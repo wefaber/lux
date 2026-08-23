@@ -1,0 +1,21 @@
+# /etc/cron.d/sgrsi-backup — Rutina de respaldo de la base de datos del SGRSI.
+#
+# Se instala con: sudo ./backup.sh instalar-cron
+# Issue: wefaber/eternum#77 · Documentado en 05-ADMIN-SO/E2/RutinasBackup.md
+#
+# Se versiona el archivo en el repositorio en vez de editar el crontab del
+# usuario a mano, para que la programacion del respaldo quede bajo control de
+# versiones y se revise igual que el resto del codigo.
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+MAILTO=""
+
+# min hora dia mes dia-semana  usuario  comando
+# Respaldo diario a las 03:00, cuando la carga del sistema es minima.
+0 3 * * *   sgrsi   /opt/sgrsi/lux/scripts/backup.sh respaldar >> /var/log/sgrsi/backup-cron.log 2>&1
+
+# Verificacion de integridad semanal (domingos 04:00): restaura el ultimo
+# dump contra una base descartable. Un respaldo que nunca se restauro no es
+# un respaldo comprobado.
+0 4 * * 0   sgrsi   /opt/sgrsi/lux/scripts/backup.sh verificar >> /var/log/sgrsi/backup-cron.log 2>&1
