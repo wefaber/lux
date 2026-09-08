@@ -1,151 +1,153 @@
-# Lux
+# Lux — SGRSI
 
-Sistema de Gestion de Recursos y Servicios Informaticos (SGRSI) para la UTU.
+IT Resource and Service Management System (SGRSI) for UTU, a Uruguayan public technical education institution.
 
-Plataforma web que centraliza la administracion de equipamiento informatico, tickets de soporte tecnico, prestamos de equipos y solicitudes de servicio de una institucion educativa. Disenada para operar con cuatro roles diferenciados: Super Admin, Administrador, Tecnico y Solicitante.
+Web platform that centralizes the administration of IT equipment, technical support tickets, equipment loans, and service requests for an educational institution. It operates with four differentiated roles: **Super Admin**, **Admin**, **Technician**, and **Requester**.
 
-## Stack tecnologico
+## Tech stack
 
-| Capa | Tecnologia | Version |
-|------|-----------|---------|
+| Layer | Technology | Version |
+|-------|-----------|---------|
 | Runtime | [Bun](https://bun.sh) | latest |
 | Bundler | [Vite](https://vite.dev) | 8.x |
 | UI | [React](https://react.dev) | 19.x |
-| Lenguaje | [TypeScript](https://typescriptlang.org) | 6.x |
-| Estilos | [TailwindCSS](https://tailwindcss.com) | 4.x |
-| Componentes base | [Radix UI](https://radix-ui.com) | 1.x |
-| Ruteo | [React Router](https://reactrouter.com) | 7.x |
-| Graficos | [Recharts](https://recharts.org) | 2.x |
-| Animaciones | [Motion](https://motion.dev) | 12.x |
-| Iconos | [Lucide React](https://lucide.dev) | 0.5.x |
+| Language | [TypeScript](https://typescriptlang.org) | 6.x |
+| Styling | [TailwindCSS](https://tailwindcss.com) | 4.x |
+| Base components | [Radix UI](https://radix-ui.com) | 1.x |
+| Routing | [React Router](https://reactrouter.com) | 7.x |
+| Charts | [Recharts](https://recharts.org) | 2.x |
+| Animations | [Motion](https://motion.dev) | 12.x |
+| Icons | [Lucide React](https://lucide.dev) | 0.5.x |
 | Mocking | [MSW](https://mswjs.io) | 2.x |
 | Linting | [oxlint](https://oxc.rs) | 1.x |
 
-### Por que TailwindCSS
+Also in use: the React Compiler (via `babel-plugin-react-compiler`), `jsqr` for QR scanning, `react-qr-code` for QR generation, and `web-haptics` for haptic feedback.
 
-Se eligio TailwindCSS como framework de estilos por tres razones principales:
+### Why TailwindCSS
 
-1. **Utilidad sobre opinion**. A diferencia de Bootstrap o MUI, Tailwind no impone un vocabulario visual prefabricado. Esto permitio construir una identidad visual propia alineada con los bocetos iniciales del sistema sin forzar overrides sobre un theme ajeno.
+TailwindCSS was chosen as the styling framework for three main reasons:
 
-2. **Zero-runtime con Vite**. Tailwind v4 funciona como plugin nativo de Vite via `@tailwindcss/vite`, generando solo el CSS utilizado en build. No hay runtime cost en produccion, a diferencia de soluciones CSS-in-JS.
+1. **Utility over opinion**. Unlike Bootstrap or MUI, Tailwind does not impose a prefabricated visual vocabulary. This allowed building a custom visual identity aligned with the system's initial design sketches, without overriding a third-party theme.
 
-3. **Design tokens accesibles**. Las variables de diseno (`--color-*`, `--font-size-*`) se mapean directamente a atributos `data-*` en el `<html>`, lo que permite implementar accesibilidad (tema oscuro, alto contraste, tamano de fuente, fuente dislexica) sin logica condicional por componente.
+2. **Zero runtime with Vite**. Tailwind v4 works as a native Vite plugin via `@tailwindcss/vite`, generating only the CSS actually used at build time. There is no runtime cost in production, unlike CSS-in-JS solutions.
 
-## Estructura del proyecto
+3. **Accessible design tokens**. Design variables (`--color-*`, `--font-size-*`) map directly to `data-*` attributes on the `<html>` element, enabling accessibility features (dark theme, high contrast, font size, dyslexic font) without per-component conditional logic.
+
+## Project structure
 
 ```
 lux/
-├── public/               # Favicon, SVGs, MSW service worker
+├── public/               # Favicon, SVG assets, MSW service worker
 ├── src/
-│   ├── assets/           # Imagenes estaticas
-│   ├── components/       # Componentes reutilizables
+│   ├── assets/           # Static images
+│   ├── components/       # Reusable components
 │   │   ├── accessibility/  # FontSizeControl, HighContrastToggle, ThemeSwitcher
-│   │   ├── auth/           # ProtectedRoute (guarda por rol)
-│   │   ├── charts/         # BarChart, PieChart (wrappers de Recharts)
+│   │   ├── auth/           # ProtectedRoute (role-based guard)
+│   │   ├── charts/         # BarChart, PieChart (Recharts wrappers)
 │   │   ├── layout/         # AppLayout, AdminLayout, Sidebar, Topbar, TabBar
-│   │   ├── skeletons/      # Estados de carga (Card, Table, Wizard)
-│   │   └── ui/             # Primitivas (Button, Card, Dialog, Input, Select, etc.)
-│   ├── features/         # Paginas y modulos de negocio
-│   │   ├── admin/          # Dashboard admin, UserManagement, RolesConfig, ActivityLog
-│   │   ├── dashboard/      # Dashboard principal con estadisticas
+│   │   ├── skeletons/      # Loading states (Card, Table, Wizard)
+│   │   └── ui/             # Primitives (Button, Card, Dialog, Input, Select, ...) + QrCode/QrScanner
+│   ├── features/         # Business pages and modules
+│   │   ├── admin/          # Admin dashboard, UserManagement, RolesConfig, ActivityLog
+│   │   ├── dashboard/      # Main dashboard with statistics
 │   │   ├── errors/         # 403, 404, 500
-│   │   ├── inventory/      # Inventario, detalle de producto/componente, formularios
-│   │   ├── loans/          # Prestamos, formulario de prestamo y devolucion
-│   │   ├── login/          # Login y WaitToLogin
-│   │   ├── profile/        # Perfil de usuario
-│   │   ├── services/       # Solicitudes de servicio, detalle y formulario
-│   │   ├── splash/         # Pantalla de bienvenida
-│   │   └── tickets/        # Tickets, detalle, wizard multi-step, OOL
-│   ├── hooks/            # Hooks de aplicacion
-│   │   ├── useAuth.ts      # Autenticacion y control de roles
-│   │   ├── useTheme.ts     # Tema, contraste, tamano de fuente, fuente dislexica
-│   │   ├── useHaptics.ts   # Feedback haptico
-│   │   └── useSkeleton.ts  # Estados de carga para componentes
-│   ├── lib/              # Tipos compartidos, constantes, utilidades
-│   │   ├── types.ts        # Interfaces de dominio (User, Product, Ticket, Loan, etc.)
-│   │   ├── constants.ts    # Rutas, configuraciones de estado, labels
-│   │   └── utils.ts        # Funcion gql, cn (classnames), formatters
-│   ├── mocks/            # Mock Service Worker (backend simulado)
-│   │   ├── data/           # Datos de prueba (users, equipment, tickets, loans, services)
-│   │   ├── handlers.ts     # Resolvers GraphQL mockeados
-│   │   ├── schema.ts       # Schema GraphQL del sistema
-│   │   ├── generators.ts   # Generadores de datos (activity logs, etc.)
-│   │   └── browser.ts      # Configuracion del worker para el navegador
+│   │   ├── inventory/      # Inventory, product/component detail, forms
+│   │   ├── loans/          # Loans, loan and return forms
+│   │   ├── login/          # Login and WaitToLogin
+│   │   ├── profile/        # User profile
+│   │   ├── services/       # Service requests, detail and form
+│   │   ├── splash/         # Welcome screen
+│   │   └── tickets/        # Tickets, detail, multi-step wizard, OOL queue
+│   ├── hooks/            # Application hooks
+│   │   ├── useAuth.ts      # Authentication and role control
+│   │   ├── useTheme.ts     # Theme, contrast, font size, dyslexic font
+│   │   ├── useHaptics.ts   # Haptic feedback
+│   │   └── useSkeleton.ts  # Loading states for components
+│   ├── lib/              # Shared types, constants, utilities
+│   │   ├── types.ts        # Domain interfaces (User, Product, Ticket, Loan, ...)
+│   │   ├── constants.ts    # Routes, status configurations, labels
+│   │   └── utils.ts        # gql() function, cn (classnames), formatters
+│   ├── mocks/            # Mock Service Worker (simulated backend)
+│   │   ├── data/           # Test data (users, equipment, tickets, loans, services)
+│   │   ├── handlers.ts     # Mocked GraphQL resolvers
+│   │   ├── schema.ts       # System GraphQL schema
+│   │   ├── generators.ts   # Data generators (activity logs, etc.)
+│   │   └── browser.ts      # Worker configuration for the browser
 │   └── router/
-│       └── index.tsx       # Arbol de rutas con lazy loading y guards por rol
-├── docs/                 # Documentacion del proyecto
+│       └── index.tsx       # Route tree with lazy loading and role guards
+├── docs/                 # Project documentation (architecture, full-stack plan)
 ├── package.json
 ├── vite.config.ts
 ├── tsconfig.json
 └── bun.lock
 ```
 
-### Separacion por capas
+### Layer separation
 
-El proyecto organiza el codigo siguiendo una separacion logica estricta:
+The codebase follows a strict logical separation:
 
-| Capa | Directorio | Responsabilidad |
-|------|-----------|----------------|
-| **Presentacion** | `features/`, `components/` | UI declarativa. Solo JSX y composicion de componentes. |
-| **Estado/Lógica** | `hooks/` | Estado global (auth, theme), reglas de negocio, side effects. |
-| **Infraestructura** | `lib/`, `mocks/`, `router/` | Tipos, constantes, comunicacion con la API, ruteo. |
+| Layer | Directory | Responsibility |
+|-------|-----------|----------------|
+| **Presentation** | `features/`, `components/` | Declarative UI. JSX and component composition only. |
+| **State / Logic** | `hooks/` | Global state (auth, theme), business rules, side effects. |
+| **Infrastructure** | `lib/`, `mocks/`, `router/` | Types, constants, API communication, routing. |
 
-Ningun componente de `features/` contiene logica de negocio: siempre se delega a hooks via `useAuth()`, `useTheme()`, o al mock backend via la funcion `gql()`. Los estilos estan completamente separados del markup: TailwindCSS se aplica por clases utilitarias, sin CSS-in-JS ni estilos inline salvo valores dinamicos puntuales.
+No `features/` component contains business logic: it is always delegated to hooks via `useAuth()`, `useTheme()`, or to the mock backend through the `gql()` function. Styling is fully separated from markup: TailwindCSS is applied through utility classes, with no CSS-in-JS and no inline styles except for specific dynamic values.
 
-## Instalacion y uso
+## Getting started
 
-### Requisitos
+### Prerequisites
 
 - [Bun](https://bun.sh) >= 1.2
 
-### Desarrollo local
+### Local development
 
 ```bash
-# Clonar
-git clone https://github.com/itica-lat/lux.git
+# Clone
+git clone https://github.com/wefaber/lux.git
 cd lux
 
-# Instalar dependencias
+# Install dependencies
 bun install
 
-# Iniciar servidor de desarrollo
+# Start the development server
 bun dev
 ```
 
-El servidor corre en `http://localhost:5173`. MSW se activa automaticamente en modo desarrollo, simulando el backend GraphQL con datos de prueba.
+The server runs at `http://localhost:5173`. MSW activates automatically in development mode, simulating the GraphQL backend with test data. Run `bun run setup` to regenerate the MSW service worker in `public/`.
 
-### Credenciales de prueba
+### Test credentials
 
-| Rol | DNI | Clave |
-|-----|-----|-------|
-| Super Admin | `11111111` | `admin123` |
-| Administrador | `22222222` | `admin123` |
-| Tecnico | `33333333` | `tec123` |
-| Solicitante | `44444444` | `sol123` |
+| Role | DNI | Password |
+|------|-----|----------|
+| Super Admin | `00000000` | `root2026` |
+| Admin | `12345678` | `admin2026` |
+| Technician | `34567890` | `tecnico2026` |
+| Requester | `67890123` | `sol2026` |
 
-### Build de produccion
+### Production build
 
 ```bash
 bun run build
 bun run preview
 ```
 
-El build genera los archivos estaticos en `dist/`, listos para servir con Nginx o cualquier servidor web.
+The build generates static files in `dist/`, ready to be served by Nginx or any web server.
 
-### Calidad de codigo
+### Code quality
 
 ```bash
-bun typecheck      # Verificar tipos
+bun typecheck      # Type checking (tsc)
 bun lint           # Linting (oxlint)
-bun format         # Formateo (oxfmt)
+bun format         # Formatting (oxfmt)
 ```
 
-## Modulos del sistema
+## System modules
 
-- **Dashboard** — Estadisticas generales, tickets por estado, servicios por periodo
-- **Inventario** — Productos (AIO, desktop, laptop, monitor, servidor, etc.) y componentes internos con soft delete
-- **Tickets** — Ciclo completo: creacion → asignacion → diagnostico → resolucion. Wizard multi-step para creacion guiada. Bandeja OOL (sin asignar)
-- **Prestamos** — Solicitud, aprobacion, devolucion de equipos con componentes incluidos
-- **Servicios** — Preparacion de laboratorios, instalacion de software, configuracion de equipos
-- **Administracion** — Gestion de usuarios, configuracion de roles, registro de actividad
-- **Accesibilidad** — Tema claro/oscuro, alto contraste, tamano de fuente ajustable, fuente dislexica
+- **Dashboard** — Overall statistics, tickets by status, services by period
+- **Inventory** — IT equipment (AIO, desktop, laptop, projectors, printers, switches, UPS, etc.) and internal components, with soft delete
+- **Tickets** — Full lifecycle: creation → assignment → diagnosis → resolution. Multi-step wizard for guided creation. Unassigned ("OOL") queue
+- **Loans** — Request, approval, and return of equipment, including components
+- **Services** — Lab preparation, software installation, equipment setup
+- **Administration** — User management, role configuration, activity log
+- **Accessibility** — Light/dark theme, high contrast, adjustable font size, dyslexic font
