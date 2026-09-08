@@ -36,7 +36,7 @@ jobs:
           # antes de dar el run por fallido.
           published=""
           for attempt in 1 2 3 4 5 6; do
-            headers=$(curl -sS -m 20 -D - -o index.html "$SITE/" 2>/dev/null) || headers=""
+            headers=$(curl -sS -m 35 -D - -o index.html "$SITE/" 2>/dev/null) || headers=""
             code=$(printf '%s' "$headers" | head -1 | awk '{print $2}')
             if [ "$code" = "200" ]; then
               lastmod=$(printf '%s' "$headers" | grep -i '^last-modified:' | head -1 | cut -d' ' -f2- | tr -d '\r')
@@ -48,6 +48,7 @@ jobs:
               echo "intento $attempt: responde 200 pero index.html quedo viejo ($lastmod)"
             else
               echo "intento $attempt: el sitio respondio '${code:-sin respuesta}'"
+              if [ "$code" = "522" ]; then echo "  522: Cloudflare no llega al origen, el VPS esta caido"; fi
             fi
             sleep 10
           done
@@ -65,7 +66,7 @@ jobs:
             echo "::error::index.html no referencia ningun bundle /assets/index-*.js"
             exit 1
           fi
-          if ! curl -fsS -m 20 -o bundle.js "$SITE$asset"; then
+          if ! curl -fsS -m 35 -o bundle.js "$SITE$asset"; then
             echo "::error::El bundle $asset no se puede descargar desde produccion."
             exit 1
           fi
