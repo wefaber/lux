@@ -20,11 +20,15 @@ jobs:
         id: start
         run: echo "epoch=$(date -u +%s)" >> "$GITHUB_OUTPUT"
 
+      # generic.sh clona en /home/hermes/repos/<dominio-con-guiones>, hace
+      # reset --hard a origin/main, buildea y rsyncea a /var/www/<dominio>.
+      # La URL va por HTTPS como el resto de los repos del server: hermes no
+      # tiene ~/.ssh/config y este repo es publico.
       - name: Deploy
         run: |
           bash /home/hermes/deploy/generic.sh \
             "lux.eternum.lat" \
-            "git@github-lux:wefaber/lux.git"
+            "https://github.com/wefaber/lux.git"
 
       - name: Verificar publicacion
         env:
@@ -72,13 +76,19 @@ jobs:
           fi
           echo "bundle vivo: $asset ($(wc -c < bundle.js) bytes)"
 
-          # La burbuja de credenciales es solo para modo mocks: si alguna
-          # aparece en el bundle, el build salio sin el guard de produccion.
-          if grep -q "root2026" bundle.js; then
-            echo "::error::Hay credenciales mock en el bundle de produccion."
+          # Produccion corre sobre MSW (VITE_ENABLE_MOCKS en .env.production)
+          # porque todavia no hay backend. Un build sin los mocks levanta la UI
+          # igual, pero deja el login muerto contra un /graphql que responde 405,
+          # asi que se verifica que el worker y los datos esten publicados.
+          if ! grep -q "root2026" bundle.js; then
+            echo "::error::El bundle salio sin los mocks: el login va a quedar muerto en produccion."
             exit 1
           fi
-          echo "sin credenciales mock en el bundle"
+          if ! curl -fsS -m 35 -o /dev/null "$SITE/mockServiceWorker.js"; then
+            echo "::error::Falta /mockServiceWorker.js en el docroot: MSW no puede arrancar."
+            exit 1
+          fi
+          echo "mocks publicados: worker y credenciales presentes"
 
       - name: Limpiar
         if: always()
