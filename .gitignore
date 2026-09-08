@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Entorno: .env.example y .env.production van versionados porque definen como
+# se buildea el sitio publicado. Los overrides de cada maquina, no (.env.local
+# ya cae bajo *.local).
+.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

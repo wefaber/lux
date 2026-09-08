@@ -1,0 +1,95 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-lux
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    timeout-minutes: 15
+    env:
+      SITE: https://lux.eternum.lat
+    steps:
+      - name: Marcar inicio
+        id: start
+        run: echo "epoch=$(date -u +%s)" >> "$GITHUB_OUTPUT"
+
+      # generic.sh clona en /home/hermes/repos/<dominio-con-guiones>, hace
+      # reset --hard a origin/main, buildea y rsyncea a /var/www/<dominio>.
+      # La URL va por HTTPS como el resto de los repos del server: hermes no
+      # tiene ~/.ssh/config y este repo es publico.
+      - name: Deploy
+        run: |
+          bash /home/hermes/deploy/generic.sh \
+            "lux.eternum.lat" \
+            "https://github.com/wefaber/lux.git"
+
+      - name: Verificar publicacion
+        env:
+          START_EPOCH: ${{ steps.start.outputs.epoch }}
+        run: |
+          set -uo pipefail
+
+          # El deploy puede tardar unos segundos en quedar visible: reintenta
+          # antes de dar el run por fallido.
+          published=""
+          for attempt in 1 2 3 4 5 6; do
+            headers=$(curl -sS -m 35 -D - -o index.html "$SITE/" 2>/dev/null) || headers=""
+            code=$(printf '%s' "$headers" | head -1 | awk '{print $2}')
+            if [ "$code" = "200" ]; then
+              lastmod=$(printf '%s' "$headers" | grep -i '^last-modified:' | head -1 | cut -d' ' -f2- | tr -d '\r')
+              lastmod_epoch=$(date -d "$lastmod" +%s 2>/dev/null || echo 0)
+              if [ "$lastmod_epoch" -ge "$((START_EPOCH - 120))" ]; then
+                published="$lastmod"
+                break
+              fi
+              echo "intento $attempt: responde 200 pero index.html quedo viejo ($lastmod)"
+            else
+              echo "intento $attempt: el sitio respondio '${code:-sin respuesta}'"
+              if [ "$code" = "522" ]; then echo "  522: Cloudflare no llega al origen, el VPS esta caido"; fi
+            fi
+            sleep 10
+          done
+
+          if [ -z "$published" ]; then
+            echo "::error::El deploy no llego a produccion: $SITE no sirve el build de este run."
+            exit 1
+          fi
+          echo "index.html publicado: $published"
+
+          # index.html nuevo con assets faltantes es la falla clasica de una
+          # copia a medias, asi que el bundle se verifica aparte.
+          asset=$(grep -o '/assets/index-[^"]*\.js' index.html | head -1)
+          if [ -z "$asset" ]; then
+            echo "::error::index.html no referencia ningun bundle /assets/index-*.js"
+            exit 1
+          fi
+          if ! curl -fsS -m 35 -o bundle.js "$SITE$asset"; then
+            echo "::error::El bundle $asset no se puede descargar desde produccion."
+            exit 1
+          fi
+          echo "bundle vivo: $asset ($(wc -c < bundle.js) bytes)"
+
+          # Produccion corre sobre MSW (VITE_ENABLE_MOCKS en .env.production)
+          # porque todavia no hay backend. Un build sin los mocks levanta la UI
+          # igual, pero deja el login muerto contra un /graphql que responde 405,
+          # asi que se verifica que el worker y los datos esten publicados.
+          if ! grep -q "root2026" bundle.js; then
+            echo "::error::El bundle salio sin los mocks: el login va a quedar muerto en produccion."
+            exit 1
+          fi
+          if ! curl -fsS -m 35 -o /dev/null "$SITE/mockServiceWorker.js"; then
+            echo "::error::Falta /mockServiceWorker.js en el docroot: MSW no puede arrancar."
+            exit 1
+          fi
+          echo "mocks publicados: worker y credenciales presentes"
+
+      - name: Limpiar
+        if: always()
+        run: rm -f index.html bundle.js

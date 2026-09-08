@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ROUTES } from "@/lib/constants";
+import { DevCredentials } from "./DevCredentials";
 
 interface LocationState {
   from?: { pathname: string };
@@ -23,6 +24,17 @@ export function LoginPage() {
   const location = useLocation();
   const from = (location.state as LocationState)?.from?.pathname ?? ROUTES.DASHBOARD;
 
+  const runLogin = async (userDni: string, userPassword: string) => {
+    setError("");
+    try {
+      await login(userDni, userPassword);
+      navigate(from, { replace: true });
+    } catch {
+      setAttempts((a) => a + 1);
+      setError("Credenciales inválidas. Verificá tu cédula y contraseña.");
+    }
+  }; // Autenticacion compartida por el formulario y la burbuja de mocks
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!dni.trim() || !password.trim()) {
@@ -33,15 +45,19 @@ export function LoginPage() {
       setError("El número de cédula debe tener 7 u 8 dígitos.");
       return;
     }
-    setError("");
-    try {
-      await login(dni.trim(), password);
-      navigate(from, { replace: true });
-    } catch {
-      setAttempts((a) => a + 1);
-      setError("Credenciales inválidas. Verificá tu cédula y contraseña.");
-    }
+    await runLogin(dni.trim(), password);
   };
+
+  const fillCredentials = (nextDni: string, nextPassword: string) => {
+    setDni(nextDni);
+    setPassword(nextPassword);
+    setError("");
+  }; // Completa el formulario desde la burbuja de mocks
+
+  const loginAs = async (nextDni: string, nextPassword: string) => {
+    fillCredentials(nextDni, nextPassword);
+    await runLogin(nextDni, nextPassword);
+  }; // Entra directo con un usuario de prueba
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-app-light dark:bg-app-dark p-4">
@@ -147,6 +163,12 @@ export function LoginPage() {
           ITI CETP 2026 · Los accesos son gestionados por administración
         </p>
       </motion.div>
+
+      {/* Misma condicion que arranca MSW en main.tsx, inline por el mismo motivo:
+          la burbuja existe donde existen los mocks */}
+      {(import.meta.env.DEV || import.meta.env.VITE_ENABLE_MOCKS === "true") && (
+        <DevCredentials onFill={fillCredentials} onLogin={loginAs} />
+      )}
     </div>
   );
 }
