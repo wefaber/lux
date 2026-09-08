@@ -164,8 +164,11 @@ export function LoginPage() {
         </p>
       </motion.div>
 
-      {/* Con import.meta.env.DEV los mocks quedan fuera del bundle de produccion */}
-      {import.meta.env.DEV && <DevCredentials onFill={fillCredentials} onLogin={loginAs} />}
+      {/* Misma condicion que arranca MSW en main.tsx, inline por el mismo motivo:
+          la burbuja existe donde existen los mocks */}
+      {(import.meta.env.DEV || import.meta.env.VITE_ENABLE_MOCKS === "true") && (
+        <DevCredentials onFill={fillCredentials} onLogin={loginAs} />
+      )}
     </div>
   );
 }
