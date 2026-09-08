@@ -1,0 +1,84 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-lux
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    timeout-minutes: 15
+    env:
+      SITE: https://lux.eternum.lat
+    steps:
+      - name: Marcar inicio
+        id: start
+        run: echo "epoch=$(date -u +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy
+        run: |
+          bash /home/hermes/deploy/generic.sh \
+            "lux.eternum.lat" \
+            "git@github-lux:wefaber/lux.git"
+
+      - name: Verificar publicacion
+        env:
+          START_EPOCH: ${{ steps.start.outputs.epoch }}
+        run: |
+          set -uo pipefail
+
+          # El deploy puede tardar unos segundos en quedar visible: reintenta
+          # antes de dar el run por fallido.
+          published=""
+          for attempt in 1 2 3 4 5 6; do
+            headers=$(curl -sS -m 20 -D - -o index.html "$SITE/" 2>/dev/null) || headers=""
+            code=$(printf '%s' "$headers" | head -1 | awk '{print $2}')
+            if [ "$code" = "200" ]; then
+              lastmod=$(printf '%s' "$headers" | grep -i '^last-modified:' | head -1 | cut -d' ' -f2- | tr -d '\r')
+              lastmod_epoch=$(date -d "$lastmod" +%s 2>/dev/null || echo 0)
+              if [ "$lastmod_epoch" -ge "$((START_EPOCH - 120))" ]; then
+                published="$lastmod"
+                break
+              fi
+              echo "intento $attempt: responde 200 pero index.html quedo viejo ($lastmod)"
+            else
+              echo "intento $attempt: el sitio respondio '${code:-sin respuesta}'"
+            fi
+            sleep 10
+          done
+
+          if [ -z "$published" ]; then
+            echo "::error::El deploy no llego a produccion: $SITE no sirve el build de este run."
+            exit 1
+          fi
+          echo "index.html publicado: $published"
+
+          # index.html nuevo con assets faltantes es la falla clasica de una
+          # copia a medias, asi que el bundle se verifica aparte.
+          asset=$(grep -o '/assets/index-[^"]*\.js' index.html | head -1)
+          if [ -z "$asset" ]; then
+            echo "::error::index.html no referencia ningun bundle /assets/index-*.js"
+            exit 1
+          fi
+          if ! curl -fsS -m 20 -o bundle.js "$SITE$asset"; then
+            echo "::error::El bundle $asset no se puede descargar desde produccion."
+            exit 1
+          fi
+          echo "bundle vivo: $asset ($(wc -c < bundle.js) bytes)"
+
+          # La burbuja de credenciales es solo para modo mocks: si alguna
+          # aparece en el bundle, el build salio sin el guard de produccion.
+          if grep -q "root2026" bundle.js; then
+            echo "::error::Hay credenciales mock en el bundle de produccion."
+            exit 1
+          fi
+          echo "sin credenciales mock en el bundle"
+
+      - name: Limpiar
+        if: always()
+        run: rm -f index.html bundle.js
