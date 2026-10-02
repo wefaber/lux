@@ -2,7 +2,7 @@ import type { ServiceRequest } from "@/lib/types";
 import { mockUsers } from "./users";
 import { genDate } from "../generators";
 
-const [, , , , , , sol1, sol2, sol3, sol4, sol5, sol6] = mockUsers;
+const [, , , tec1, tec2, tec3, sol1, sol2, sol3, sol4, sol5, sol6] = mockUsers;
 
 // Las fechas son relativas a hoy para que el dashboard siempre tenga datos
 // reales en los periodos de 7, 30 y 90 dias, sin inventar conteos.
@@ -13,6 +13,7 @@ export const mockServices: ServiceRequest[] = [
     type: "lab_preparation",
     status: "completed",
     requestedBy: sol1,
+    assignedTo: tec1,
     description:
       "Preparar laboratorio 3 para taller de redes del módulo 4. Se necesitan 12 equipos configurados con Cisco Packet Tracer y acceso al servidor de práctica.",
     labNumber: "3",
@@ -28,6 +29,7 @@ export const mockServices: ServiceRequest[] = [
     type: "software_installation",
     status: "in_progress",
     requestedBy: sol2,
+    assignedTo: tec2,
     description:
       "Instalar MATLAB R2024a con el Toolbox de Señales y Procesamiento de Imágenes en los 8 equipos del laboratorio de electrónica.",
     labNumber: null,
@@ -42,6 +44,7 @@ export const mockServices: ServiceRequest[] = [
     type: "equipment_setup",
     status: "approved",
     requestedBy: sol3,
+    assignedTo: tec3,
     description:
       "Configurar el nuevo servidor de archivos institucional. Necesita configuración de active directory, cuotas de disco y políticas de acceso por departamento.",
     labNumber: null,
@@ -56,6 +59,7 @@ export const mockServices: ServiceRequest[] = [
     type: "lab_preparation",
     status: "pending",
     requestedBy: sol4,
+    assignedTo: null,
     description:
       "Preparar laboratorio 1 para evaluación final de programación el 2 de junio. Se necesitan 15 equipos con entorno de desarrollo Python y acceso a GitLab institucional.",
     labNumber: "1",
@@ -70,6 +74,7 @@ export const mockServices: ServiceRequest[] = [
     type: "software_installation",
     status: "rejected",
     requestedBy: sol5,
+    assignedTo: null,
     description: "Instalar Adobe Creative Suite completo en los equipos de administración.",
     labNumber: null,
     softwareName: "Adobe Creative Suite",
@@ -84,6 +89,7 @@ export const mockServices: ServiceRequest[] = [
     type: "equipment_setup",
     status: "completed",
     requestedBy: sol1,
+    assignedTo: tec1,
     description:
       "Configurar impresora HP LaserJet en red para todos los equipos de administración. Crear cola de impresión compartida y configurar accesos.",
     labNumber: null,
@@ -99,6 +105,7 @@ export const mockServices: ServiceRequest[] = [
     type: "lab_preparation",
     status: "in_progress",
     requestedBy: sol2,
+    assignedTo: tec2,
     description:
       "Preparar salón B para presentación institucional el 30 de mayo. Se necesita proyector configurado con laptop y sistema de audio.",
     labNumber: null,
@@ -113,6 +120,7 @@ export const mockServices: ServiceRequest[] = [
     type: "software_installation",
     status: "completed",
     requestedBy: sol6,
+    assignedTo: tec3,
     description:
       "Instalar y configurar entorno de desarrollo Java (JDK 21 + IntelliJ IDEA) en los equipos del laboratorio 2.",
     labNumber: null,
@@ -128,6 +136,7 @@ export const mockServices: ServiceRequest[] = [
     type: "other",
     status: "pending",
     requestedBy: sol3,
+    assignedTo: null,
     description:
       "Solicitud de revisión general de seguridad de la red WiFi institucional. Se han detectado dispositivos desconocidos conectados.",
     labNumber: null,
@@ -142,6 +151,7 @@ export const mockServices: ServiceRequest[] = [
     type: "lab_preparation",
     status: "completed",
     requestedBy: sol4,
+    assignedTo: tec1,
     description:
       "Preparar laboratorio 4 para el inicio del semestre con nueva distribución de escritorios y revisión de todos los equipos.",
     labNumber: "4",
@@ -157,6 +167,7 @@ export const mockServices: ServiceRequest[] = [
     type: "software_installation",
     status: "pending",
     requestedBy: sol5,
+    assignedTo: null,
     description:
       "Instalar Visual Studio Code y la extensión de Python en los equipos del laboratorio 1.",
     labNumber: null,
@@ -171,6 +182,7 @@ export const mockServices: ServiceRequest[] = [
     type: "lab_preparation",
     status: "pending",
     requestedBy: sol1,
+    assignedTo: null,
     description:
       "Preparar el laboratorio 2 para la evaluación práctica de bases de datos del jueves.",
     labNumber: "2",
@@ -185,6 +197,7 @@ export const mockServices: ServiceRequest[] = [
     type: "equipment_setup",
     status: "approved",
     requestedBy: sol6,
+    assignedTo: tec2,
     description:
       "Configurar el proyector del salón 4 para que tome la entrada HDMI de la notebook docente.",
     labNumber: null,
@@ -199,6 +212,7 @@ export const mockServices: ServiceRequest[] = [
     type: "other",
     status: "in_progress",
     requestedBy: sol2,
+    assignedTo: tec3,
     description: "Revisar la conexión Wi-Fi del salón 7: se corta durante las clases de la tarde.",
     labNumber: null,
     softwareName: null,
@@ -212,6 +226,7 @@ export const mockServices: ServiceRequest[] = [
     type: "software_installation",
     status: "completed",
     requestedBy: sol3,
+    assignedTo: tec1,
     description: "Instalar LibreOffice 24 en la sala de profesores.",
     labNumber: null,
     softwareName: "LibreOffice 24",
@@ -225,6 +240,7 @@ export const mockServices: ServiceRequest[] = [
     type: "lab_preparation",
     status: "completed",
     requestedBy: sol4,
+    assignedTo: tec2,
     description: "Preparar el laboratorio 3 con Packet Tracer para el parcial de redes.",
     labNumber: "3",
     softwareName: null,
@@ -239,6 +255,7 @@ export const mockServices: ServiceRequest[] = [
     type: "equipment_setup",
     status: "rejected",
     requestedBy: sol1,
+    assignedTo: null,
     description: "Instalar un segundo monitor en el puesto del aula 2.",
     labNumber: null,
     softwareName: null,
@@ -252,6 +269,7 @@ export const mockServices: ServiceRequest[] = [
     type: "software_installation",
     status: "completed",
     requestedBy: sol5,
+    assignedTo: tec3,
     description: "Actualizar Arduino IDE a la versión 2 en el laboratorio de electrónica.",
     labNumber: null,
     softwareName: "Arduino IDE 2",
@@ -266,6 +284,7 @@ export const mockServices: ServiceRequest[] = [
     type: "lab_preparation",
     status: "completed",
     requestedBy: sol6,
+    assignedTo: tec1,
     description:
       "Dejar el laboratorio 1 con usuarios de invitado para la jornada de puertas abiertas.",
     labNumber: "1",
@@ -281,6 +300,7 @@ export const mockServices: ServiceRequest[] = [
     type: "other",
     status: "completed",
     requestedBy: sol2,
+    assignedTo: tec2,
     description: "Recuperar archivos de un pendrive que no reconoce el equipo de dirección.",
     labNumber: null,
     softwareName: null,
@@ -295,6 +315,7 @@ export const mockServices: ServiceRequest[] = [
     type: "software_installation",
     status: "completed",
     requestedBy: sol3,
+    assignedTo: tec3,
     description: "Instalar GIMP en los 10 equipos del laboratorio de diseño.",
     labNumber: null,
     softwareName: "GIMP 2.10",
@@ -308,6 +329,7 @@ export const mockServices: ServiceRequest[] = [
     type: "equipment_setup",
     status: "completed",
     requestedBy: sol4,
+    assignedTo: tec1,
     description: "Configurar la impresora de administración para escanear a correo.",
     labNumber: null,
     softwareName: null,
@@ -321,6 +343,7 @@ export const mockServices: ServiceRequest[] = [
     type: "lab_preparation",
     status: "completed",
     requestedBy: sol1,
+    assignedTo: tec2,
     description: "Preparar el laboratorio 2 con máquinas virtuales Ubuntu para el taller de Linux.",
     labNumber: "2",
     softwareName: null,
@@ -334,6 +357,7 @@ export const mockServices: ServiceRequest[] = [
     type: "software_installation",
     status: "completed",
     requestedBy: sol5,
+    assignedTo: tec3,
     description: "Instalar AutoCAD educativo en el laboratorio 3.",
     labNumber: null,
     softwareName: "AutoCAD 2025",

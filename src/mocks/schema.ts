@@ -43,6 +43,8 @@ export const schema = `
     returnLoan(id: ID!, damaged: Boolean, issues: String): Loan!
     createServiceRequest(input: ServiceRequestInput!): ServiceRequest!
     updateServiceRequest(id: ID!, input: ServiceRequestUpdateInput!): ServiceRequest!
+    claimServiceRequest(id: ID!): ServiceRequest!
+    assignServiceRequest(id: ID!, technicianId: ID!): ServiceRequest!
     changePassword(currentPassword: String!, newPassword: String!): Boolean!
   }
 
@@ -143,6 +145,7 @@ export const schema = `
     type: String!
     status: String!
     requestedBy: User!
+    assignedTo: User
     description: String!
     labNumber: String
     softwareName: String

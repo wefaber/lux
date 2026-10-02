@@ -113,6 +113,8 @@ function duplicateProductError(
   return null;
 }
 
+const CLOSED_SERVICE_STATUSES = new Set<ServiceStatus>(["completed", "rejected"]);
+
 function invalidLoanTransition(loan: Loan, action: string): string {
   return `No se puede ${action} un préstamo en estado "${LOAN_STATUS_CONFIG[loan.status].label}"`;
 }
@@ -664,6 +666,7 @@ export const handlers = [
       type: input.type as ServiceRequest["type"],
       status: "pending",
       requestedBy: user,
+      assignedTo: null,
       description: input.description,
       labNumber: input.labNumber ?? null,
       softwareName: input.softwareName ?? null,
@@ -677,7 +680,8 @@ export const handlers = [
   }),
 
   graphql.mutation("UpdateServiceRequest", ({ request, variables }) => {
-    if (!hasRole(getCaller(request), STAFF_ROLES)) {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) {
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
     const { id, input } = variables as {
@@ -687,9 +691,55 @@ export const handlers = [
     const service = mockServices.find((s) => s.id === id);
     if (!service) return HttpResponse.json({ errors: [{ message: "Solicitud no encontrada" }] });
     if (input.status) service.status = input.status as ServiceRequest["status"];
+    // Quien la pone en marcha o la cierra sin responsable queda como responsable
+    if (!service.assignedTo && (input.status === "in_progress" || input.status === "completed")) {
+      service.assignedTo = caller;
+    }
     if (input.resolutionText !== undefined) service.resolutionText = input.resolutionText;
     service.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { updateServiceRequest: service } });
+  }),
+
+  graphql.mutation("ClaimServiceRequest", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) {
+      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+    }
+    const { id } = variables as { id: string };
+    const service = mockServices.find((s) => s.id === id);
+    if (!service) return HttpResponse.json({ errors: [{ message: "Solicitud no encontrada" }] });
+    if (CLOSED_SERVICE_STATUSES.has(service.status)) {
+      return HttpResponse.json({ errors: [{ message: "La solicitud ya está cerrada" }] });
+    }
+    if (service.assignedTo) {
+      return HttpResponse.json({
+        errors: [{ message: `La solicitud ya la tomó ${service.assignedTo.name}` }],
+      });
+    }
+    service.assignedTo = caller;
+    service.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ data: { claimServiceRequest: service } });
+  }),
+
+  graphql.mutation("AssignServiceRequest", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) {
+      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+    }
+    const { id, technicianId } = variables as { id: string; technicianId: string };
+    const service = mockServices.find((s) => s.id === id);
+    const tech = mockUsers.find((u) => u.id === technicianId && u.isActive);
+    if (!service || !tech) return HttpResponse.json({ errors: [{ message: "No encontrado" }] });
+    if (!isStaff(tech)) {
+      return HttpResponse.json({
+        errors: [{ message: "Solo se puede asignar a personal técnico" }],
+      });
+    }
+    if (CLOSED_SERVICE_STATUSES.has(service.status)) {
+      return HttpResponse.json({ errors: [{ message: "La solicitud ya está cerrada" }] });
+    }
+    service.assignedTo = tech;
+    service.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ data: { assignServiceRequest: service } });
   }),
 
   graphql.mutation("CreateUser", ({ request, variables }) => {

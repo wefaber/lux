@@ -98,6 +98,7 @@ export interface ServiceRequest {
   type: ServiceType;
   status: ServiceStatus;
   requestedBy: User;
+  assignedTo: User | null;
   description: string;
   labNumber: string | null;
   softwareName: string | null;
