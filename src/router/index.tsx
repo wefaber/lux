@@ -83,7 +83,23 @@ export const router = createBrowserRouter([
         ),
       },
       { path: "inventory/:id", element: <ProductDetail /> },
+      {
+        path: "inventory/:id/editar",
+        element: (
+          <ProtectedRoute roles={STAFF_ROLES}>
+            <EquipmentForm mode="product" />
+          </ProtectedRoute>
+        ),
+      },
       { path: "inventory/componente/:id", element: <ComponentDetail /> },
+      {
+        path: "inventory/componente/:id/editar",
+        element: (
+          <ProtectedRoute roles={STAFF_ROLES}>
+            <EquipmentForm mode="component" />
+          </ProtectedRoute>
+        ),
+      },
       { path: "equipment-status", element: <EquipmentStatus /> },
       { path: "tickets", element: <TicketList /> },
       { path: "tickets/:id", element: <TicketDetail /> },

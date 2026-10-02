@@ -9,10 +9,10 @@ export const schema = `
     productByMachineId(machineId: String!): Product
     components(productId: ID, isWorking: Boolean): [Component!]!
     component(id: ID!): Component
-    tickets(status: String, assignedToId: ID, submittedById: ID): [Ticket!]!
+    tickets(status: String, assignedToId: ID, submittedById: ID, equipmentId: ID): [Ticket!]!
     ticket(id: ID!): Ticket
     oolTickets: [Ticket!]!
-    loans(status: String, userId: ID): [Loan!]!
+    loans(status: String, userId: ID, equipmentId: ID): [Loan!]!
     loan(id: ID!): Loan
     serviceRequests(status: String, requestedById: ID): [ServiceRequest!]!
     serviceRequest(id: ID!): ServiceRequest
@@ -25,10 +25,10 @@ export const schema = `
     updateUser(id: ID!, input: UserInput!): User!
     deleteUser(id: ID!): Boolean!
     createProduct(input: ProductInput!): Product!
-    updateProduct(id: ID!, input: ProductInput!): Product!
+    updateProduct(id: ID!, input: ProductUpdateInput!): Product!
     softDeleteProduct(id: ID!): Boolean!
     createComponent(input: ComponentInput!): Component!
-    updateComponent(id: ID!, input: ComponentInput!): Component!
+    updateComponent(id: ID!, input: ComponentUpdateInput!): Component!
     softDeleteComponent(id: ID!): Boolean!
     createTicket(input: TicketInput!): Ticket!
     updateTicket(id: ID!, input: TicketUpdateInput!): Ticket!
@@ -201,6 +201,27 @@ export const schema = `
     status: String!
     issues: String
     location: String!
+  }
+
+  input ProductUpdateInput {
+    machineId: String
+    kind: String
+    brand: String
+    model: String
+    serialNumber: String
+    partNumber: String
+    issues: String
+    location: String
+  }
+
+  input ComponentUpdateInput {
+    name: String
+    model: String
+    manufacturer: String
+    serialNumber: String
+    partNumber: String
+    isFactory: Boolean
+    isWorking: Boolean
   }
 
   input ComponentInput {

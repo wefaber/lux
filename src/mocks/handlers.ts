@@ -5,6 +5,7 @@ import { mockTickets } from "./data/tickets";
 import { mockLoans } from "./data/loans";
 import { mockServices } from "./data/services";
 import { mockActivityLogs } from "./generators";
+import { validateComponent, validateProduct, type FieldErrors } from "@/lib/validation";
 import {
   LOAN_STATUS_CONFIG,
   TICKET_STATUS_CONFIG,
@@ -64,6 +65,8 @@ const FORBIDDEN = { errors: [{ message: "No tenés permisos para esta acción" }
 // Estados en los que el prestamo compromete el equipo: aprobado y todavia no
 // entregado, o entregado y todavia no devuelto.
 const OPEN_LOAN_STATUSES = new Set<LoanStatus>(["approved", "active", "overdue"]);
+// Incluye los pendientes: bloquean dar de baja lo que alguien ya pidio
+const IN_COURSE_LOAN_STATUSES = new Set<LoanStatus>(["pending", ...OPEN_LOAN_STATUSES]);
 
 function hasOpenLoan(equipmentId: string, exceptLoanId?: string): boolean {
   return mockLoans.some(
@@ -89,6 +92,25 @@ function canTransitionTicket(ticket: Ticket, to: TicketStatus): boolean {
 
 function invalidTicketTransition(ticket: Ticket, to: TicketStatus): string {
   return `No se puede pasar un ticket de "${TICKET_STATUS_CONFIG[ticket.status].label}" a "${TICKET_STATUS_CONFIG[to].label}"`;
+}
+
+function firstError(errors: FieldErrors<string>): string | null {
+  return Object.values(errors)[0] ?? null;
+}
+
+// machineId y n° de serie identifican al equipo: no se repiten entre los vigentes
+function duplicateProductError(
+  fields: { machineId: string; serialNumber: string },
+  exceptId?: string,
+): string | null {
+  const others = mockProducts.filter((p) => p.deletedAt === null && p.id !== exceptId);
+  if (others.some((p) => p.machineId === fields.machineId)) {
+    return `Ya existe un equipo con ID ${fields.machineId}`;
+  }
+  if (others.some((p) => p.serialNumber === fields.serialNumber)) {
+    return `Ya existe un equipo con n° de serie ${fields.serialNumber}`;
+  }
+  return null;
 }
 
 function invalidLoanTransition(loan: Loan, action: string): string {
@@ -228,12 +250,17 @@ export const handlers = [
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json({ errors: [{ message: "No autenticado" }] });
     syncOverdueLoans();
-    const { status, userId } = variables as { status?: LoanStatus; userId?: string };
+    const { status, userId, equipmentId } = variables as {
+      status?: LoanStatus;
+      userId?: string;
+      equipmentId?: string;
+    };
     // El solicitante solo ve sus prestamos, mande el filtro que mande
     const scopedUserId = isStaff(caller) ? userId : caller.id;
     let loans = [...mockLoans];
     if (status) loans = filterByStatus<Loan>(loans, status);
     if (scopedUserId) loans = loans.filter((l) => l.user.id === scopedUserId);
+    if (equipmentId) loans = loans.filter((l) => l.equipment.id === equipmentId);
     return HttpResponse.json({ data: { loans } });
   }),
 
@@ -743,13 +770,23 @@ export const handlers = [
         location: string;
       };
     };
+    const fields = {
+      ...input,
+      machineId: input.machineId.trim().toUpperCase(),
+      brand: input.brand.trim(),
+      model: input.model.trim(),
+      serialNumber: input.serialNumber.trim().toUpperCase(),
+      partNumber: input.partNumber.trim().toUpperCase(),
+    };
+    const error = firstError(validateProduct(fields)) ?? duplicateProductError(fields);
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
     const newProduct: Product = {
       id: `prod-${Date.now()}`,
       type: "product",
-      ...input,
-      status: input.status as Product["status"],
-      location: input.location as Product["location"],
-      issues: input.issues ?? null,
+      ...fields,
+      status: fields.status as Product["status"],
+      location: fields.location as Product["location"],
+      issues: fields.issues?.trim() || null,
       components: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -763,10 +800,32 @@ export const handlers = [
     if (!hasRole(getCaller(request), STAFF_ROLES)) {
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
-    const { id, input } = variables as { id: string; input: Partial<Product> };
-    const product = mockProducts.find((p) => p.id === id);
+    const { id, input } = variables as {
+      id: string;
+      input: Partial<
+        Pick<
+          Product,
+          "machineId" | "kind" | "brand" | "model" | "serialNumber" | "partNumber" | "location"
+        > & { issues: string | null }
+      >;
+    };
+    const product = mockProducts.find((p) => p.id === id && p.deletedAt === null);
     if (!product) return HttpResponse.json({ errors: [{ message: "Producto no encontrado" }] });
-    Object.assign(product, input, { updatedAt: new Date().toISOString() });
+    // Solo campos descriptivos: lo que no se manda queda como estaba. El estado
+    // lo mueven los prestamos y la baja, no la edicion.
+    const next = {
+      machineId: (input.machineId ?? product.machineId).trim().toUpperCase(),
+      kind: input.kind ?? product.kind,
+      location: input.location ?? product.location,
+      brand: (input.brand ?? product.brand).trim(),
+      model: (input.model ?? product.model).trim(),
+      serialNumber: (input.serialNumber ?? product.serialNumber).trim().toUpperCase(),
+      partNumber: (input.partNumber ?? product.partNumber).trim().toUpperCase(),
+    };
+    const error = firstError(validateProduct(next)) ?? duplicateProductError(next, product.id);
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    Object.assign(product, next, { updatedAt: new Date().toISOString() });
+    if (input.issues !== undefined) product.issues = input.issues?.trim() || null;
     return HttpResponse.json({ data: { updateProduct: product } });
   }),
 
@@ -775,9 +834,23 @@ export const handlers = [
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
     const { id } = variables as { id: string };
-    const product = mockProducts.find((p) => p.id === id);
+    const product = mockProducts.find((p) => p.id === id && p.deletedAt === null);
     if (!product) return HttpResponse.json({ errors: [{ message: "Producto no encontrado" }] });
-    product.deletedAt = new Date().toISOString();
+    syncOverdueLoans();
+    if (mockLoans.some((l) => l.equipment.id === id && IN_COURSE_LOAN_STATUSES.has(l.status))) {
+      return HttpResponse.json({
+        errors: [{ message: "No se puede dar de baja: el equipo tiene préstamos en curso" }],
+      });
+    }
+    if (mockTickets.some((t) => t.equipmentId === id && t.status !== "resolved")) {
+      return HttpResponse.json({
+        errors: [{ message: "No se puede dar de baja: el equipo tiene tickets abiertos" }],
+      });
+    }
+    const now = new Date().toISOString();
+    product.status = "retired";
+    product.deletedAt = now;
+    product.updatedAt = now;
     return HttpResponse.json({ data: { softDeleteProduct: true } });
   }),
 
@@ -797,17 +870,95 @@ export const handlers = [
         productId?: string;
       };
     };
+    const fields = {
+      ...input,
+      name: input.name.trim(),
+      model: input.model.trim(),
+      manufacturer: input.manufacturer.trim(),
+      serialNumber: input.serialNumber.trim().toUpperCase(),
+      partNumber: input.partNumber.trim().toUpperCase(),
+    };
+    const error = firstError(validateComponent(fields));
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
     const newComponent: Component = {
       id: `comp-${Date.now()}`,
       type: "component",
-      ...input,
-      productId: input.productId ?? null,
+      ...fields,
+      productId: fields.productId ?? null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       deletedAt: null,
     };
     mockComponents.push(newComponent);
     return HttpResponse.json({ data: { createComponent: newComponent } });
+  }),
+
+  graphql.mutation("UpdateComponent", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) {
+      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+    }
+    const { id, input } = variables as {
+      id: string;
+      input: Partial<
+        Pick<
+          Component,
+          | "name"
+          | "model"
+          | "manufacturer"
+          | "serialNumber"
+          | "partNumber"
+          | "isFactory"
+          | "isWorking"
+        >
+      >;
+    };
+    const component = mockComponents.find((c) => c.id === id && c.deletedAt === null);
+    if (!component) {
+      return HttpResponse.json({ errors: [{ message: "Componente no encontrado" }] });
+    }
+    const next = {
+      name: (input.name ?? component.name).trim(),
+      model: (input.model ?? component.model).trim(),
+      manufacturer: (input.manufacturer ?? component.manufacturer).trim(),
+      serialNumber: (input.serialNumber ?? component.serialNumber).trim().toUpperCase(),
+      partNumber: (input.partNumber ?? component.partNumber).trim().toUpperCase(),
+    };
+    const error = firstError(validateComponent(next));
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    Object.assign(component, next, { updatedAt: new Date().toISOString() });
+    if (input.isFactory !== undefined) component.isFactory = input.isFactory;
+    if (input.isWorking !== undefined) component.isWorking = input.isWorking;
+    return HttpResponse.json({ data: { updateComponent: component } });
+  }),
+
+  graphql.mutation("SoftDeleteComponent", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) {
+      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+    }
+    const { id } = variables as { id: string };
+    const component = mockComponents.find((c) => c.id === id && c.deletedAt === null);
+    if (!component) {
+      return HttpResponse.json({ errors: [{ message: "Componente no encontrado" }] });
+    }
+    syncOverdueLoans();
+    const inOpenLoan = mockLoans.some(
+      (l) => IN_COURSE_LOAN_STATUSES.has(l.status) && l.components.some((c) => c.id === id),
+    );
+    if (inOpenLoan) {
+      return HttpResponse.json({
+        errors: [
+          { message: "No se puede dar de baja: el componente está en un préstamo en curso" },
+        ],
+      });
+    }
+    const now = new Date().toISOString();
+    component.deletedAt = now;
+    component.updatedAt = now;
+    // El equipo deja de listarlo entre sus componentes
+    for (const product of mockProducts) {
+      product.components = product.components.filter((c) => c.id !== id);
+    }
+    return HttpResponse.json({ data: { softDeleteComponent: true } });
   }),
 
   graphql.mutation("ChangePassword", ({ request }) => {

@@ -1,4 +1,5 @@
-import { useParams, Link } from "react-router-dom";
+import { useState } from "react";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import { ArrowLeft, Edit2, Trash2 } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
@@ -11,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import { QrCode } from "@/components/ui/QrCode";
+import { RetireEquipmentDialog } from "./RetireEquipmentDialog";
+import { EquipmentHistory } from "./EquipmentHistory";
 
 const PRODUCT_QUERY = `
   query GetProduct($id: ID!) {
@@ -36,13 +39,16 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 export function ProductDetail() {
   const { id } = useParams<{ id: string }>();
   const { hasRole } = useAuth();
+  const navigate = useNavigate();
+  const [retireOpen, setRetireOpen] = useState(false);
   const { data, isLoading, error } = useAsync<{ product: Product | null }>(
     () => gql(PRODUCT_QUERY, { id }),
     [id],
   );
 
   const product = data?.product;
-  const canEdit = hasRole("root_admin", "admin", "tecnico");
+  const isStaff = hasRole("root_admin", "admin", "tecnico");
+  const canEdit = isStaff && !product?.deletedAt;
 
   return (
     <div className="space-y-6 max-w-full">
@@ -69,13 +75,24 @@ export function ProductDetail() {
                 Editar
               </Link>
             </Button>
-            <Button variant="destructive" size="sm">
+            <Button variant="destructive" size="sm" onClick={() => setRetireOpen(true)}>
               <Trash2 className="h-3.5 w-3.5" />
               Dar de baja
             </Button>
           </div>
         )}
       </div>
+
+      {product && id && (
+        <RetireEquipmentDialog
+          kind="product"
+          id={id}
+          name={`${product.machineId} · ${product.brand} ${product.model}`}
+          open={retireOpen}
+          onOpenChange={setRetireOpen}
+          onRetired={() => navigate(ROUTES.INVENTORY)}
+        />
+      )}
 
       {error && (
         <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
@@ -219,6 +236,8 @@ export function ProductDetail() {
               )}
             </CardContent>
           </Card>
+
+          {isStaff && <EquipmentHistory equipmentId={product.id} />}
         </motion.div>
       ) : (
         !isLoading && (
