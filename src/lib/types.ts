@@ -71,7 +71,7 @@ export interface Ticket {
   resolvedAt: string | null;
 } // Interfaz de ticket
 
-export type LoanStatus = "pending" | "approved" | "active" | "overdue" | "returned"; // Estado del prestamo
+export type LoanStatus = "pending" | "approved" | "rejected" | "active" | "overdue" | "returned"; // Estado del prestamo
 
 export interface Loan {
   id: string;
@@ -79,6 +79,8 @@ export interface Loan {
   user: User;
   status: LoanStatus;
   approvedBy: User | null;
+  deliveredBy: User | null;
+  deliveredAt: string | null;
   issueDate: string;
   returnDate: string;
   actualReturnDate: string | null;

@@ -57,6 +57,7 @@ export const LOAN_STATUS_CONFIG: Record<
 > = {
   pending: { label: "Pendiente", color: "warning" },
   approved: { label: "Aprobado", color: "success" },
+  rejected: { label: "Rechazado", color: "destructive" },
   active: { label: "Activo", color: "info" },
   overdue: { label: "Vencido", color: "destructive" },
   returned: { label: "Devuelto", color: "muted" },

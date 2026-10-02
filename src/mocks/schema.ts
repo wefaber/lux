@@ -4,7 +4,7 @@ export const schema = `
     me: User
     users(role: String, isActive: Boolean): [User!]!
     user(id: ID!): User
-    products(status: String, location: String, deletedAt: String): [Product!]!
+    products(status: String, location: String, deletedAt: String, availableForLoan: Boolean): [Product!]!
     product(id: ID!): Product
     productByMachineId(machineId: String!): Product
     components(productId: ID, isWorking: Boolean): [Component!]!
@@ -38,7 +38,8 @@ export const schema = `
     createLoan(input: LoanInput!): Loan!
     approveLoan(id: ID!): Loan!
     rejectLoan(id: ID!, reason: String!): Loan!
-    returnLoan(id: ID!): Loan!
+    deliverLoan(id: ID!): Loan!
+    returnLoan(id: ID!, damaged: Boolean, issues: String): Loan!
     createServiceRequest(input: ServiceRequestInput!): ServiceRequest!
     updateServiceRequest(id: ID!, input: ServiceRequestUpdateInput!): ServiceRequest!
     changePassword(currentPassword: String!, newPassword: String!): Boolean!
@@ -125,6 +126,8 @@ export const schema = `
     user: User!
     status: String!
     approvedBy: User
+    deliveredBy: User
+    deliveredAt: String
     issueDate: String!
     returnDate: String!
     actualReturnDate: String
@@ -236,7 +239,7 @@ export const schema = `
 
   input LoanInput {
     equipmentId: ID!
-    userId: ID!
+    userId: ID
     issueDate: String!
     returnDate: String!
     componentIds: [ID!]

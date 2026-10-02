@@ -5,6 +5,7 @@ import { mockTickets } from "./data/tickets";
 import { mockLoans } from "./data/loans";
 import { mockServices } from "./data/services";
 import { mockActivityLogs } from "./generators";
+import { LOAN_STATUS_CONFIG } from "@/lib/constants";
 import type {
   User,
   UserRole,
@@ -39,6 +40,32 @@ function getCaller(request: Request): User | null {
 
 function hasRole(caller: User | null, allowedRoles: UserRole[]): caller is User {
   return caller !== null && allowedRoles.includes(caller.role);
+}
+
+// Estados en los que el prestamo compromete el equipo: aprobado y todavia no
+// entregado, o entregado y todavia no devuelto.
+const OPEN_LOAN_STATUSES = new Set<LoanStatus>(["approved", "active", "overdue"]);
+
+function hasOpenLoan(equipmentId: string, exceptLoanId?: string): boolean {
+  return mockLoans.some(
+    (l) =>
+      l.id !== exceptLoanId && l.equipment.id === equipmentId && OPEN_LOAN_STATUSES.has(l.status),
+  );
+}
+
+// Un prestamo entregado cuya fecha de devolucion ya paso queda vencido. En un
+// backend real lo haria un job programado; aca se resuelve en cada lectura.
+function syncOverdueLoans(): void {
+  const now = new Date();
+  for (const loan of mockLoans) {
+    if (loan.status === "active" && new Date(loan.returnDate) < now) {
+      loan.status = "overdue";
+    }
+  }
+}
+
+function invalidLoanTransition(loan: Loan, action: string): string {
+  return `No se puede ${action} un préstamo en estado "${LOAN_STATUS_CONFIG[loan.status].label}"`;
 }
 
 export const handlers = [
@@ -76,9 +103,17 @@ export const handlers = [
   }),
 
   graphql.query("GetProducts", ({ variables }) => {
-    const { status, location } = variables as { status?: string; location?: string };
+    const { status, location, availableForLoan } = variables as {
+      status?: string;
+      location?: string;
+      availableForLoan?: boolean;
+    };
     let products = mockProducts.filter((p) => p.deletedAt === null);
     if (status) products = products.filter((p) => p.status === status);
+    // Disponible pero ya aprobado para otro prestamo no se puede volver a pedir
+    if (availableForLoan) {
+      products = products.filter((p) => p.status === "available" && !hasOpenLoan(p.id));
+    }
     if (location) products = products.filter((p) => p.location === location);
     return HttpResponse.json({ data: { products } });
   }),
@@ -137,17 +172,28 @@ export const handlers = [
     return HttpResponse.json({ data: { oolTickets: ool } });
   }),
 
-  graphql.query("GetLoans", ({ variables }) => {
+  graphql.query("GetLoans", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json({ errors: [{ message: "No autenticado" }] });
+    syncOverdueLoans();
     const { status, userId } = variables as { status?: LoanStatus; userId?: string };
+    // El solicitante solo ve sus prestamos, mande el filtro que mande
+    const scopedUserId = STAFF_ROLES.includes(caller.role) ? userId : caller.id;
     let loans = [...mockLoans];
     if (status) loans = filterByStatus<Loan>(loans, status);
-    if (userId) loans = loans.filter((l) => l.user.id === userId);
+    if (scopedUserId) loans = loans.filter((l) => l.user.id === scopedUserId);
     return HttpResponse.json({ data: { loans } });
   }),
 
-  graphql.query("GetLoan", ({ variables }) => {
+  graphql.query("GetLoan", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json({ errors: [{ message: "No autenticado" }] });
+    syncOverdueLoans();
     const { id } = variables as { id: string };
     const loan = mockLoans.find((l) => l.id === id) ?? null;
+    if (loan && !STAFF_ROLES.includes(caller.role) && loan.user.id !== caller.id) {
+      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+    }
     return HttpResponse.json({ data: { loan } });
   }),
 
@@ -304,23 +350,34 @@ export const handlers = [
   }),
 
   graphql.mutation("CreateLoan", ({ request, variables }) => {
-    const approver = getCaller(request);
-    if (!hasRole(approver, STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
-    }
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json({ errors: [{ message: "No autenticado" }] });
     const { input } = variables as {
       input: {
         equipmentId: string;
-        userId: string;
+        userId?: string;
         issueDate: string;
         returnDate: string;
         componentIds?: string[];
       };
     };
-    const equipment = mockProducts.find((p) => p.id === input.equipmentId);
-    const loanUser = mockUsers.find((u) => u.id === input.userId);
+    // El staff puede registrar un prestamo a nombre de otro usuario; el
+    // solicitante solo puede pedirlo para si mismo.
+    const loanUserId = STAFF_ROLES.includes(caller.role) ? (input.userId ?? caller.id) : caller.id;
+    const equipment = mockProducts.find((p) => p.id === input.equipmentId && p.deletedAt === null);
+    const loanUser = mockUsers.find((u) => u.id === loanUserId && u.isActive);
     if (!equipment || !loanUser) {
       return HttpResponse.json({ errors: [{ message: "Equipo o usuario no encontrado" }] });
+    }
+    if (equipment.status !== "available" || hasOpenLoan(equipment.id)) {
+      return HttpResponse.json({
+        errors: [{ message: "El equipo no está disponible para préstamo" }],
+      });
+    }
+    if (!(new Date(input.returnDate) > new Date(input.issueDate))) {
+      return HttpResponse.json({
+        errors: [{ message: "La fecha de devolución debe ser posterior a la de entrega" }],
+      });
     }
     const components = input.componentIds
       ? mockComponents.filter((c) => input.componentIds!.includes(c.id))
@@ -330,7 +387,9 @@ export const handlers = [
       equipment,
       user: loanUser,
       status: "pending",
-      approvedBy: approver,
+      approvedBy: null,
+      deliveredBy: null,
+      deliveredAt: null,
       issueDate: input.issueDate,
       returnDate: input.returnDate,
       actualReturnDate: null,
@@ -344,27 +403,94 @@ export const handlers = [
   }),
 
   graphql.mutation("ApproveLoan", ({ request, variables }) => {
-    if (!hasRole(getCaller(request), ELEVATED_ROLES)) {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) {
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
     const { id } = variables as { id: string };
     const loan = mockLoans.find((l) => l.id === id);
     if (!loan) return HttpResponse.json({ errors: [{ message: "Préstamo no encontrado" }] });
+    if (loan.status !== "pending") {
+      return HttpResponse.json({ errors: [{ message: invalidLoanTransition(loan, "aprobar") }] });
+    }
+    if (hasOpenLoan(loan.equipment.id, loan.id)) {
+      return HttpResponse.json({
+        errors: [{ message: "El equipo ya está comprometido en otro préstamo" }],
+      });
+    }
     loan.status = "approved";
+    loan.approvedBy = caller;
     loan.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { approveLoan: loan } });
+  }),
+
+  graphql.mutation("RejectLoan", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) {
+      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+    }
+    const { id, reason } = variables as { id: string; reason: string };
+    const loan = mockLoans.find((l) => l.id === id);
+    if (!loan) return HttpResponse.json({ errors: [{ message: "Préstamo no encontrado" }] });
+    if (loan.status !== "pending") {
+      return HttpResponse.json({ errors: [{ message: invalidLoanTransition(loan, "rechazar") }] });
+    }
+    if (!reason?.trim()) {
+      return HttpResponse.json({ errors: [{ message: "Indicá el motivo del rechazo" }] });
+    }
+    loan.status = "rejected";
+    loan.rejectionReason = reason.trim();
+    loan.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ data: { rejectLoan: loan } });
+  }),
+
+  graphql.mutation("DeliverLoan", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) {
+      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+    }
+    const { id } = variables as { id: string };
+    const loan = mockLoans.find((l) => l.id === id);
+    if (!loan) return HttpResponse.json({ errors: [{ message: "Préstamo no encontrado" }] });
+    if (loan.status !== "approved") {
+      return HttpResponse.json({ errors: [{ message: invalidLoanTransition(loan, "entregar") }] });
+    }
+    if (loan.equipment.status !== "available") {
+      return HttpResponse.json({
+        errors: [{ message: "El equipo no está disponible para entregar" }],
+      });
+    }
+    const now = new Date().toISOString();
+    loan.status = "active";
+    loan.deliveredBy = caller;
+    loan.deliveredAt = now;
+    loan.updatedAt = now;
+    loan.equipment.status = "in_use";
+    loan.equipment.updatedAt = now;
+    return HttpResponse.json({ data: { deliverLoan: loan } });
   }),
 
   graphql.mutation("ReturnLoan", ({ request, variables }) => {
     if (!hasRole(getCaller(request), STAFF_ROLES)) {
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
-    const { id } = variables as { id: string };
+    const { id, damaged, issues } = variables as {
+      id: string;
+      damaged?: boolean;
+      issues?: string;
+    };
     const loan = mockLoans.find((l) => l.id === id);
     if (!loan) return HttpResponse.json({ errors: [{ message: "Préstamo no encontrado" }] });
+    if (loan.status !== "active" && loan.status !== "overdue") {
+      return HttpResponse.json({ errors: [{ message: invalidLoanTransition(loan, "devolver") }] });
+    }
+    const now = new Date().toISOString();
     loan.status = "returned";
-    loan.actualReturnDate = new Date().toISOString();
-    loan.updatedAt = new Date().toISOString();
+    loan.actualReturnDate = now;
+    loan.updatedAt = now;
+    // Si vuelve con fallas pasa a reparacion en vez de quedar disponible
+    loan.equipment.status = damaged ? "in_repair" : "available";
+    if (damaged && issues?.trim()) loan.equipment.issues = issues.trim();
+    loan.equipment.updatedAt = now;
     return HttpResponse.json({ data: { returnLoan: loan } });
   }),
 

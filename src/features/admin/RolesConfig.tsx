@@ -28,8 +28,17 @@ const PERMISSIONS: Array<{ label: string; key: string; roles: UserRole[] }> = [
   },
   { label: "Asignar tickets", key: "assign_tickets", roles: ["root_admin", "admin"] },
   { label: "Resolver tickets", key: "resolve_tickets", roles: ["root_admin", "admin", "tecnico"] },
-  { label: "Ver préstamos", key: "view_loans", roles: ["root_admin", "admin", "tecnico"] },
-  { label: "Gestionar préstamos", key: "manage_loans", roles: ["root_admin", "admin"] },
+  {
+    label: "Solicitar préstamos",
+    key: "request_loans",
+    roles: ["root_admin", "admin", "tecnico", "solicitante"],
+  },
+  {
+    label: "Ver todos los préstamos",
+    key: "view_loans",
+    roles: ["root_admin", "admin", "tecnico"],
+  },
+  { label: "Gestionar préstamos", key: "manage_loans", roles: ["root_admin", "admin", "tecnico"] },
   {
     label: "Ver solicitudes",
     key: "view_services",

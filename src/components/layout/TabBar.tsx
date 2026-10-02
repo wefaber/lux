@@ -33,7 +33,7 @@ const TAB_ITEMS: TabItem[] = [
     icon: BookOpen,
     label: "Préstamos",
     to: ROUTES.LOANS,
-    roles: ["root_admin", "admin", "tecnico"],
+    roles: ["root_admin", "admin", "tecnico", "solicitante"],
   },
   {
     icon: Wrench,
