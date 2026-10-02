@@ -35,6 +35,7 @@ export const schema = `
     assignTicket(id: ID!, technicianId: ID!): Ticket!
     claimTicket(id: ID!): Ticket!
     completeTicket(id: ID!, input: TicketCompleteInput!): Ticket!
+    changeTicketStatus(id: ID!, status: String!): Ticket!
     createLoan(input: LoanInput!): Loan!
     approveLoan(id: ID!): Loan!
     rejectLoan(id: ID!, reason: String!): Loan!
@@ -224,11 +225,7 @@ export const schema = `
     title: String
     description: String
     category: String
-    status: String
-    assignedToId: ID
-    diagnosis: String
-    corrected: Boolean
-    actionsTaken: String
+    equipmentId: ID
   }
 
   input TicketCompleteInput {

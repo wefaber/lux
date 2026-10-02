@@ -3,7 +3,13 @@ import { Package, Ticket, BookOpen, Wrench, TrendingUp, Download } from "lucide-
 import { useAuth } from "@/hooks/useAuth";
 import { useAsync } from "@/hooks/useSkeleton";
 import { gql, cn } from "@/lib/utils";
-import { TICKET_STATUS_CONFIG } from "@/lib/constants";
+import { downloadCsv } from "@/lib/csv";
+import {
+  DASHBOARD_PERIODS,
+  DASHBOARD_PERIOD_LABELS,
+  TICKET_STATUS_CONFIG,
+  type DashboardPeriod,
+} from "@/lib/constants";
 import type { DashboardStats, TicketStatus } from "@/lib/types";
 import { LuxPieChart } from "@/components/charts/PieChart";
 import { LuxBarChart } from "@/components/charts/BarChart";
@@ -56,7 +62,8 @@ function MetricCard({ icon: Icon, label, value, color }: MetricCardProps) {
 
 export function DashboardPage() {
   const { user, hasRole } = useAuth();
-  const [period] = useState("7d"); // Seteo de periodo de datos
+  const [period, setPeriod] = useState<DashboardPeriod>("7d"); // Periodo del grafico de solicitudes
+  const isStaff = hasRole("root_admin", "admin", "tecnico");
   const { data, isLoading, error } = useAsync<{ dashboardStats: DashboardStats }>(
     () => gql(DASHBOARD_QUERY, { period }),
     [period],
@@ -77,6 +84,24 @@ export function DashboardPage() {
       value: s.count,
     })) ?? []; // Informacion de la grafica de barras
 
+  const handleExport = () => {
+    if (!stats) return;
+    const today = new Date().toISOString().slice(0, 10);
+    downloadCsv(`lux-dashboard-${period}-${today}.csv`, [
+      ["Métrica", "Valor"],
+      ["Equipos totales", stats.totalEquipment],
+      ["Tickets abiertos", stats.openTickets],
+      ["Préstamos activos", stats.activeLoans],
+      ["Solicitudes pendientes", stats.pendingServices],
+      [],
+      ["Tickets por estado", "Cantidad"],
+      ...stats.ticketsByStatus.map((t) => [TICKET_STATUS_CONFIG[t.status].label, t.count]),
+      [],
+      [`Solicitudes de servicio (${DASHBOARD_PERIOD_LABELS[period]})`, "Cantidad"],
+      ...stats.servicesByPeriod.map((s) => [s.date, s.count]),
+    ]);
+  };
+
   // Show full skeletons ONLY on first load (when we don't have stats yet)
   const isInitialLoading = isLoading && !stats;
 
@@ -87,16 +112,30 @@ export function DashboardPage() {
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Buenos días, {user?.name.split(" ")[0]}
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Resumen del sistema · ITI CETP</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {isStaff ? "Resumen del sistema" : "Tu actividad"} · ITI CETP
+          </p>
         </div>
-        {hasRole("root_admin", "admin") && (
-          <div className="flex gap-2">
-            <Button variant="secondary" size="sm">
+        <div className="flex gap-2">
+          <select
+            aria-label="Período"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as DashboardPeriod)}
+            className="h-8 rounded-lg border border-input bg-card/50 px-3 text-xs text-foreground focus:outline-none focus:border-ring cursor-pointer"
+          >
+            {DASHBOARD_PERIODS.map((p) => (
+              <option key={p} value={p}>
+                {DASHBOARD_PERIOD_LABELS[p]}
+              </option>
+            ))}
+          </select>
+          {hasRole("root_admin", "admin") && (
+            <Button variant="secondary" size="sm" onClick={handleExport} disabled={!stats}>
               <Download className="h-3.5 w-3.5" />
               Exportar CSV
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {isInitialLoading ? (
@@ -114,25 +153,25 @@ export function DashboardPage() {
         >
           <MetricCard
             icon={Package}
-            label="Equipos totales"
+            label={isStaff ? "Equipos totales" : "Equipos disponibles"}
             value={stats?.totalEquipment ?? 0}
             color="rgb(0,122,255)"
           />
           <MetricCard
             icon={Ticket}
-            label="Tickets abiertos"
+            label={isStaff ? "Tickets abiertos" : "Mis tickets abiertos"}
             value={stats?.openTickets ?? 0}
             color="rgb(255,159,10)"
           />
           <MetricCard
             icon={BookOpen}
-            label="Préstamos activos"
+            label={isStaff ? "Préstamos activos" : "Mis préstamos activos"}
             value={stats?.activeLoans ?? 0}
             color="rgb(52,199,89)"
           />
           <MetricCard
             icon={Wrench}
-            label="Solicitudes pendientes"
+            label={isStaff ? "Solicitudes pendientes" : "Mis solicitudes pendientes"}
             value={stats?.pendingServices ?? 0}
             color="rgb(255,69,58)"
           />
@@ -156,7 +195,7 @@ export function DashboardPage() {
             <LuxPieChart data={pieData} title="Tickets por estado" />
             <LuxBarChart
               data={barData}
-              title="Solicitudes de servicio — últimos 7 días"
+              title={`Solicitudes de servicio · ${DASHBOARD_PERIOD_LABELS[period]}`}
               color="rgb(0,122,255)"
             />
           </div>

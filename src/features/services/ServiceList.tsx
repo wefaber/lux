@@ -38,7 +38,6 @@ export function ServiceList() {
     (s) => !statusFilter || s.status === statusFilter,
   );
 
-  
   const showSkeleton = isLoading && !data; //Skeleton cuando se esta cargando y no hay informacion
 
   return (
@@ -126,14 +125,12 @@ export function ServiceList() {
                       {formatDate(s.createdAt)}
                     </td>
                     <td className="px-6 py-4">
-                      {hasRole("root_admin", "admin", "tecnico") && (
-                        <Link
-                          to={`${ROUTES.SERVICES}/${s.id}`}
-                          className="text-xs text-primary hover:underline font-semibold"
-                        >
-                          Ver detalle
-                        </Link>
-                      )}
+                      <Link
+                        to={`${ROUTES.SERVICES}/${s.id}`}
+                        className="text-xs text-primary hover:underline font-semibold"
+                      >
+                        Ver detalle
+                      </Link>
                     </td>
                   </tr>
                 );

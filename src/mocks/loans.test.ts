@@ -1,43 +1,14 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { setupServer } from "msw/node";
-import { handlers } from "./handlers";
+import { describe, expect, test } from "bun:test";
 import { mockLoans } from "./data/loans";
 import { mockProducts } from "./data/equipment";
 import type { Loan } from "@/lib/types";
+import { gqlAs, useMockServer, USERS } from "@/test/graphql";
 
-// Los handlers mutan los datos semilla en memoria, igual que en el navegador.
 // Cada test arma sus propios préstamos sobre equipos propios para no depender
 // del orden de ejecución.
+useMockServer();
 
-const server = setupServer(...handlers);
-
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
-afterAll(() => server.close());
-
-const ADMIN = "u-admin-1";
-const TECNICO = "u-tec-1";
-const SOLICITANTE = "u-sol-1";
-const OTRO_SOLICITANTE = "u-sol-2";
-
-interface GqlResult<T> {
-  data?: T;
-  errors?: Array<{ message: string }>;
-}
-
-async function gqlAs<T>(
-  userId: string | null,
-  query: string,
-  variables?: Record<string, unknown>,
-): Promise<GqlResult<T>> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (userId) headers.Authorization = `Bearer mock-token-${userId}`;
-  const res = await fetch("http://localhost/graphql", {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ query, variables }),
-  });
-  return (await res.json()) as GqlResult<T>;
-}
+const { ADMIN, TECNICO, SOLICITANTE, OTRO_SOLICITANTE } = USERS;
 
 const CREATE = `mutation CreateLoan($input: LoanInput!) { createLoan(input: $input) { id } }`;
 const APPROVE = `mutation ApproveLoan($id: ID!) { approveLoan(id: $id) { id } }`;

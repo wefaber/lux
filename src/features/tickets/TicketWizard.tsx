@@ -37,22 +37,23 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
   const [corrected, setCorrected] = useState<boolean | null>(ticket.corrected ?? null);
   const [actionsTaken, setActionsTaken] = useState(ticket.actionsTaken ?? "");
   const [completing, setCompleting] = useState(false);
-  const [completed, setCompleted] = useState(ticket.status === "resolved");
+  const [error, setError] = useState("");
 
-  const isResolved = ticket.status === "resolved" || completed; // Verificacion si esta resuelto o no
+  // Sale del estado del ticket y no de un flag local: si se reabre, vuelve a ser editable
+  const isResolved = ticket.status === "resolved";
 
   const handleComplete = async () => {
     if (!diagnosis || corrected === null) return;
     setCompleting(true);
+    setError("");
     try {
       await gql(COMPLETE_TICKET_MUTATION, {
         id: ticket.id,
         input: { diagnosis, corrected, actionsTaken },
       });
-      setCompleted(true);
       onComplete();
-    } catch {
-      // TODO: show error toast
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al completar el ticket");
     } finally {
       setCompleting(false);
     }
@@ -151,7 +152,8 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
             Anterior
           </Button>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {error && <span className="text-xs text-destructive font-medium">{error}</span>}
             {currentStep < steps.length - 1 ? (
               <Button
                 size="sm"
@@ -159,7 +161,16 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
               >
                 Siguiente
               </Button>
-            ) : canComplete && !isResolved ? (
+            ) : isResolved ? (
+              <span className="text-xs text-success font-medium flex items-center gap-1">
+                <CheckCircle2 className="h-4 w-4" />
+                Resuelto
+              </span>
+            ) : !canComplete ? null : ticket.status === "pending" ? (
+              <span className="text-xs text-muted-foreground font-medium">
+                Tomá el ticket para poder completarlo
+              </span>
+            ) : (
               <Button
                 size="sm"
                 onClick={handleComplete}
@@ -167,12 +178,7 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
               >
                 {completing ? "Completando..." : "Marcar como completado"}
               </Button>
-            ) : isResolved ? (
-              <span className="text-xs text-success font-medium flex items-center gap-1">
-                <CheckCircle2 className="h-4 w-4" />
-                Resuelto
-              </span>
-            ) : null}
+            )}
           </div>
         </div>
       </div>

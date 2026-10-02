@@ -5,7 +5,12 @@ import { mockTickets } from "./data/tickets";
 import { mockLoans } from "./data/loans";
 import { mockServices } from "./data/services";
 import { mockActivityLogs } from "./generators";
-import { LOAN_STATUS_CONFIG } from "@/lib/constants";
+import {
+  LOAN_STATUS_CONFIG,
+  TICKET_STATUS_CONFIG,
+  TICKET_TRANSITIONS,
+  type DashboardPeriod,
+} from "@/lib/constants";
 import type {
   User,
   UserRole,
@@ -42,6 +47,20 @@ function hasRole(caller: User | null, allowedRoles: UserRole[]): caller is User 
   return caller !== null && allowedRoles.includes(caller.role);
 }
 
+function isStaff(user: User): boolean {
+  return STAFF_ROLES.includes(user.role);
+}
+
+// 90 dias en barras diarias no se lee: se agrupa por semana
+const PERIOD_BUCKETS: Record<DashboardPeriod, { days: number; bucketDays: number }> = {
+  "7d": { days: 7, bucketDays: 1 },
+  "30d": { days: 30, bucketDays: 1 },
+  "90d": { days: 91, bucketDays: 7 },
+};
+
+const UNAUTHENTICATED = { errors: [{ message: "No autenticado" }] };
+const FORBIDDEN = { errors: [{ message: "No tenés permisos para esta acción" }] };
+
 // Estados en los que el prestamo compromete el equipo: aprobado y todavia no
 // entregado, o entregado y todavia no devuelto.
 const OPEN_LOAN_STATUSES = new Set<LoanStatus>(["approved", "active", "overdue"]);
@@ -62,6 +81,14 @@ function syncOverdueLoans(): void {
       loan.status = "overdue";
     }
   }
+}
+
+function canTransitionTicket(ticket: Ticket, to: TicketStatus): boolean {
+  return TICKET_TRANSITIONS[ticket.status].includes(to);
+}
+
+function invalidTicketTransition(ticket: Ticket, to: TicketStatus): string {
+  return `No se puede pasar un ticket de "${TICKET_STATUS_CONFIG[ticket.status].label}" a "${TICKET_STATUS_CONFIG[to].label}"`;
 }
 
 function invalidLoanTransition(loan: Loan, action: string): string {
@@ -88,7 +115,10 @@ export const handlers = [
     return HttpResponse.json({ data: { me: getCaller(request) } });
   }),
 
-  graphql.query("GetUsers", ({ variables }) => {
+  graphql.query("GetUsers", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    if (!isStaff(caller)) return HttpResponse.json(FORBIDDEN);
     const { role, isActive } = variables as { role?: string; isActive?: boolean };
     let users = [...mockUsers];
     if (role) users = users.filter((u) => u.role === role);
@@ -96,13 +126,17 @@ export const handlers = [
     return HttpResponse.json({ data: { users } });
   }),
 
-  graphql.query("GetUser", ({ variables }) => {
+  graphql.query("GetUser", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
     const { id } = variables as { id: string };
+    if (!isStaff(caller) && id !== caller.id) return HttpResponse.json(FORBIDDEN);
     const user = mockUsers.find((u) => u.id === id);
     return HttpResponse.json({ data: { user: user ?? null } });
   }),
 
-  graphql.query("GetProducts", ({ variables }) => {
+  graphql.query("GetProducts", ({ request, variables }) => {
+    if (!getCaller(request)) return HttpResponse.json(UNAUTHENTICATED);
     const { status, location, availableForLoan } = variables as {
       status?: string;
       location?: string;
@@ -118,19 +152,22 @@ export const handlers = [
     return HttpResponse.json({ data: { products } });
   }),
 
-  graphql.query("GetProduct", ({ variables }) => {
+  graphql.query("GetProduct", ({ request, variables }) => {
+    if (!getCaller(request)) return HttpResponse.json(UNAUTHENTICATED);
     const { id } = variables as { id: string };
     const product = mockProducts.find((p) => p.id === id) ?? null;
     return HttpResponse.json({ data: { product } });
   }),
 
-  graphql.query("GetProductByMachineId", ({ variables }) => {
+  graphql.query("GetProductByMachineId", ({ request, variables }) => {
+    if (!getCaller(request)) return HttpResponse.json(UNAUTHENTICATED);
     const { machineId } = variables as { machineId: string };
     const product = mockProducts.find((p) => p.machineId === machineId && p.deletedAt === null) ?? null;
     return HttpResponse.json({ data: { productByMachineId: product } });
   }),
 
-  graphql.query("GetComponents", ({ variables }) => {
+  graphql.query("GetComponents", ({ request, variables }) => {
+    if (!getCaller(request)) return HttpResponse.json(UNAUTHENTICATED);
     const { productId, isWorking } = variables as { productId?: string; isWorking?: boolean };
     let components = mockComponents.filter((c) => c.deletedAt === null);
     if (productId !== undefined) {
@@ -142,32 +179,47 @@ export const handlers = [
     return HttpResponse.json({ data: { components } });
   }),
 
-  graphql.query("GetComponent", ({ variables }) => {
+  graphql.query("GetComponent", ({ request, variables }) => {
+    if (!getCaller(request)) return HttpResponse.json(UNAUTHENTICATED);
     const { id } = variables as { id: string };
     const component = mockComponents.find((c) => c.id === id) ?? null;
     return HttpResponse.json({ data: { component } });
   }),
 
-  graphql.query("GetTickets", ({ variables }) => {
-    const { status, assignedToId, submittedById } = variables as {
+  graphql.query("GetTickets", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    const { status, assignedToId, submittedById, equipmentId } = variables as {
       status?: TicketStatus;
       assignedToId?: string;
       submittedById?: string;
+      equipmentId?: string;
     };
+    // El solicitante solo ve sus tickets, mande el filtro que mande
+    const scopedSubmittedById = isStaff(caller) ? submittedById : caller.id;
     let tickets = [...mockTickets];
     if (status) tickets = tickets.filter((t) => t.status === status);
     if (assignedToId) tickets = tickets.filter((t) => t.assignedTo?.id === assignedToId);
-    if (submittedById) tickets = tickets.filter((t) => t.submittedBy.id === submittedById);
+    if (scopedSubmittedById) {
+      tickets = tickets.filter((t) => t.submittedBy.id === scopedSubmittedById);
+    }
+    if (equipmentId) tickets = tickets.filter((t) => t.equipmentId === equipmentId);
     return HttpResponse.json({ data: { tickets } });
   }),
 
-  graphql.query("GetTicket", ({ variables }) => {
+  graphql.query("GetTicket", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
     const { id } = variables as { id: string };
     const ticket = mockTickets.find((t) => t.id === id) ?? null;
+    if (ticket && !isStaff(caller) && ticket.submittedBy.id !== caller.id) {
+      return HttpResponse.json(FORBIDDEN);
+    }
     return HttpResponse.json({ data: { ticket } });
   }),
 
-  graphql.query("GetOolTickets", () => {
+  graphql.query("GetOolTickets", ({ request }) => {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
     const ool = mockTickets.filter((t) => t.status === "pending" && t.assignedTo === null);
     return HttpResponse.json({ data: { oolTickets: ool } });
   }),
@@ -178,7 +230,7 @@ export const handlers = [
     syncOverdueLoans();
     const { status, userId } = variables as { status?: LoanStatus; userId?: string };
     // El solicitante solo ve sus prestamos, mande el filtro que mande
-    const scopedUserId = STAFF_ROLES.includes(caller.role) ? userId : caller.id;
+    const scopedUserId = isStaff(caller) ? userId : caller.id;
     let loans = [...mockLoans];
     if (status) loans = filterByStatus<Loan>(loans, status);
     if (scopedUserId) loans = loans.filter((l) => l.user.id === scopedUserId);
@@ -191,68 +243,88 @@ export const handlers = [
     syncOverdueLoans();
     const { id } = variables as { id: string };
     const loan = mockLoans.find((l) => l.id === id) ?? null;
-    if (loan && !STAFF_ROLES.includes(caller.role) && loan.user.id !== caller.id) {
+    if (loan && !isStaff(caller) && loan.user.id !== caller.id) {
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
     return HttpResponse.json({ data: { loan } });
   }),
 
-  graphql.query("GetServiceRequests", ({ variables }) => {
+  graphql.query("GetServiceRequests", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
     const { status, requestedById } = variables as {
       status?: ServiceStatus;
       requestedById?: string;
     };
+    // El solicitante solo ve sus solicitudes, mande el filtro que mande
+    const scopedRequestedById = isStaff(caller) ? requestedById : caller.id;
     let services = [...mockServices];
     if (status) services = filterByStatus<ServiceRequest>(services, status);
-    if (requestedById) services = services.filter((s) => s.requestedBy.id === requestedById);
+    if (scopedRequestedById) {
+      services = services.filter((s) => s.requestedBy.id === scopedRequestedById);
+    }
     return HttpResponse.json({ data: { serviceRequests: services } });
   }),
 
-  graphql.query("GetServiceRequest", ({ variables }) => {
+  graphql.query("GetServiceRequest", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
     const { id } = variables as { id: string };
     const serviceRequest = mockServices.find((s) => s.id === id) ?? null;
+    if (serviceRequest && !isStaff(caller) && serviceRequest.requestedBy.id !== caller.id) {
+      return HttpResponse.json(FORBIDDEN);
+    }
     return HttpResponse.json({ data: { serviceRequest } });
   }),
 
-  graphql.query("GetDashboardStats", () => {
-    const activeProducts = mockProducts.filter((p) => p.deletedAt === null);
-    const openTickets = mockTickets.filter((t) => t.status !== "resolved");
-    const activeLoans = mockLoans.filter((l) =>
-      ["active", "approved", "overdue"].includes(l.status),
+  graphql.query("GetDashboardStats", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    syncOverdueLoans();
+    const { period } = variables as { period?: string };
+    const { days, bucketDays } = PERIOD_BUCKETS[period as DashboardPeriod] ?? PERIOD_BUCKETS["7d"];
+
+    // El staff ve el sistema completo; el solicitante, solo lo suyo
+    const staff = isStaff(caller);
+    const tickets = staff ? mockTickets : mockTickets.filter((t) => t.submittedBy.id === caller.id);
+    const loans = staff ? mockLoans : mockLoans.filter((l) => l.user.id === caller.id);
+    const services = staff
+      ? mockServices
+      : mockServices.filter((s) => s.requestedBy.id === caller.id);
+    // Al solicitante le sirve saber cuantos equipos puede pedir, no el inventario total
+    const equipment = mockProducts.filter(
+      (p) => p.deletedAt === null && (staff || (p.status === "available" && !hasOpenLoan(p.id))),
     );
-    const pendingServices = mockServices.filter((s) => s.status === "pending");
 
-    const ticketsByStatus: DashboardStats["ticketsByStatus"] = [
-      { status: "pending", count: mockTickets.filter((t) => t.status === "pending").length },
-      {
-        status: "in_progress",
-        count: mockTickets.filter((t) => t.status === "in_progress").length,
-      },
-      {
-        status: "in_resolution",
-        count: mockTickets.filter((t) => t.status === "in_resolution").length,
-      },
-      { status: "resolved", count: mockTickets.filter((t) => t.status === "resolved").length },
-    ];
+    const ticketStatuses: TicketStatus[] = ["pending", "in_progress", "in_resolution", "resolved"];
+    const ticketsByStatus: DashboardStats["ticketsByStatus"] = ticketStatuses.map((status) => ({
+      status,
+      count: tickets.filter((t) => t.status === status).length,
+    }));
 
+    const todayEnd = new Date();
+    todayEnd.setUTCHours(24, 0, 0, 0);
+    const bucketCount = Math.ceil(days / bucketDays);
     const servicesByPeriod: DashboardStats["servicesByPeriod"] = Array.from(
-      { length: 7 },
+      { length: bucketCount },
       (_, i) => {
-        const d = new Date();
-        d.setDate(d.getDate() - (6 - i));
-        const dateStr = d.toISOString().slice(0, 10);
-        const count =
-          mockServices.filter((s) => s.createdAt.startsWith(dateStr)).length +
-          Math.floor(Math.random() * 3);
-        return { date: dateStr, count };
+        const end = new Date(todayEnd);
+        end.setUTCDate(end.getUTCDate() - (bucketCount - 1 - i) * bucketDays);
+        const start = new Date(end);
+        start.setUTCDate(start.getUTCDate() - bucketDays);
+        const count = services.filter((s) => {
+          const created = new Date(s.createdAt);
+          return created >= start && created < end;
+        }).length;
+        return { date: start.toISOString().slice(0, 10), count };
       },
     );
 
     const stats: DashboardStats = {
-      totalEquipment: activeProducts.length,
-      openTickets: openTickets.length,
-      activeLoans: activeLoans.length,
-      pendingServices: pendingServices.length,
+      totalEquipment: equipment.length,
+      openTickets: tickets.filter((t) => t.status !== "resolved").length,
+      activeLoans: loans.filter((l) => OPEN_LOAN_STATUSES.has(l.status)).length,
+      pendingServices: services.filter((s) => s.status === "pending").length,
       ticketsByStatus,
       servicesByPeriod,
     };
@@ -260,7 +332,8 @@ export const handlers = [
     return HttpResponse.json({ data: { dashboardStats: stats } });
   }),
 
-  graphql.query("GetActivityLogs", ({ variables }) => {
+  graphql.query("GetActivityLogs", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), ELEVATED_ROLES)) return HttpResponse.json(FORBIDDEN);
     const { userId, operation, startDate, endDate } = variables as {
       userId?: string;
       operation?: string;
@@ -313,6 +386,11 @@ export const handlers = [
     const { id } = variables as { id: string };
     const ticket = mockTickets.find((t) => t.id === id);
     if (!ticket) return HttpResponse.json({ errors: [{ message: "Ticket no encontrado" }] });
+    if (ticket.status !== "pending") {
+      return HttpResponse.json({
+        errors: [{ message: invalidTicketTransition(ticket, "in_progress") }],
+      });
+    }
     ticket.assignedTo = caller;
     ticket.status = "in_progress";
     ticket.updatedAt = new Date().toISOString();
@@ -323,11 +401,49 @@ export const handlers = [
     if (!hasRole(getCaller(request), STAFF_ROLES)) {
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
-    const { id, input } = variables as { id: string; input: Partial<Ticket> };
+    const { id, input } = variables as {
+      id: string;
+      input: Partial<Pick<Ticket, "title" | "description" | "category" | "equipmentId">>;
+    };
     const ticket = mockTickets.find((t) => t.id === id);
     if (!ticket) return HttpResponse.json({ errors: [{ message: "Ticket no encontrado" }] });
-    Object.assign(ticket, input, { updatedAt: new Date().toISOString() });
+    // Solo datos descriptivos: el estado se mueve por changeTicketStatus/completeTicket
+    const { title, description, category, equipmentId } = input;
+    if (title !== undefined) ticket.title = title;
+    if (description !== undefined) ticket.description = description;
+    if (category !== undefined) ticket.category = category;
+    if (equipmentId !== undefined) {
+      ticket.equipmentId = equipmentId;
+      ticket.equipment = mockProducts.find((p) => p.id === equipmentId) ?? null;
+    }
+    ticket.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { updateTicket: ticket } });
+  }),
+
+  graphql.mutation("ChangeTicketStatus", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) {
+      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+    }
+    const { id, status } = variables as { id: string; status: TicketStatus };
+    const ticket = mockTickets.find((t) => t.id === id);
+    if (!ticket) return HttpResponse.json({ errors: [{ message: "Ticket no encontrado" }] });
+    if (!(status in TICKET_STATUS_CONFIG)) {
+      return HttpResponse.json({ errors: [{ message: "Estado inválido" }] });
+    }
+    if (status === "resolved") {
+      return HttpResponse.json({
+        errors: [{ message: "Para resolver un ticket completá el diagnóstico" }],
+      });
+    }
+    // Tomar el ticket asigna responsable: no se hace cambiando el estado a mano
+    if (ticket.status === "pending" || !canTransitionTicket(ticket, status)) {
+      return HttpResponse.json({ errors: [{ message: invalidTicketTransition(ticket, status) }] });
+    }
+    if (status === "pending") ticket.assignedTo = null;
+    if (ticket.status === "resolved") ticket.resolvedAt = null;
+    ticket.status = status;
+    ticket.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ data: { changeTicketStatus: ticket } });
   }),
 
   graphql.mutation("CompleteTicket", ({ request, variables }) => {
@@ -340,6 +456,16 @@ export const handlers = [
     };
     const ticket = mockTickets.find((t) => t.id === id);
     if (!ticket) return HttpResponse.json({ errors: [{ message: "Ticket no encontrado" }] });
+    if (!canTransitionTicket(ticket, "resolved")) {
+      return HttpResponse.json({
+        errors: [{ message: invalidTicketTransition(ticket, "resolved") }],
+      });
+    }
+    if (!input.diagnosis?.trim() || typeof input.corrected !== "boolean") {
+      return HttpResponse.json({
+        errors: [{ message: "Completá el diagnóstico y si se corrigió el problema" }],
+      });
+    }
     ticket.status = "resolved";
     ticket.diagnosis = input.diagnosis;
     ticket.corrected = input.corrected;
@@ -363,7 +489,7 @@ export const handlers = [
     };
     // El staff puede registrar un prestamo a nombre de otro usuario; el
     // solicitante solo puede pedirlo para si mismo.
-    const loanUserId = STAFF_ROLES.includes(caller.role) ? (input.userId ?? caller.id) : caller.id;
+    const loanUserId = isStaff(caller) ? (input.userId ?? caller.id) : caller.id;
     const equipment = mockProducts.find((p) => p.id === input.equipmentId && p.deletedAt === null);
     const loanUser = mockUsers.find((u) => u.id === loanUserId && u.isActive);
     if (!equipment || !loanUser) {
@@ -697,8 +823,19 @@ export const handlers = [
     const ticket = mockTickets.find((t) => t.id === id);
     const tech = mockUsers.find((u) => u.id === technicianId);
     if (!ticket || !tech) return HttpResponse.json({ errors: [{ message: "No encontrado" }] });
+    if (!isStaff(tech)) {
+      return HttpResponse.json({
+        errors: [{ message: "Solo se puede asignar a personal técnico" }],
+      });
+    }
+    // Asignar un pendiente lo pone en progreso; reasignar no cambia el estado
+    if (ticket.status === "resolved") {
+      return HttpResponse.json({
+        errors: [{ message: "No se puede reasignar un ticket resuelto" }],
+      });
+    }
     ticket.assignedTo = tech;
-    ticket.status = "in_progress";
+    if (ticket.status === "pending") ticket.status = "in_progress";
     ticket.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { assignTicket: ticket } });
   }),

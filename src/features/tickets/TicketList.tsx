@@ -76,10 +76,7 @@ export function TicketList() {
     [isSolicitante, user?.id],
   );
 
-  const { data: productsData } = useAsync<{ products: Product[] }>(
-    () => gql(PRODUCTS_QUERY),
-    [],
-  );
+  const { data: productsData } = useAsync<{ products: Product[] }>(() => gql(PRODUCTS_QUERY), []);
 
   const products = productsData?.products ?? [];
 
@@ -120,7 +117,6 @@ export function TicketList() {
     }
   }; // Funcion que maneja la creacion del ticket
 
-
   const handleQrScan = (machineId: string) => {
     const product = products.find((p) => p.machineId === machineId);
     if (product) {
@@ -138,12 +134,11 @@ export function TicketList() {
           <p className="text-sm text-muted-foreground mt-0.5">Mesa de ayuda</p>
         </div>
         <div className="flex gap-2">
-          {!hasRole("root_admin", "admin", "tecnico") && (
-            <Button size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" />
-              Nuevo ticket
-            </Button>
-          )}
+          {/* Cualquier rol puede reportar un incidente; OOL es una accion extra del staff */}
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus className="h-3.5 w-3.5" />
+            Nuevo ticket
+          </Button>
           {hasRole("root_admin", "admin", "tecnico") && (
             <Button variant="secondary" size="sm" asChild>
               <Link to={`${ROUTES.TICKETS}/ool`}>
@@ -220,18 +215,12 @@ export function TicketList() {
                   >
                     <td className="px-6 py-4 text-xs text-muted-foreground font-mono">{t.id}</td>
                     <td className="px-6 py-4">
-                      {hasRole("root_admin", "admin", "tecnico") ? (
-                        <Link
-                          to={`${ROUTES.TICKETS}/${t.id}`}
-                          className="text-sm font-semibold text-foreground hover:underline"
-                        >
-                          {truncate(t.title, 48)}
-                        </Link>
-                      ) : (
-                        <span className="text-sm text-foreground font-semibold">
-                          {truncate(t.title, 48)}
-                        </span>
-                      )}
+                      <Link
+                        to={`${ROUTES.TICKETS}/${t.id}`}
+                        className="text-sm font-semibold text-foreground hover:underline"
+                      >
+                        {truncate(t.title, 48)}
+                      </Link>
                     </td>
                     <td className="px-6 py-4">
                       <Badge color={statusConf.color} withDot>
@@ -381,11 +370,7 @@ export function TicketList() {
         )}
       </AnimatePresence>
 
-      <QrScanner
-        open={scannerOpen}
-        onOpenChange={setScannerOpen}
-        onScan={handleQrScan}
-      />
+      <QrScanner open={scannerOpen} onOpenChange={setScannerOpen} onScan={handleQrScan} />
     </div>
   );
 }
