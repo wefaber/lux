@@ -117,6 +117,17 @@ function duplicateProductError(
 
 const CLOSED_SERVICE_STATUSES = new Set<ServiceStatus>(["completed", "rejected"]);
 
+// Horas entre el alta y la resolucion, redondeadas a un decimal
+function averageResolutionHours(tickets: Ticket[]): number | null {
+  const resolved = tickets.filter((t) => t.status === "resolved" && t.resolvedAt);
+  if (resolved.length === 0) return null;
+  const total = resolved.reduce(
+    (sum, t) => sum + (new Date(t.resolvedAt!).getTime() - new Date(t.createdAt).getTime()),
+    0,
+  );
+  return Math.round((total / resolved.length / 3_600_000) * 10) / 10;
+}
+
 function invalidLoanTransition(loan: Loan, action: string): string {
   return `No se puede ${action} un préstamo en estado "${LOAN_STATUS_CONFIG[loan.status].label}"`;
 }
@@ -381,26 +392,16 @@ export const handlers = [
       }))
       .toSorted((a, b) => b.daysOverdue - a.daysOverdue);
 
-    // Horas entre el alta y la resolucion, redondeadas a un decimal
-    const averageHours = (tickets: Ticket[]): number | null => {
-      const resolved = tickets.filter((t) => t.status === "resolved" && t.resolvedAt);
-      if (resolved.length === 0) return null;
-      const total = resolved.reduce(
-        (sum, t) => sum + (new Date(t.resolvedAt!).getTime() - new Date(t.createdAt).getTime()),
-        0,
-      );
-      return Math.round((total / resolved.length / 3_600_000) * 10) / 10;
-    };
     const categories: TicketCategory[] = ["hardware", "software", "network", "other"];
     const resolution: Reports["resolution"] = {
       resolvedCount: mockTickets.filter((t) => t.status === "resolved" && t.resolvedAt).length,
-      averageHours: averageHours(mockTickets),
+      averageHours: averageResolutionHours(mockTickets),
       byCategory: categories.map((category) => {
         const tickets = mockTickets.filter((t) => t.category === category);
         return {
           category,
           resolvedCount: tickets.filter((t) => t.status === "resolved" && t.resolvedAt).length,
-          averageHours: averageHours(tickets),
+          averageHours: averageResolutionHours(tickets),
         };
       }),
     };
