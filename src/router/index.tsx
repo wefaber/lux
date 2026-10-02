@@ -22,6 +22,7 @@ import { AdminDashboard } from "@/features/admin/AdminDashboard";
 import { UserManagement } from "@/features/admin/UserManagement";
 import { RolesConfig } from "@/features/admin/RolesConfig";
 import { ActivityLog } from "@/features/admin/ActivityLog";
+import { ReportsPage } from "@/features/admin/ReportsPage";
 import { NotFoundPage } from "@/features/errors/NotFoundPage";
 import { ForbiddenPage } from "@/features/errors/ForbiddenPage";
 import { ServerErrorPage } from "@/features/errors/ServerErrorPage";
@@ -130,6 +131,7 @@ export const router = createBrowserRouter([
       { path: "users", element: <UserManagement /> },
       { path: "roles", element: <RolesConfig /> },
       { path: "logs", element: <ActivityLog /> },
+      { path: "reports", element: <ReportsPage /> },
     ],
   },
 

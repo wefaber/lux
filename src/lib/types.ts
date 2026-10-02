@@ -128,6 +128,33 @@ export interface DashboardStats {
   servicesByPeriod: Array<{ date: string; count: number }>;
 } // Interfaz de datos del dashboard
 
+export interface Reports {
+  overdueLoans: Array<{
+    loanId: string;
+    machineId: string;
+    equipment: string;
+    user: string;
+    returnDate: string;
+    daysOverdue: number;
+  }>;
+  resolution: {
+    resolvedCount: number;
+    averageHours: number | null;
+    byCategory: Array<{
+      category: TicketCategory;
+      resolvedCount: number;
+      averageHours: number | null;
+    }>;
+  };
+  topIncidentEquipment: Array<{
+    equipmentId: string;
+    machineId: string;
+    equipment: string;
+    ticketCount: number;
+    openCount: number;
+  }>;
+} // Reportes para el administrador
+
 export interface AuthUser extends User {
   token: string;
 } // Interfaz de auth user con token de usuario extendiendo usuario

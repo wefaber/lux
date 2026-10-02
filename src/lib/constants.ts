@@ -26,6 +26,7 @@ export const ROUTES = {
   ADMIN_USERS: "/admin/users",
   ADMIN_ROLES: "/admin/roles",
   ADMIN_LOGS: "/admin/logs",
+  ADMIN_REPORTS: "/admin/reports",
   NOT_FOUND: "/404",
   FORBIDDEN: "/403",
   SERVER_ERROR: "/500",

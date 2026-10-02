@@ -21,6 +21,8 @@ import type {
   Loan,
   ServiceRequest,
   DashboardStats,
+  Reports,
+  TicketCategory,
   TicketStatus,
   LoanStatus,
   ServiceStatus,
@@ -359,6 +361,67 @@ export const handlers = [
     };
 
     return HttpResponse.json({ data: { dashboardStats: stats } });
+  }),
+
+  graphql.query("GetReports", ({ request }) => {
+    if (!hasRole(getCaller(request), ELEVATED_ROLES)) return HttpResponse.json(FORBIDDEN);
+    syncOverdueLoans();
+    const now = Date.now();
+    const DAY = 24 * 60 * 60 * 1000;
+
+    const overdueLoans: Reports["overdueLoans"] = mockLoans
+      .filter((l) => l.status === "overdue")
+      .map((l) => ({
+        loanId: l.id,
+        machineId: l.equipment.machineId,
+        equipment: `${l.equipment.brand} ${l.equipment.model}`,
+        user: l.user.name,
+        returnDate: l.returnDate,
+        daysOverdue: Math.floor((now - new Date(l.returnDate).getTime()) / DAY),
+      }))
+      .toSorted((a, b) => b.daysOverdue - a.daysOverdue);
+
+    // Horas entre el alta y la resolucion, redondeadas a un decimal
+    const averageHours = (tickets: Ticket[]): number | null => {
+      const resolved = tickets.filter((t) => t.status === "resolved" && t.resolvedAt);
+      if (resolved.length === 0) return null;
+      const total = resolved.reduce(
+        (sum, t) => sum + (new Date(t.resolvedAt!).getTime() - new Date(t.createdAt).getTime()),
+        0,
+      );
+      return Math.round((total / resolved.length / 3_600_000) * 10) / 10;
+    };
+    const categories: TicketCategory[] = ["hardware", "software", "network", "other"];
+    const resolution: Reports["resolution"] = {
+      resolvedCount: mockTickets.filter((t) => t.status === "resolved" && t.resolvedAt).length,
+      averageHours: averageHours(mockTickets),
+      byCategory: categories.map((category) => {
+        const tickets = mockTickets.filter((t) => t.category === category);
+        return {
+          category,
+          resolvedCount: tickets.filter((t) => t.status === "resolved" && t.resolvedAt).length,
+          averageHours: averageHours(tickets),
+        };
+      }),
+    };
+
+    const topIncidentEquipment: Reports["topIncidentEquipment"] = mockProducts
+      .map((p) => {
+        const tickets = mockTickets.filter((t) => t.equipmentId === p.id);
+        return {
+          equipmentId: p.id,
+          machineId: p.machineId,
+          equipment: `${p.brand} ${p.model}`,
+          ticketCount: tickets.length,
+          openCount: tickets.filter((t) => t.status !== "resolved").length,
+        };
+      })
+      .filter((e) => e.ticketCount > 0)
+      .toSorted((a, b) => b.ticketCount - a.ticketCount || b.openCount - a.openCount)
+      .slice(0, 10);
+
+    const reports: Reports = { overdueLoans, resolution, topIncidentEquipment };
+    return HttpResponse.json({ data: { reports } });
   }),
 
   graphql.query("GetActivityLogs", ({ request, variables }) => {

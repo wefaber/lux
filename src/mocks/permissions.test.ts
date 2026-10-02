@@ -4,7 +4,7 @@ import { mockServices } from "./data/services";
 import { mockLoans } from "./data/loans";
 import { mockProducts } from "./data/equipment";
 import { FORBIDDEN, gqlAs, useMockServer, USERS } from "@/test/graphql";
-import type { DashboardStats } from "@/lib/types";
+import type { DashboardStats, Reports } from "@/lib/types";
 
 useMockServer();
 
@@ -140,5 +140,48 @@ describe("#26 métricas de solicitudes reales y por período", () => {
   test("un período desconocido cae en 7 días", async () => {
     const res = await gqlAs<{ dashboardStats: DashboardStats }>(ADMIN, STATS, { period: "1y" });
     expect(res.data!.dashboardStats.servicesByPeriod).toHaveLength(7);
+  });
+});
+
+describe("#27 reportes para el administrador", () => {
+  const REPORTS = `query GetReports { reports { overdueLoans { loanId daysOverdue } resolution { resolvedCount averageHours byCategory { category resolvedCount averageHours } } topIncidentEquipment { equipmentId ticketCount openCount } } }`;
+
+  test("solo el admin los consulta", async () => {
+    expect((await gqlAs(TECNICO, REPORTS)).errors?.[0].message).toBe(FORBIDDEN);
+    expect((await gqlAs(SOLICITANTE, REPORTS)).errors?.[0].message).toBe(FORBIDDEN);
+  });
+
+  test("los números se reconcilian con los datos", async () => {
+    const res = await gqlAs<{ reports: Reports }>(ADMIN, REPORTS);
+    const { overdueLoans, resolution, topIncidentEquipment } = res.data!.reports;
+
+    expect(overdueLoans.map((l) => l.loanId).toSorted()).toEqual(
+      mockLoans
+        .filter((l) => l.status === "overdue")
+        .map((l) => l.id)
+        .toSorted(),
+    );
+    for (let i = 1; i < overdueLoans.length; i++) {
+      expect(overdueLoans[i - 1].daysOverdue).toBeGreaterThanOrEqual(overdueLoans[i].daysOverdue);
+    }
+
+    const resolved = mockTickets.filter((t) => t.status === "resolved" && t.resolvedAt);
+    expect(resolution.resolvedCount).toBe(resolved.length);
+    expect(resolution.byCategory.reduce((n, c) => n + c.resolvedCount, 0)).toBe(resolved.length);
+    const hours =
+      resolved.reduce(
+        (n, t) => n + new Date(t.resolvedAt!).getTime() - new Date(t.createdAt).getTime(),
+        0,
+      ) /
+      resolved.length /
+      3_600_000;
+    expect(resolution.averageHours).toBeCloseTo(hours, 0);
+
+    const top = topIncidentEquipment[0];
+    expect(top.ticketCount).toBe(
+      mockTickets.filter((t) => t.equipmentId === top.equipmentId).length,
+    );
+    for (const e of topIncidentEquipment)
+      expect(e.ticketCount).toBeLessThanOrEqual(top.ticketCount);
   });
 });

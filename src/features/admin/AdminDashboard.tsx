@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { Users, Shield, ActivitySquare, ArrowRight } from "lucide-react";
+import { Users, Shield, ActivitySquare, ArrowRight, BarChart3 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ROUTES, SPRING_TRANSITION } from "@/lib/constants";
 import { useAsync } from "@/hooks/useSkeleton";
@@ -39,6 +39,13 @@ export function AdminDashboard() {
       to: ROUTES.ADMIN_LOGS,
       color: "rgb(52,199,89)",
     },
+    {
+      icon: BarChart3,
+      title: "Reportes",
+      description: `Préstamos vencidos, resolución e incidentes`,
+      to: ROUTES.ADMIN_REPORTS,
+      color: "rgb(175,82,222)",
+    },
   ];
 
   return (
@@ -52,7 +59,7 @@ export function AdminDashboard() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {cards.map(({ icon: Icon, title, description, to, color }, i) => (
           <motion.div
             key={to}

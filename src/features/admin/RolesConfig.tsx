@@ -52,6 +52,7 @@ const PERMISSIONS: Array<{ label: string; key: string; roles: UserRole[] }> = [
   { label: "Panel de admin", key: "admin_panel", roles: ["root_admin", "admin"] },
   { label: "Gestionar usuarios", key: "manage_users", roles: ["root_admin", "admin"] },
   { label: "Ver logs de actividad", key: "view_logs", roles: ["root_admin", "admin"] },
+  { label: "Ver reportes", key: "view_reports", roles: ["root_admin", "admin"] },
   { label: "Exportar datos", key: "export_data", roles: ["root_admin", "admin"] },
 ]; // Vista de permisos por roles
 

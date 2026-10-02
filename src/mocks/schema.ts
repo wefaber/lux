@@ -17,6 +17,7 @@ export const schema = `
     serviceRequests(status: String, requestedById: ID): [ServiceRequest!]!
     serviceRequest(id: ID!): ServiceRequest
     dashboardStats(period: String): DashboardStats!
+    reports: Reports!
     activityLogs(userId: ID, operation: String, startDate: String, endDate: String): [ActivityLog!]!
   }
 
@@ -153,6 +154,41 @@ export const schema = `
     resolutionText: String
     createdAt: String!
     updatedAt: String!
+  }
+
+  type Reports {
+    overdueLoans: [OverdueLoanReport!]!
+    resolution: ResolutionReport!
+    topIncidentEquipment: [EquipmentIncidentReport!]!
+  }
+
+  type OverdueLoanReport {
+    loanId: ID!
+    machineId: String!
+    equipment: String!
+    user: String!
+    returnDate: String!
+    daysOverdue: Int!
+  }
+
+  type ResolutionReport {
+    resolvedCount: Int!
+    averageHours: Float
+    byCategory: [CategoryResolution!]!
+  }
+
+  type CategoryResolution {
+    category: String!
+    resolvedCount: Int!
+    averageHours: Float
+  }
+
+  type EquipmentIncidentReport {
+    equipmentId: ID!
+    machineId: String!
+    equipment: String!
+    ticketCount: Int!
+    openCount: Int!
   }
 
   type DashboardStats {
