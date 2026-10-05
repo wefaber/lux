@@ -1,0 +1,13 @@
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches: [main, master, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    uses: wefaber/.github/.github/workflows/security.yml@main
