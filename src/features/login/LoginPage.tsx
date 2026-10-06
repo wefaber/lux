@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "motion/react";
 import { Zap, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { isMocksUnavailable } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,9 +30,13 @@ export function LoginPage() {
     try {
       await login(userDni, userPassword);
       navigate(from, { replace: true });
-    } catch {
+    } catch (error) {
       setAttempts((a) => a + 1);
-      setError("Credenciales inválidas. Verificá tu cédula y contraseña.");
+      setError(
+        isMocksUnavailable(error)
+          ? "No responde el servidor de datos de prueba. Recargá la página e intentá de nuevo."
+          : "Credenciales inválidas. Verificá tu cédula y contraseña.",
+      );
     }
   }; // Autenticacion compartida por el formulario y la burbuja de mocks
 

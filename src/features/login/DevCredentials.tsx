@@ -114,7 +114,7 @@ export function DevCredentials({ onFill, onLogin }: DevCredentialsProps) {
             <div className="flex items-start justify-between gap-2">
               <div>
                 <p className="text-sm font-semibold text-foreground">Credenciales de prueba</p>
-                <p className="text-[11px] text-muted-foreground">Modo mocks (MSW) · solo en dev</p>
+                <p className="text-[11px] text-muted-foreground">Datos de prueba · credenciales públicas</p>
               </div>
               <button
                 type="button"
