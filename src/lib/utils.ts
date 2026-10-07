@@ -47,7 +47,26 @@ function getAuthToken(): string | null {
   }
 } // Lee el token de la sesion guardada para adjuntarlo en cada request
 
-export async function gql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
+// Un /graphql que responde 404/405 solo puede venir del nginx que sirve el SPA:
+// significa que el service worker de MSW no intercepto (ver mocks-runtime.ts).
+export class MocksUnavailableError extends Error {
+  constructor(status: number) {
+    super(`No hay backend detras de /graphql (HTTP ${status})`);
+    this.name = "MocksUnavailableError";
+  }
+}
+
+export function isMocksUnavailable(error: unknown): boolean {
+  return error instanceof MocksUnavailableError;
+} // Permite distinguir "el servidor de prueba no responde" de "credenciales malas"
+
+// Mismo par de condiciones que arranca MSW en main.tsx, inline por el mismo
+// motivo: asi un build sin mocks pliega esta rama y no arrastra nada.
+const MOCKS_ENABLED = import.meta.env.DEV || import.meta.env.VITE_ENABLE_MOCKS === "true";
+
+const MOCKS_DOWN_STATUS = [404, 405];
+
+async function request<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
   const token = getAuthToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -59,9 +78,30 @@ export async function gql<T>(query: string, variables?: Record<string, unknown>)
   });
 
   if (!response.ok) {
+    if (MOCKS_ENABLED && MOCKS_DOWN_STATUS.includes(response.status)) {
+      // El SW quedo mudo y la peticion se fue a nginx: re-armamos y reintentamos
+      // una sola vez, asi el usuario no ve el error.
+      const { reArmMocks } = await import("@/lib/mocks-runtime");
+      await reArmMocks().catch(() => {});
+
+      const retry = await fetch("/graphql", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ query, variables }),
+      });
+
+      if (retry.ok) return readData<T>(retry);
+
+      throw new MocksUnavailableError(retry.status);
+    }
+
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
   }
 
+  return readData<T>(response);
+} // Peticion con reintento si los mocks quedaron inactivos
+
+async function readData<T>(response: Response): Promise<T> {
   const json = (await response.json()) as { data?: T; errors?: Array<{ message: string }> };
 
   if (json.errors && json.errors.length > 0) {
@@ -73,6 +113,10 @@ export async function gql<T>(query: string, variables?: Record<string, unknown>)
   }
 
   return json.data;
+} // Lectura y validacion de la respuesta
+
+export async function gql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
+  return request<T>(query, variables);
 } // Solicitudes a la API con metodos y gestion de errores
 
 export function generateId(): string {
