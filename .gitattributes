@@ -1,0 +1,5 @@
+# Los scripts de administracion se ejecutan en el servidor Debian: deben
+# quedar con finales de linea LF aunque se editen desde Windows. Un CRLF en
+# la primera linea rompe el shebang con "bad interpreter: /usr/bin/env^M".
+*.sh    text eol=lf
+scripts/cron/*  text eol=lf
