@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
-import { Users, Shield, ActivitySquare, ArrowLeft, Zap } from "lucide-react";
+import { Users, Shield, ActivitySquare, ArrowLeft, Zap, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
 import { ThemeSwitcher } from "@/components/accessibility/ThemeSwitcher";
@@ -10,6 +10,7 @@ const adminNav = [
   { icon: Users, label: "Usuarios", to: ROUTES.ADMIN_USERS },
   { icon: Shield, label: "Roles y Permisos", to: ROUTES.ADMIN_ROLES },
   { icon: ActivitySquare, label: "Registros de Actividad", to: ROUTES.ADMIN_LOGS },
+  { icon: BarChart3, label: "Reportes", to: ROUTES.ADMIN_REPORTS },
 ];
 
 function initials(name: string): string {

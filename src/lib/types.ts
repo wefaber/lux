@@ -71,7 +71,7 @@ export interface Ticket {
   resolvedAt: string | null;
 } // Interfaz de ticket
 
-export type LoanStatus = "pending" | "approved" | "active" | "overdue" | "returned"; // Estado del prestamo
+export type LoanStatus = "pending" | "approved" | "rejected" | "active" | "overdue" | "returned"; // Estado del prestamo
 
 export interface Loan {
   id: string;
@@ -79,6 +79,8 @@ export interface Loan {
   user: User;
   status: LoanStatus;
   approvedBy: User | null;
+  deliveredBy: User | null;
+  deliveredAt: string | null;
   issueDate: string;
   returnDate: string;
   actualReturnDate: string | null;
@@ -96,6 +98,7 @@ export interface ServiceRequest {
   type: ServiceType;
   status: ServiceStatus;
   requestedBy: User;
+  assignedTo: User | null;
   description: string;
   labNumber: string | null;
   softwareName: string | null;
@@ -124,6 +127,33 @@ export interface DashboardStats {
   ticketsByStatus: Array<{ status: TicketStatus; count: number }>;
   servicesByPeriod: Array<{ date: string; count: number }>;
 } // Interfaz de datos del dashboard
+
+export interface Reports {
+  overdueLoans: Array<{
+    loanId: string;
+    machineId: string;
+    equipment: string;
+    user: string;
+    returnDate: string;
+    daysOverdue: number;
+  }>;
+  resolution: {
+    resolvedCount: number;
+    averageHours: number | null;
+    byCategory: Array<{
+      category: TicketCategory;
+      resolvedCount: number;
+      averageHours: number | null;
+    }>;
+  };
+  topIncidentEquipment: Array<{
+    equipmentId: string;
+    machineId: string;
+    equipment: string;
+    ticketCount: number;
+    openCount: number;
+  }>;
+} // Reportes para el administrador
 
 export interface AuthUser extends User {
   token: string;

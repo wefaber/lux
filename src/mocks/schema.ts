@@ -4,19 +4,20 @@ export const schema = `
     me: User
     users(role: String, isActive: Boolean): [User!]!
     user(id: ID!): User
-    products(status: String, location: String, deletedAt: String): [Product!]!
+    products(status: String, location: String, deletedAt: String, availableForLoan: Boolean): [Product!]!
     product(id: ID!): Product
     productByMachineId(machineId: String!): Product
     components(productId: ID, isWorking: Boolean): [Component!]!
     component(id: ID!): Component
-    tickets(status: String, assignedToId: ID, submittedById: ID): [Ticket!]!
+    tickets(status: String, assignedToId: ID, submittedById: ID, equipmentId: ID): [Ticket!]!
     ticket(id: ID!): Ticket
     oolTickets: [Ticket!]!
-    loans(status: String, userId: ID): [Loan!]!
+    loans(status: String, userId: ID, equipmentId: ID): [Loan!]!
     loan(id: ID!): Loan
     serviceRequests(status: String, requestedById: ID): [ServiceRequest!]!
     serviceRequest(id: ID!): ServiceRequest
     dashboardStats(period: String): DashboardStats!
+    reports: Reports!
     activityLogs(userId: ID, operation: String, startDate: String, endDate: String): [ActivityLog!]!
   }
 
@@ -25,22 +26,26 @@ export const schema = `
     updateUser(id: ID!, input: UserInput!): User!
     deleteUser(id: ID!): Boolean!
     createProduct(input: ProductInput!): Product!
-    updateProduct(id: ID!, input: ProductInput!): Product!
+    updateProduct(id: ID!, input: ProductUpdateInput!): Product!
     softDeleteProduct(id: ID!): Boolean!
     createComponent(input: ComponentInput!): Component!
-    updateComponent(id: ID!, input: ComponentInput!): Component!
+    updateComponent(id: ID!, input: ComponentUpdateInput!): Component!
     softDeleteComponent(id: ID!): Boolean!
     createTicket(input: TicketInput!): Ticket!
     updateTicket(id: ID!, input: TicketUpdateInput!): Ticket!
     assignTicket(id: ID!, technicianId: ID!): Ticket!
     claimTicket(id: ID!): Ticket!
     completeTicket(id: ID!, input: TicketCompleteInput!): Ticket!
+    changeTicketStatus(id: ID!, status: String!): Ticket!
     createLoan(input: LoanInput!): Loan!
     approveLoan(id: ID!): Loan!
     rejectLoan(id: ID!, reason: String!): Loan!
-    returnLoan(id: ID!): Loan!
+    deliverLoan(id: ID!): Loan!
+    returnLoan(id: ID!, damaged: Boolean, issues: String): Loan!
     createServiceRequest(input: ServiceRequestInput!): ServiceRequest!
     updateServiceRequest(id: ID!, input: ServiceRequestUpdateInput!): ServiceRequest!
+    claimServiceRequest(id: ID!): ServiceRequest!
+    assignServiceRequest(id: ID!, technicianId: ID!): ServiceRequest!
     changePassword(currentPassword: String!, newPassword: String!): Boolean!
   }
 
@@ -125,6 +130,8 @@ export const schema = `
     user: User!
     status: String!
     approvedBy: User
+    deliveredBy: User
+    deliveredAt: String
     issueDate: String!
     returnDate: String!
     actualReturnDate: String
@@ -139,6 +146,7 @@ export const schema = `
     type: String!
     status: String!
     requestedBy: User!
+    assignedTo: User
     description: String!
     labNumber: String
     softwareName: String
@@ -146,6 +154,41 @@ export const schema = `
     resolutionText: String
     createdAt: String!
     updatedAt: String!
+  }
+
+  type Reports {
+    overdueLoans: [OverdueLoanReport!]!
+    resolution: ResolutionReport!
+    topIncidentEquipment: [EquipmentIncidentReport!]!
+  }
+
+  type OverdueLoanReport {
+    loanId: ID!
+    machineId: String!
+    equipment: String!
+    user: String!
+    returnDate: String!
+    daysOverdue: Int!
+  }
+
+  type ResolutionReport {
+    resolvedCount: Int!
+    averageHours: Float
+    byCategory: [CategoryResolution!]!
+  }
+
+  type CategoryResolution {
+    category: String!
+    resolvedCount: Int!
+    averageHours: Float
+  }
+
+  type EquipmentIncidentReport {
+    equipmentId: ID!
+    machineId: String!
+    equipment: String!
+    ticketCount: Int!
+    openCount: Int!
   }
 
   type DashboardStats {
@@ -199,6 +242,27 @@ export const schema = `
     location: String!
   }
 
+  input ProductUpdateInput {
+    machineId: String
+    kind: String
+    brand: String
+    model: String
+    serialNumber: String
+    partNumber: String
+    issues: String
+    location: String
+  }
+
+  input ComponentUpdateInput {
+    name: String
+    model: String
+    manufacturer: String
+    serialNumber: String
+    partNumber: String
+    isFactory: Boolean
+    isWorking: Boolean
+  }
+
   input ComponentInput {
     name: String!
     model: String!
@@ -221,11 +285,7 @@ export const schema = `
     title: String
     description: String
     category: String
-    status: String
-    assignedToId: ID
-    diagnosis: String
-    corrected: Boolean
-    actionsTaken: String
+    equipmentId: ID
   }
 
   input TicketCompleteInput {
@@ -236,7 +296,7 @@ export const schema = `
 
   input LoanInput {
     equipmentId: ID!
-    userId: ID!
+    userId: ID
     issueDate: String!
     returnDate: String!
     componentIds: [ID!]

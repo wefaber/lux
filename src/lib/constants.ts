@@ -26,6 +26,7 @@ export const ROUTES = {
   ADMIN_USERS: "/admin/users",
   ADMIN_ROLES: "/admin/roles",
   ADMIN_LOGS: "/admin/logs",
+  ADMIN_REPORTS: "/admin/reports",
   NOT_FOUND: "/404",
   FORBIDDEN: "/403",
   SERVER_ERROR: "/500",
@@ -40,6 +41,19 @@ export const TICKET_STATUS_CONFIG: Record<
   in_resolution: { label: "En resolución", color: "warning" },
   resolved: { label: "Resuelto", color: "success" },
 }; // Configuracion de estados de tickets, con etiquetas y colores para UI
+
+// Ciclo de vida del ticket: transiciones validas desde cada estado.
+// - pending -> in_progress: solo con claim/assign, porque asigna responsable
+// - in_progress -> pending: liberar el ticket (quita el responsable)
+// - in_progress <-> in_resolution
+// - in_progress | in_resolution -> resolved: solo con completeTicket (exige diagnostico)
+// - resolved -> in_progress: reabrir
+export const TICKET_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
+  pending: ["in_progress"],
+  in_progress: ["pending", "in_resolution", "resolved"],
+  in_resolution: ["in_progress", "resolved"],
+  resolved: ["in_progress"],
+};
 
 export const EQUIPMENT_STATUS_CONFIG: Record<
   EquipmentStatus,
@@ -57,6 +71,7 @@ export const LOAN_STATUS_CONFIG: Record<
 > = {
   pending: { label: "Pendiente", color: "warning" },
   approved: { label: "Aprobado", color: "success" },
+  rejected: { label: "Rechazado", color: "destructive" },
   active: { label: "Activo", color: "info" },
   overdue: { label: "Vencido", color: "destructive" },
   returned: { label: "Devuelto", color: "muted" },
@@ -72,6 +87,15 @@ export const SERVICE_STATUS_CONFIG: Record<
   completed: { label: "Completado", color: "success" },
   rejected: { label: "Rechazado", color: "destructive" },
 }; // Configuracion de estado de servicios
+
+export const DASHBOARD_PERIODS = ["7d", "30d", "90d"] as const;
+export type DashboardPeriod = (typeof DASHBOARD_PERIODS)[number];
+
+export const DASHBOARD_PERIOD_LABELS: Record<DashboardPeriod, string> = {
+  "7d": "últimos 7 días",
+  "30d": "últimos 30 días",
+  "90d": "últimos 90 días",
+}; // Periodos del dashboard; 90 dias se agrupa por semana
 
 export const SERVICE_TYPE_LABELS: Record<ServiceType, string> = {
   lab_preparation: "Preparación de laboratorio",

@@ -28,8 +28,17 @@ const PERMISSIONS: Array<{ label: string; key: string; roles: UserRole[] }> = [
   },
   { label: "Asignar tickets", key: "assign_tickets", roles: ["root_admin", "admin"] },
   { label: "Resolver tickets", key: "resolve_tickets", roles: ["root_admin", "admin", "tecnico"] },
-  { label: "Ver préstamos", key: "view_loans", roles: ["root_admin", "admin", "tecnico"] },
-  { label: "Gestionar préstamos", key: "manage_loans", roles: ["root_admin", "admin"] },
+  {
+    label: "Solicitar préstamos",
+    key: "request_loans",
+    roles: ["root_admin", "admin", "tecnico", "solicitante"],
+  },
+  {
+    label: "Ver todos los préstamos",
+    key: "view_loans",
+    roles: ["root_admin", "admin", "tecnico"],
+  },
+  { label: "Gestionar préstamos", key: "manage_loans", roles: ["root_admin", "admin", "tecnico"] },
   {
     label: "Ver solicitudes",
     key: "view_services",
@@ -43,6 +52,7 @@ const PERMISSIONS: Array<{ label: string; key: string; roles: UserRole[] }> = [
   { label: "Panel de admin", key: "admin_panel", roles: ["root_admin", "admin"] },
   { label: "Gestionar usuarios", key: "manage_users", roles: ["root_admin", "admin"] },
   { label: "Ver logs de actividad", key: "view_logs", roles: ["root_admin", "admin"] },
+  { label: "Ver reportes", key: "view_reports", roles: ["root_admin", "admin"] },
   { label: "Exportar datos", key: "export_data", roles: ["root_admin", "admin"] },
 ]; // Vista de permisos por roles
 

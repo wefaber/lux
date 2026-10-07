@@ -22,10 +22,14 @@ import { AdminDashboard } from "@/features/admin/AdminDashboard";
 import { UserManagement } from "@/features/admin/UserManagement";
 import { RolesConfig } from "@/features/admin/RolesConfig";
 import { ActivityLog } from "@/features/admin/ActivityLog";
+import { ReportsPage } from "@/features/admin/ReportsPage";
 import { NotFoundPage } from "@/features/errors/NotFoundPage";
 import { ForbiddenPage } from "@/features/errors/ForbiddenPage";
 import { ServerErrorPage } from "@/features/errors/ServerErrorPage";
 import { ROUTES } from "@/lib/constants";
+import type { UserRole } from "@/lib/types";
+
+const STAFF_ROLES: UserRole[] = ["root_admin", "admin", "tecnico"];
 
 export const router = createBrowserRouter([
   {
@@ -63,45 +67,54 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <DashboardPage /> },
       { path: "inventory", element: <InventoryPage /> },
-      { path: "inventory/nuevo", element: <EquipmentForm mode="product" /> },
-      { path: "inventory/nuevo-componente", element: <EquipmentForm mode="component" /> },
-      { path: "inventory/:id", element: <ProductDetail /> },
-      { path: "inventory/componente/:id", element: <ComponentDetail /> },
-      { path: "equipment-status", element: <EquipmentStatus /> },
-      { path: "tickets", element: <TicketList /> },
       {
-        path: "tickets/:id",
+        path: "inventory/nuevo",
         element: (
-          <ProtectedRoute roles={["root_admin", "admin", "tecnico"]}>
-            <TicketDetail />
+          <ProtectedRoute roles={STAFF_ROLES}>
+            <EquipmentForm mode="product" />
           </ProtectedRoute>
         ),
       },
       {
+        path: "inventory/nuevo-componente",
+        element: (
+          <ProtectedRoute roles={STAFF_ROLES}>
+            <EquipmentForm mode="component" />
+          </ProtectedRoute>
+        ),
+      },
+      { path: "inventory/:id", element: <ProductDetail /> },
+      {
+        path: "inventory/:id/editar",
+        element: (
+          <ProtectedRoute roles={STAFF_ROLES}>
+            <EquipmentForm mode="product" />
+          </ProtectedRoute>
+        ),
+      },
+      { path: "inventory/componente/:id", element: <ComponentDetail /> },
+      {
+        path: "inventory/componente/:id/editar",
+        element: (
+          <ProtectedRoute roles={STAFF_ROLES}>
+            <EquipmentForm mode="component" />
+          </ProtectedRoute>
+        ),
+      },
+      { path: "equipment-status", element: <EquipmentStatus /> },
+      { path: "tickets", element: <TicketList /> },
+      { path: "tickets/:id", element: <TicketDetail /> },
+      {
         path: "tickets/ool",
         element: (
-          <ProtectedRoute roles={["root_admin", "admin", "tecnico"]}>
+          <ProtectedRoute roles={STAFF_ROLES}>
             <OolList />
           </ProtectedRoute>
         ),
       },
-      {
-        path: "loans",
-        element: (
-          <ProtectedRoute roles={["root_admin", "admin", "tecnico"]}>
-            <LoansPage />
-          </ProtectedRoute>
-        ),
-      },
+      { path: "loans", element: <LoansPage /> },
       { path: "service-requests", element: <ServiceList /> },
-      {
-        path: "service-requests/:id",
-        element: (
-          <ProtectedRoute roles={["root_admin", "admin", "tecnico"]}>
-            <ServiceDetail />
-          </ProtectedRoute>
-        ),
-      },
+      { path: "service-requests/:id", element: <ServiceDetail /> },
       { path: "profile", element: <ProfilePage /> },
     ],
   },
@@ -118,6 +131,7 @@ export const router = createBrowserRouter([
       { path: "users", element: <UserManagement /> },
       { path: "roles", element: <RolesConfig /> },
       { path: "logs", element: <ActivityLog /> },
+      { path: "reports", element: <ReportsPage /> },
     ],
   },
 

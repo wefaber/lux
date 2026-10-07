@@ -17,14 +17,28 @@ const SERVICES_QUERY = `
     serviceRequests(requestedById: $requestedById) {
       id type status description labNumber softwareName equipmentId resolutionText
       requestedBy { id name }
+      assignedTo { id name }
       createdAt updatedAt
     }
   }
 `; // Obtencion de datos de servicio para la lista
 
+const SERVICE_COLUMNS = [
+  "ID",
+  "Tipo",
+  "Descripción",
+  "Estado",
+  "Solicitante",
+  "Asignado a",
+  "Fecha",
+  "",
+];
+
 export function ServiceList() {
   const { user, hasRole } = useAuth(); // Verificacion de roles con Auth
   const [statusFilter, setStatusFilter] = useState<ServiceStatus | "">(""); // Obtencion de status para filtros
+  // "" todos, "none" sin asignar, o el id del responsable
+  const [assigneeFilter, setAssigneeFilter] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
 
   const isSolicitante = !hasRole("root_admin", "admin", "tecnico");
@@ -34,11 +48,20 @@ export function ServiceList() {
     [isSolicitante, user?.id],
   ); // Fetch y refetch de datos
 
-  const services = (data?.serviceRequests ?? []).filter(
-    (s) => !statusFilter || s.status === statusFilter,
+  const allServices = data?.serviceRequests ?? [];
+  const assignees = [
+    ...new Map(
+      allServices.flatMap((s) => (s.assignedTo ? [[s.assignedTo.id, s.assignedTo]] : [])),
+    ).values(),
+  ].toSorted((a, b) => a.name.localeCompare(b.name));
+
+  const services = allServices.filter(
+    (s) =>
+      (!statusFilter || s.status === statusFilter) &&
+      (!assigneeFilter ||
+        (assigneeFilter === "none" ? !s.assignedTo : s.assignedTo?.id === assigneeFilter)),
   );
 
-  
   const showSkeleton = isLoading && !data; //Skeleton cuando se esta cargando y no hay informacion
 
   return (
@@ -71,10 +94,29 @@ export function ServiceList() {
           <option value="completed">Completado</option>
           <option value="rejected">Rechazado</option>
         </select>
+        {!isSolicitante && (
+          <select
+            aria-label="Responsable"
+            value={assigneeFilter}
+            onChange={(e) => setAssigneeFilter(e.target.value)}
+            className="h-10 rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer"
+          >
+            <option value="">Todos los responsables</option>
+            <option value="none">Sin asignar</option>
+            {user && <option value={user.id}>Asignadas a mí</option>}
+            {assignees
+              .filter((a) => a.id !== user?.id)
+              .map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+          </select>
+        )}
       </div>
 
       {showSkeleton ? (
-        <TableSkeleton rows={6} cols={5} />
+        <TableSkeleton rows={6} cols={7} />
       ) : services.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground text-sm font-medium">
           No hay solicitudes de servicio
@@ -89,7 +131,7 @@ export function ServiceList() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border">
-                {["ID", "Tipo", "Descripción", "Estado", "Solicitante", "Fecha", ""].map((h) => (
+                {SERVICE_COLUMNS.map((h) => (
                   <th
                     key={h}
                     className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
@@ -122,18 +164,19 @@ export function ServiceList() {
                     <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
                       {s.requestedBy.name}
                     </td>
+                    <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
+                      {s.assignedTo?.name ?? "—"}
+                    </td>
                     <td className="px-6 py-4 text-xs text-muted-foreground">
                       {formatDate(s.createdAt)}
                     </td>
                     <td className="px-6 py-4">
-                      {hasRole("root_admin", "admin", "tecnico") && (
-                        <Link
-                          to={`${ROUTES.SERVICES}/${s.id}`}
-                          className="text-xs text-primary hover:underline font-semibold"
-                        >
-                          Ver detalle
-                        </Link>
-                      )}
+                      <Link
+                        to={`${ROUTES.SERVICES}/${s.id}`}
+                        className="text-xs text-primary hover:underline font-semibold"
+                      >
+                        Ver detalle
+                      </Link>
                     </td>
                   </tr>
                 );

@@ -46,7 +46,7 @@ const navItems = [
     icon: BookOpen,
     label: "Préstamos",
     to: ROUTES.LOANS,
-    roles: ["root_admin", "admin", "tecnico"] as const,
+    roles: ["root_admin", "admin", "tecnico", "solicitante"] as const,
   },
   {
     icon: Wrench,

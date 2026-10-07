@@ -1,12 +1,12 @@
 import { useParams, Link } from "react-router-dom";
 import { motion } from "motion/react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, UserCheck } from "lucide-react";
 import { useState } from "react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { gql, formatDate } from "@/lib/utils";
 import { SERVICE_STATUS_CONFIG, SERVICE_TYPE_LABELS, ROUTES } from "@/lib/constants";
-import type { ServiceRequest, ServiceStatus } from "@/lib/types";
+import type { ServiceRequest, ServiceStatus, User } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -25,6 +25,7 @@ const SERVICE_QUERY = `
  serviceRequest(id: $id) {
  id type status description labNumber softwareName equipmentId resolutionText
  requestedBy { id name email }
+ assignedTo { id name }
  createdAt updatedAt
  }
  }
@@ -35,6 +36,18 @@ const UPDATE_SERVICE_MUTATION = `
  updateServiceRequest(id: $id, input: $input) { id status }
  }
 `; // Alteracion del Service
+
+const CLAIM_SERVICE_MUTATION = `
+ mutation ClaimServiceRequest($id: ID!) { claimServiceRequest(id: $id) { id } }
+`;
+const ASSIGN_SERVICE_MUTATION = `
+ mutation AssignServiceRequest($id: ID!, $technicianId: ID!) {
+ assignServiceRequest(id: $id, technicianId: $technicianId) { id }
+ }
+`;
+const STAFF_USERS_QUERY = `
+ query GetUsers($isActive: Boolean) { users(isActive: $isActive) { id name role } }
+`;
 
 export function ServiceDetail() {
   const { id } = useParams<{ id: string }>(); // Variable constante ID con parametros String
@@ -50,6 +63,24 @@ export function ServiceDetail() {
 
   const service = data?.serviceRequest; // Verificacion e informacion (Si existe) de servicio
   const canManage = hasRole("root_admin", "admin", "tecnico"); // Verificacion si puede gestionar
+  const [assignError, setAssignError] = useState("");
+
+  const { data: usersData } = useAsync<{ users: User[] } | null>(
+    () => (canManage ? gql(STAFF_USERS_QUERY, { isActive: true }) : Promise.resolve(null)),
+    [canManage],
+  );
+  const technicians = (usersData?.users ?? []).filter((u) => u.role !== "solicitante");
+  const isClosed = service ? ["completed", "rejected"].includes(service.status) : true;
+
+  const assign = async (mutation: string, variables: Record<string, unknown>) => {
+    setAssignError("");
+    try {
+      await gql(mutation, variables);
+      refetch();
+    } catch (err) {
+      setAssignError(err instanceof Error ? err.message : "Error al asignar");
+    }
+  };
 
   const handleUpdate = async () => {
     if (!id || !newStatus) return;
@@ -82,7 +113,23 @@ export function ServiceDetail() {
         <h1 className="text-xl font-semibold tracking-tight text-foreground flex-1">
           Solicitud de servicio
         </h1>
+        {canManage && service && !service.assignedTo && !isClosed && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => assign(CLAIM_SERVICE_MUTATION, { id })}
+          >
+            <UserCheck className="h-3.5 w-3.5" />
+            Tomar solicitud
+          </Button>
+        )}
       </div>
+
+      {assignError && (
+        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
+          {assignError}
+        </div>
+      )}
 
       {error && (
         <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
@@ -119,6 +166,33 @@ export function ServiceDetail() {
                     Fecha
                   </p>
                   <p className="text-foreground">{formatDate(service.createdAt)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
+                    Asignado a
+                  </p>
+                  {canManage && !isClosed ? (
+                    <select
+                      aria-label="Asignar responsable"
+                      value={service.assignedTo?.id ?? ""}
+                      onChange={(e) =>
+                        e.target.value &&
+                        assign(ASSIGN_SERVICE_MUTATION, { id, technicianId: e.target.value })
+                      }
+                      className="h-8 rounded-lg border border-input bg-card/50 px-2 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer"
+                    >
+                      <option value="" disabled>
+                        Sin asignar
+                      </option>
+                      {technicians.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-foreground">{service.assignedTo?.name ?? "Sin asignar"}</p>
+                  )}
                 </div>
                 {service.labNumber && (
                   <div>

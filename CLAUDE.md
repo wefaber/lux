@@ -9,6 +9,7 @@ bun dev          # start dev server (MSW mocking auto-enabled)
 bun run build    # tsc -b + vite build
 bun run typecheck
 bun run lint
+bun test         # handler tests (bun:test + msw/node), files under src/**/*.test.ts
 bun run lint:fix
 bunx msw init public/ --save   # re-initialize MSW service worker
 ```

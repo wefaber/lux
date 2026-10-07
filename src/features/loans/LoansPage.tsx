@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Plus, RotateCcw, CheckCircle } from "lucide-react";
+import { Plus, RotateCcw, CheckCircle, XCircle, PackageCheck } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
-import { gql, formatDate, isOverdue, cn } from "@/lib/utils";
+import { gql, formatDate, cn } from "@/lib/utils";
 import { LOAN_STATUS_CONFIG } from "@/lib/constants";
 import type { Loan, LoanStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -11,42 +11,55 @@ import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import { MetricCardSkeleton } from "@/components/skeletons/CardSkeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LoanForm } from "./LoanForm";
+import { RejectLoanDialog, ReturnLoanDialog } from "./LoanActionDialogs";
 
 const LOANS_QUERY = `
- query GetLoans($status: String) {
- loans(status: $status) {
- id status issueDate returnDate actualReturnDate rejectionReason
+ query GetLoans($status: String, $userId: ID) {
+ loans(status: $status, userId: $userId) {
+ id status issueDate returnDate actualReturnDate rejectionReason deliveredAt
  equipment { id brand model serialNumber location }
  user { id name }
  approvedBy { id name }
+ deliveredBy { id name }
  components { id name }
  createdAt updatedAt
  }
  }
 `;
 
-const RETURN_MUTATION = `
- mutation ReturnLoan($id: ID!) { returnLoan(id: $id) { id status } }
-`;
 const APPROVE_MUTATION = `
  mutation ApproveLoan($id: ID!) { approveLoan(id: $id) { id status } }
 `;
+const DELIVER_MUTATION = `
+ mutation DeliverLoan($id: ID!) { deliverLoan(id: $id) { id status } }
+`;
+
+const LOAN_STATUSES = Object.keys(LOAN_STATUS_CONFIG) as LoanStatus[];
 
 export function LoansPage() {
   const [statusFilter, setStatusFilter] = useState<LoanStatus | "">("");
   const [createOpen, setCreateOpen] = useState(false);
-  const { hasRole } = useAuth();
+  const [rejecting, setRejecting] = useState<Loan | null>(null);
+  const [returning, setReturning] = useState<Loan | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
+  const { user, hasRole } = useAuth();
+
+  // El solicitante solo pide y consulta; aprobar, rechazar, entregar y devolver es del staff
+  const isStaff = hasRole("root_admin", "admin", "tecnico");
 
   const { data, isLoading, refetch } = useAsync<{ loans: Loan[] }>(
-    () => gql(LOANS_QUERY, { status: statusFilter || undefined }),
-    [statusFilter],
+    () =>
+      gql(LOANS_QUERY, {
+        status: statusFilter || undefined,
+        userId: isStaff ? undefined : user?.id,
+      }),
+    [statusFilter, isStaff, user?.id],
   );
 
   const loans = data?.loans ?? [];
   const activeCount = loans.filter((l) => l.status === "active").length;
-  const overdueCount = loans.filter(
-    (l) => l.status === "overdue" || (l.status === "active" && isOverdue(l.returnDate)),
-  ).length;
+  const overdueCount = loans.filter((l) => l.status === "overdue").length;
   const returned = loans.filter((l) => l.status === "returned");
   const onTimeRate =
     returned.length > 0
@@ -57,13 +70,23 @@ export function LoansPage() {
         )
       : 0;
 
-  const handleReturn = async (id: string) => {
-    await gql(RETURN_MUTATION, { id });
-    refetch();
+  const runAction = async (id: string, mutation: string) => {
+    setBusyId(id);
+    setActionError("");
+    try {
+      await gql(mutation, { id });
+      refetch();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Error al actualizar el préstamo");
+    } finally {
+      setBusyId(null);
+    }
   };
 
-  const handleApprove = async (id: string) => {
-    await gql(APPROVE_MUTATION, { id });
+  const handleDialogDone = () => {
+    setRejecting(null);
+    setReturning(null);
+    setActionError("");
     refetch();
   };
 
@@ -75,11 +98,13 @@ export function LoansPage() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Préstamos</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Gestión de préstamos de equipos</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {isStaff ? "Gestión de préstamos de equipos" : "Tus solicitudes de préstamo"}
+          </p>
         </div>
         <Button size="sm" onClick={() => setCreateOpen(true)}>
           <Plus className="h-3.5 w-3.5" />
-          Registrar préstamo
+          {isStaff ? "Registrar préstamo" : "Solicitar préstamo"}
         </Button>
       </div>
 
@@ -127,13 +152,19 @@ export function LoansPage() {
           className="h-10 rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer"
         >
           <option value="">Todos los estados</option>
-          <option value="pending">Pendiente</option>
-          <option value="approved">Aprobado</option>
-          <option value="active">Activo</option>
-          <option value="overdue">Vencido</option>
-          <option value="returned">Devuelto</option>
+          {LOAN_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {LOAN_STATUS_CONFIG[s].label}
+            </option>
+          ))}
         </select>
       </div>
+
+      {actionError && (
+        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
+          {actionError}
+        </div>
+      )}
 
       {showSkeleton ? (
         <TableSkeleton rows={8} cols={6} />
@@ -153,12 +184,12 @@ export function LoansPage() {
               <tr className="border-b border-border">
                 {[
                   "Equipo",
-                  "Usuario",
+                  ...(isStaff ? ["Usuario"] : []),
                   "Estado",
                   "Aprobado por",
                   "Vencimiento",
                   "Alta",
-                  "Acciones",
+                  ...(isStaff ? ["Acciones"] : []),
                 ].map((h) => (
                   <th
                     key={h}
@@ -172,7 +203,7 @@ export function LoansPage() {
             <tbody>
               {loans.map((l) => {
                 const statusConf = LOAN_STATUS_CONFIG[l.status];
-                const actuallyOverdue = l.status === "active" && isOverdue(l.returnDate);
+                const busy = busyId === l.id;
                 return (
                   <tr
                     key={l.id}
@@ -186,13 +217,25 @@ export function LoansPage() {
                         {l.equipment.location}
                       </p>
                     </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
-                      {l.user.name}
-                    </td>
+                    {isStaff && (
+                      <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
+                        {l.user.name}
+                      </td>
+                    )}
                     <td className="px-6 py-4">
-                      <Badge color={actuallyOverdue ? "destructive" : statusConf.color} withDot>
-                        {actuallyOverdue ? "Vencido" : statusConf.label}
+                      <Badge color={statusConf.color} withDot>
+                        {statusConf.label}
                       </Badge>
+                      {l.status === "rejected" && l.rejectionReason && (
+                        <p className="text-xs text-muted-foreground mt-1 max-w-56">
+                          {l.rejectionReason}
+                        </p>
+                      )}
+                      {l.deliveredBy && l.deliveredAt && l.status !== "returned" && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Entregado por {l.deliveredBy.name} el {formatDate(l.deliveredAt)}
+                        </p>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
                       {l.approvedBy?.name ?? "—"}
@@ -203,22 +246,56 @@ export function LoansPage() {
                     <td className="px-6 py-4 text-xs text-muted-foreground">
                       {formatDate(l.issueDate)}
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex gap-1.5">
-                        {l.status === "pending" && hasRole("root_admin", "admin") && (
-                          <Button size="sm" variant="secondary" onClick={() => handleApprove(l.id)}>
-                            <CheckCircle className="h-3.5 w-3.5" />
-                            Aprobar
-                          </Button>
-                        )}
-                        {["active", "approved", "overdue"].includes(l.status) && (
-                          <Button size="sm" variant="secondary" onClick={() => handleReturn(l.id)}>
-                            <RotateCcw className="h-3.5 w-3.5" />
-                            Devolver
-                          </Button>
-                        )}
-                      </div>
-                    </td>
+                    {isStaff && (
+                      <td className="px-6 py-4">
+                        <div className="flex gap-1.5">
+                          {l.status === "pending" && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                disabled={busy}
+                                onClick={() => runAction(l.id, APPROVE_MUTATION)}
+                              >
+                                <CheckCircle className="h-3.5 w-3.5" />
+                                Aprobar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={busy}
+                                onClick={() => setRejecting(l)}
+                              >
+                                <XCircle className="h-3.5 w-3.5" />
+                                Rechazar
+                              </Button>
+                            </>
+                          )}
+                          {l.status === "approved" && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={busy}
+                              onClick={() => runAction(l.id, DELIVER_MUTATION)}
+                            >
+                              <PackageCheck className="h-3.5 w-3.5" />
+                              Registrar entrega
+                            </Button>
+                          )}
+                          {(l.status === "active" || l.status === "overdue") && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={busy}
+                              onClick={() => setReturning(l)}
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                              Devolver
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -230,7 +307,7 @@ export function LoansPage() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Registrar préstamo</DialogTitle>
+            <DialogTitle>{isStaff ? "Registrar préstamo" : "Solicitar préstamo"}</DialogTitle>
           </DialogHeader>
           <LoanForm
             onSuccess={() => {
@@ -240,6 +317,17 @@ export function LoansPage() {
           />
         </DialogContent>
       </Dialog>
+
+      <RejectLoanDialog
+        loan={rejecting}
+        onClose={() => setRejecting(null)}
+        onDone={handleDialogDone}
+      />
+      <ReturnLoanDialog
+        loan={returning}
+        onClose={() => setReturning(null)}
+        onDone={handleDialogDone}
+      />
     </div>
   );
 }
