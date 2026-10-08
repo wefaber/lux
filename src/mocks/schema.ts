@@ -198,6 +198,16 @@ export const schema = `
     pendingServices: Int!
     ticketsByStatus: [TicketStatusCount!]!
     servicesByPeriod: [PeriodCount!]!
+    # Solo para el staff; null para el solicitante
+    workQueue: WorkQueue
+  }
+
+  type WorkQueue {
+    unassignedTickets: Int!
+    ticketsInProgress: Int!
+    pendingServices: Int!
+    overdueLoans: Int!
+    equipmentInRepair: Int!
   }
 
   type TicketStatusCount {
