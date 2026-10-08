@@ -74,18 +74,18 @@ function isKeyboardRun(word: string): boolean {
   return false;
 }
 
-export function machineIdPrefix(kind: string, locationCode: string | undefined): string | null {
+export function machineIdPrefix(kind: string, code: string | undefined): string | null {
   const kindCode = KIND_MACHINE_CODE[kind];
-  return locationCode && kindCode ? `${locationCode}-${kindCode}` : null;
+  return code && kindCode ? `${code}-${kindCode}` : null;
 }
 
 // Proximo ID libre para el area 1 de la ubicacion, como sugerencia
 export function suggestMachineId(
   kind: string,
-  locationCode: string | undefined,
+  code: string | undefined,
   taken: string[],
 ): string | null {
-  const prefix = machineIdPrefix(kind, locationCode);
+  const prefix = machineIdPrefix(kind, code);
   if (!prefix) return null;
   const used = taken
     .filter((id) => id.startsWith(prefix))
@@ -100,15 +100,15 @@ export function validateMachineId(
   location: LocationRef | undefined,
 ): string | null {
   const id = machineId.trim().toUpperCase();
-  const locationCode = location?.code;
+  const code = location?.code;
   const kindCode = KIND_MACHINE_CODE[kind];
-  if (!location || !locationCode) return "Ubicación inválida";
+  if (!location || !code) return "Ubicación inválida";
   if (!kindCode) return "Tipo de equipo inválido";
-  const example = `${locationCode}-${kindCode}1`;
+  const example = `${code}-${kindCode}1`;
   const match = MACHINE_ID_PATTERN.exec(id);
   if (!match) return `Formato inválido. Ej: ${example}`;
-  if (match[1] !== locationCode) {
-    return `Un equipo en ${location.name} empieza con "${locationCode}-". Ej: ${example}`;
+  if (match[1] !== code) {
+    return `Un equipo en ${location.name} empieza con "${code}-". Ej: ${example}`;
   }
   if (match[2] !== kindCode) return `Un ${kind} usa el código "${kindCode}". Ej: ${example}`;
   if (Number(match[3]) === 0) return "Los números arrancan en 1";

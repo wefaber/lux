@@ -86,7 +86,7 @@ export function LocationsPage() {
                 {["Código", "Nombre", "Tipo", "Equipos", "Actualizada", ""].map((h) => (
                   <th
                     key={h}
-                    className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                   >
                     {h}
                   </th>
@@ -99,23 +99,23 @@ export function LocationsPage() {
                   key={l.id}
                   className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                 >
-                  <td className="px-6 py-4 font-mono text-sm font-semibold text-primary">
+                  <td className="px-4 py-3 font-mono text-sm font-semibold text-primary">
                     {l.code}
                   </td>
-                  <td className="px-6 py-4 text-sm font-semibold text-foreground">
+                  <td className="px-4 py-3 text-sm font-semibold text-foreground">
                     <span className="inline-flex items-center gap-2">
                       <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
                       {l.name}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground">
+                  <td className="px-4 py-3 text-sm text-muted-foreground">
                     {LOCATION_KIND_LABELS[l.kind]}
                   </td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground">{l.productCount}</td>
-                  <td className="px-6 py-4 text-xs text-muted-foreground">
+                  <td className="px-4 py-3 text-sm text-muted-foreground">{l.productCount}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">
                     {formatDate(l.updatedAt)}
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="sm" onClick={() => setEditing(l)}>
                         <Pencil className="h-3.5 w-3.5" />
@@ -164,6 +164,11 @@ export function LocationsPage() {
   );
 }
 
+// Nombre sugerido a partir del tipo y el numero: Laboratorio 3
+function autoName(kind: string, number: number): string {
+  return `${LOCATION_KIND_LABELS[kind as LocationKind]} ${Number.isInteger(number) ? number : ""}`.trim();
+}
+
 interface LocationFormProps {
   location: Location | null;
   /** Las ya registradas, para proponer el proximo numero libre de cada tipo */
@@ -189,9 +194,6 @@ function LocationForm({ location, existing, onDone, onCancel }: LocationFormProp
   // Con equipos, tipo y numero quedan fijos: forman el codigo de su ID de maquina
   const codeLocked = (location?.productCount ?? 0) > 0;
   const code = locationCode(form.kind, form.number);
-
-  const autoName = (kind: string, number: number) =>
-    `${LOCATION_KIND_LABELS[kind as LocationKind]} ${Number.isInteger(number) ? number : ""}`.trim();
 
   const update = <K extends keyof LocationFields>(k: K, v: LocationFields[K]) => {
     setForm((f) => {
