@@ -143,6 +143,17 @@ export interface Intervention {
   updatedAt: string;
 } // Intervencion registrada sobre un equipo, con o sin ticket
 
+export type CommentEntity = "ticket" | "service_request"; // Que se puede comentar
+
+export interface Comment {
+  id: string;
+  entityType: CommentEntity;
+  entityId: string;
+  author: User;
+  body: string;
+  createdAt: string;
+} // Comentario en el hilo de un ticket o solicitud
+
 export interface ActivityLog {
   id: string;
   userId: string;

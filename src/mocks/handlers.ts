@@ -3,11 +3,13 @@ import { mockUsers, mockPasswords } from "./data/users";
 import { mockProducts, mockComponents } from "./data/equipment";
 import { mockLocations } from "./data/locations";
 import { mockInterventions } from "./data/interventions";
+import { mockComments } from "./data/comments";
 import { mockTickets } from "./data/tickets";
 import { mockLoans } from "./data/loans";
 import { mockServices } from "./data/services";
 import { mockActivityLogs } from "./generators";
 import {
+  validateComment,
   validateComponent,
   validateIntervention,
   validateLocation,
@@ -28,6 +30,8 @@ import type {
   Location,
   Intervention,
   InterventionType,
+  Comment,
+  CommentEntity,
   Product,
   Component,
   Ticket,
@@ -144,6 +148,24 @@ function duplicateProductError(
   if (others.some((p) => p.serialNumber === fields.serialNumber)) {
     return `Ya existe un equipo con n° de serie ${fields.serialNumber}`;
   }
+  return null;
+}
+
+// Quien puede leer y escribir el hilo de un ticket o solicitud: el staff, o el
+// solicitante que lo abrio (la misma regla que para ver el detalle)
+function commentAccessError(
+  caller: User,
+  entityType: CommentEntity,
+  entityId: string,
+): { message: string } | null {
+  const owner =
+    entityType === "ticket"
+      ? mockTickets.find((t) => t.id === entityId)?.submittedBy
+      : entityType === "service_request"
+        ? mockServices.find((s) => s.id === entityId)?.requestedBy
+        : undefined;
+  if (!owner) return { message: "No encontrado" };
+  if (!isStaff(caller) && owner.id !== caller.id) return FORBIDDEN.errors[0];
   return null;
 }
 
@@ -1201,6 +1223,43 @@ export const handlers = [
     if (ticket.status === "pending") ticket.status = "in_progress";
     ticket.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { assignTicket: ticket } });
+  }),
+
+  // ── Comentarios ────────────────────────────────────────────────────────────
+  // Hilo de un ticket o solicitud entre quien lo abrio y el staff
+
+  graphql.query("GetComments", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    const { entityType, entityId } = variables as { entityType: CommentEntity; entityId: string };
+    const denied = commentAccessError(caller, entityType, entityId);
+    if (denied) return HttpResponse.json({ errors: [denied] });
+    const comments = mockComments
+      .filter((c) => c.entityType === entityType && c.entityId === entityId)
+      .toSorted((a, b) => a.createdAt.localeCompare(b.createdAt));
+    return HttpResponse.json({ data: { comments } });
+  }),
+
+  graphql.mutation("CreateComment", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    const { input } = variables as {
+      input: { entityType: CommentEntity; entityId: string; body: string };
+    };
+    const denied = commentAccessError(caller, input.entityType, input.entityId);
+    if (denied) return HttpResponse.json({ errors: [denied] });
+    const error = validateComment(input.body);
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    const comment: Comment = {
+      id: nextId("cmt-", mockComments, 3),
+      entityType: input.entityType,
+      entityId: input.entityId,
+      author: caller,
+      body: input.body.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    mockComments.push(comment);
+    return HttpResponse.json({ data: { createComment: comment } });
   }),
 
   // ── Intervenciones ─────────────────────────────────────────────────────────

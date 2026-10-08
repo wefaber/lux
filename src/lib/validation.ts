@@ -158,6 +158,14 @@ export function validateLocation(l: LocationFields): FieldErrors<keyof LocationF
   ]);
 }
 
+// Comentario: ni vacio ni un texto interminable
+export function validateComment(body: string): string | null {
+  const text = body.trim();
+  if (!text) return "El comentario no puede estar vacío";
+  if (text.length > 1000) return "El comentario no puede superar los 1000 caracteres";
+  return null;
+}
+
 // Intervencion: tipo conocido, descripcion util y fecha que ya paso
 export function validateIntervention(
   i: InterventionFields,

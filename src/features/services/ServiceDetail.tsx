@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CommentThread } from "@/components/comments/CommentThread";
 
 const SERVICE_QUERY = `
  query GetServiceRequest($id: ID!) {
@@ -269,6 +270,8 @@ export function ServiceDetail() {
               </CardContent>
             </Card>
           )}
+
+          <CommentThread entityType="service_request" entityId={service.id} />
         </motion.div>
       )}
     </div>

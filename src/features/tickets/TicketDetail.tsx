@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { WizardSkeleton } from "@/components/skeletons/WizardSkeleton";
 import { TicketWizard } from "./TicketWizard";
+import { CommentThread } from "@/components/comments/CommentThread";
 
 const TICKET_QUERY = `
  query GetTicket($id: ID!) {
@@ -208,6 +209,8 @@ export function TicketDetail() {
           </Card>
         )
       )}
+
+      {ticket && <CommentThread entityType="ticket" entityId={ticket.id} />}
     </div>
   );
 }

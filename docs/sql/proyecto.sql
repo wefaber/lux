@@ -157,6 +157,21 @@ CREATE TABLE IF NOT EXISTS nota_tecnica (
     CHECK (timestamp IS NOT NULL)
 );
 
+-- Hilo de un ticket o solicitud de servicio. entidad_id apunta a ticket o a
+-- solicitud_servicio segun entidad_tipo, por eso no lleva clave foranea.
+CREATE TABLE IF NOT EXISTS comentario (
+    id VARCHAR(100) PRIMARY KEY NOT NULL,
+    entidad_tipo VARCHAR(50) NOT NULL,
+    entidad_id VARCHAR(100) NOT NULL,
+    autor_id VARCHAR(100) NOT NULL,
+    cuerpo VARCHAR(1000) NOT NULL,
+    fecha_creacion DATETIME NOT NULL,
+    CONSTRAINT fk_comentario_autor_id FOREIGN KEY (autor_id) REFERENCES usuario(id),
+    CHECK (entidad_tipo IN ('ticket', 'solicitud_servicio')),
+    CHECK (cuerpo <> '' AND LENGTH(cuerpo) <= 1000)
+);
+CREATE INDEX idx_comentario_entidad ON comentario (entidad_tipo, entidad_id, fecha_creacion);
+
 -- Trabajo hecho sobre un equipo (mantenimiento, limpieza, cambio de piezas...).
 -- ticket_id es opcional: solo si la intervencion surgio de un ticket.
 CREATE TABLE IF NOT EXISTS intervencion (

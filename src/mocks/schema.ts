@@ -21,6 +21,7 @@ export const schema = `
     activityLogs(userId: ID, operation: String, startDate: String, endDate: String): [ActivityLog!]!
     locations: [Location!]!
     interventions(equipmentId: ID!): [Intervention!]!
+    comments(entityType: String!, entityId: ID!): [Comment!]!
   }
 
   type Mutation {
@@ -54,6 +55,16 @@ export const schema = `
     softDeleteLocation(id: ID!): Boolean!
     createIntervention(input: InterventionInput!): Intervention!
     updateIntervention(id: ID!, input: InterventionUpdateInput!): Intervention!
+    createComment(input: CommentInput!): Comment!
+  }
+
+  type Comment {
+    id: ID!
+    entityType: String!
+    entityId: ID!
+    author: User!
+    body: String!
+    createdAt: String!
   }
 
   type Intervention {
@@ -292,6 +303,12 @@ export const schema = `
     partNumber: String
     issues: String
     locationId: ID
+  }
+
+  input CommentInput {
+    entityType: String!
+    entityId: ID!
+    body: String!
   }
 
   input InterventionInput {
