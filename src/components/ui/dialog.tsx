@@ -37,7 +37,10 @@ function DialogContent({
           transition={{ type: "spring", stiffness: 350, damping: 28 }}
           className={cn(
             "fixed left-[50%] top-[50%] z-50 w-full max-w-lg translate-x-[-50%] translate-y-[-50%]",
-            "rounded-2xl border border-border/50 bg-popover/85 p-6 shadow-2xl backdrop-blur-3xl",
+            // En el telefono: margen a los costados y alto limitado a lo visible (dvh descuenta
+            // las barras del navegador); si el contenido no entra, se desplaza adentro del modal
+            "w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain",
+            "rounded-2xl border border-border/50 bg-popover/85 p-5 sm:p-6 shadow-2xl backdrop-blur-3xl",
             "focus:outline-none focus:ring-0",
             className,
           )}

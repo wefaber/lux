@@ -1,10 +1,11 @@
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, Link, useNavigate } from "react-router-dom";
 import { Users, Shield, ActivitySquare, ArrowLeft, Zap, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
 import { ThemeSwitcher } from "@/components/accessibility/ThemeSwitcher";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 
 const adminNav = [
   { icon: Users, label: "Usuarios", to: ROUTES.ADMIN_USERS },
@@ -28,7 +29,8 @@ export function AdminLayout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <aside className="w-56 flex flex-col glass-sidebar">
+      {/* El menu lateral solo desde md: en el telefono le dejaba ~150px al contenido */}
+      <aside className="hidden md:flex w-56 flex-col glass-sidebar">
         <div className="flex items-center gap-2 p-4 h-14">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-destructive">
             <Zap className="h-4 w-4 text-destructive-foreground" />
@@ -90,11 +92,41 @@ export function AdminLayout() {
       </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="h-14 flex items-center justify-between px-6 glass-topbar">
-          <h1 className="text-sm font-semibold text-foreground">Panel de Administración</h1>
+        <header className="h-14 flex items-center justify-between gap-2 px-4 md:px-6 glass-topbar">
+          <div className="flex items-center gap-1 min-w-0">
+            <Button variant="ghost" size="icon" className="md:hidden shrink-0" asChild>
+              <Link to={ROUTES.DASHBOARD} aria-label="Volver al Dashboard">
+                <ArrowLeft className="h-4 w-4" />
+              </Link>
+            </Button>
+            <h1 className="text-sm font-semibold text-foreground truncate">Panel de Administración</h1>
+          </div>
           <ThemeSwitcher />
         </header>
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+        {/* En el telefono las secciones van en una fila que se desplaza de costado */}
+        <nav
+          aria-label="Secciones de administración"
+          className="md:hidden flex gap-1 overflow-x-auto px-4 py-2 border-b border-border"
+        >
+          {adminNav.map(({ icon: Icon, label, to }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                cn(
+                  "flex shrink-0 items-center gap-2 rounded-xl px-3 py-1.5 text-sm whitespace-nowrap transition-colors",
+                  isActive
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm"
+                    : "text-muted-foreground hover:bg-sidebar-accent",
+                )
+              }
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <Outlet />
         </main>
       </div>

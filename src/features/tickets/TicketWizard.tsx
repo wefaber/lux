@@ -95,15 +95,17 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
   }; // Flujo de renderizado del ticket
 
   return (
-    <div className="flex gap-8 min-h-[500px]">
-      <nav className="w-44 flex-shrink-0 pt-1">
-        <ol className="space-y-1">
+    // En el telefono los pasos van arriba, en una fila que se desplaza de costado;
+    // desde md vuelven a la columna de la izquierda
+    <div className="flex flex-col md:flex-row gap-4 md:gap-8 md:min-h-[500px]">
+      <nav className="md:w-44 flex-shrink-0 pt-1 -mx-1 px-1 overflow-x-auto md:overflow-visible">
+        <ol className="flex md:flex-col gap-1">
           {steps.map((step, i) => (
-            <li key={step.id}>
+            <li key={step.id} className="shrink-0">
               <button
                 onClick={() => setCurrentStep(i)}
                 className={cn(
-                  "w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-all cursor-pointer text-left",
+                  "md:w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm whitespace-nowrap transition-all cursor-pointer text-left",
                   currentStep === i
                     ? "bg-card/60 text-foreground font-medium shadow-sm"
                     : "text-muted-foreground hover:bg-muted/50",
