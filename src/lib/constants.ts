@@ -7,6 +7,8 @@ import type {
   TicketCategory,
   UserRole,
   InterventionType,
+  ReservationResource,
+  ReservationStatus,
 } from "./types";
 
 export const AUTH_STORAGE_KEY = "lux_auth"; // Clave de localStorage compartida entre useAuth y gql()
@@ -19,6 +21,7 @@ export const ROUTES = {
   INVENTORY: "/dashboard/inventory",
   EQUIPMENT_STATUS: "/dashboard/equipment-status",
   LOCATIONS: "/dashboard/locations",
+  RESERVATIONS: "/dashboard/reservations",
   TICKETS: "/dashboard/tickets",
   LOANS: "/dashboard/loans",
   SERVICES: "/dashboard/service-requests",
@@ -111,6 +114,23 @@ export const TICKET_CATEGORY_LABELS: Record<TicketCategory, string> = {
   network: "Red",
   other: "Otro",
 }; // Labels de categorias de ticket
+
+export const RESERVATION_STATUS_CONFIG: Record<
+  ReservationStatus,
+  { label: string; color: "success" | "warning" | "info" | "destructive" | "muted" }
+> = {
+  pending: { label: "Pendiente", color: "warning" },
+  approved: { label: "Aprobada", color: "success" },
+  rejected: { label: "Rechazada", color: "destructive" },
+  active: { label: "En curso", color: "info" },
+  completed: { label: "Finalizada", color: "muted" },
+  cancelled: { label: "Cancelada", color: "muted" },
+}; // Configuracion de estados de reservas
+
+export const RESERVATION_RESOURCE_LABELS: Record<ReservationResource, string> = {
+  equipment: "Equipo",
+  location: "Espacio",
+}; // Que se reserva
 
 export const INTERVENTION_TYPE_LABELS: Record<InterventionType, string> = {
   preventive_maintenance: "Mantenimiento preventivo",

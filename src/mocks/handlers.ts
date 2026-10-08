@@ -4,6 +4,7 @@ import { mockProducts, mockComponents } from "./data/equipment";
 import { mockLocations } from "./data/locations";
 import { mockInterventions } from "./data/interventions";
 import { mockComments } from "./data/comments";
+import { mockReservations } from "./data/reservations";
 import { mockTickets } from "./data/tickets";
 import { mockLoans } from "./data/loans";
 import { mockServices } from "./data/services";
@@ -14,12 +15,14 @@ import {
   validateIntervention,
   validateLocation,
   validateProduct,
+  validateReservation,
   type FieldErrors,
   type InterventionFields,
   type LocationFields,
 } from "@/lib/validation";
 import {
   LOAN_STATUS_CONFIG,
+  RESERVATION_STATUS_CONFIG,
   TICKET_STATUS_CONFIG,
   TICKET_TRANSITIONS,
   type DashboardPeriod,
@@ -32,6 +35,9 @@ import type {
   InterventionType,
   Comment,
   CommentEntity,
+  Reservation,
+  ReservationResource,
+  ReservationStatus,
   Product,
   Component,
   Ticket,
@@ -149,6 +155,59 @@ function duplicateProductError(
     return `Ya existe un equipo con n° de serie ${fields.serialNumber}`;
   }
   return null;
+}
+
+// Reservas que ocupan su recurso: contra estas se controla el solapamiento
+const BLOCKING_RESERVATION_STATUSES = new Set<ReservationStatus>(["approved", "active"]);
+// Reservas que todavia cuentan para el recurso (impiden darlo de baja)
+const OPEN_RESERVATION_STATUSES = new Set<ReservationStatus>(["pending", "approved", "active"]);
+
+// El ciclo avanza solo con el tiempo, igual que los prestamos vencidos:
+// aprobada -> en curso al empezar -> finalizada al terminar
+function syncReservations(now: number = Date.now()): void {
+  for (const r of mockReservations) {
+    if (r.status !== "approved" && r.status !== "active") continue;
+    const next: ReservationStatus =
+      Date.parse(r.endsAt) <= now
+        ? "completed"
+        : Date.parse(r.startsAt) <= now
+          ? "active"
+          : r.status;
+    if (next !== r.status) {
+      r.status = next;
+      r.updatedAt = new Date(now).toISOString();
+    }
+  }
+}
+
+function reservationResourceId(r: Reservation): string | undefined {
+  return r.resourceType === "equipment" ? r.equipment?.id : r.location?.id;
+}
+
+// Un mismo equipo o espacio no puede tener dos reservas aprobadas en el mismo horario
+function reservationOverlapError(
+  resourceType: ReservationResource,
+  resourceId: string,
+  startsAt: string,
+  endsAt: string,
+  exceptId?: string,
+): string | null {
+  const start = Date.parse(startsAt);
+  const end = Date.parse(endsAt);
+  const clash = mockReservations.find(
+    (r) =>
+      r.id !== exceptId &&
+      BLOCKING_RESERVATION_STATUSES.has(r.status) &&
+      r.resourceType === resourceType &&
+      reservationResourceId(r) === resourceId &&
+      Date.parse(r.startsAt) < end &&
+      start < Date.parse(r.endsAt),
+  );
+  return clash ? `Se superpone con la reserva ${clash.id}, ya aprobada para ese horario` : null;
+}
+
+function invalidReservationTransition(r: Reservation, action: string): string {
+  return `No se puede ${action} una reserva "${RESERVATION_STATUS_CONFIG[r.status].label}"`;
 }
 
 // Quien puede leer y escribir el hilo de un ticket o solicitud: el staff, o el
@@ -1081,6 +1140,16 @@ export const handlers = [
         errors: [{ message: "No se puede dar de baja: el equipo tiene tickets abiertos" }],
       });
     }
+    syncReservations();
+    if (
+      mockReservations.some(
+        (r) => r.equipment?.id === id && OPEN_RESERVATION_STATUSES.has(r.status),
+      )
+    ) {
+      return HttpResponse.json({
+        errors: [{ message: "No se puede dar de baja: el equipo tiene reservas vigentes" }],
+      });
+    }
     const now = new Date().toISOString();
     product.status = "retired";
     product.deletedAt = now;
@@ -1223,6 +1292,220 @@ export const handlers = [
     if (ticket.status === "pending") ticket.status = "in_progress";
     ticket.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { assignTicket: ticket } });
+  }),
+
+  // ── Reservas ───────────────────────────────────────────────────────────────
+  // El solicitante pide y sigue las suyas; el staff ve todas y las gestiona
+
+  graphql.query("GetReservations", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    syncReservations();
+    const { status } = variables as { status?: ReservationStatus };
+    // El solicitante solo ve las suyas, mande el filtro que mande
+    let reservations = isStaff(caller)
+      ? [...mockReservations]
+      : mockReservations.filter((r) => r.user.id === caller.id);
+    if (status) reservations = reservations.filter((r) => r.status === status);
+    reservations.sort((a, b) => b.startsAt.localeCompare(a.startsAt));
+    return HttpResponse.json({ data: { reservations } });
+  }),
+
+  graphql.query("GetReservation", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    syncReservations();
+    const { id } = variables as { id: string };
+    const reservation = mockReservations.find((r) => r.id === id) ?? null;
+    if (reservation && !isStaff(caller) && reservation.user.id !== caller.id) {
+      return HttpResponse.json(FORBIDDEN);
+    }
+    return HttpResponse.json({ data: { reservation } });
+  }),
+
+  graphql.mutation("CreateReservation", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    syncReservations();
+    const { input } = variables as {
+      input: {
+        resourceType: ReservationResource;
+        equipmentId?: string;
+        locationId?: string;
+        startsAt: string;
+        endsAt: string;
+        purpose: string;
+      };
+    };
+    let equipment: Product | null = null;
+    let location: Location | null = null;
+    if (input.resourceType === "equipment") {
+      equipment = mockProducts.find((p) => p.id === input.equipmentId && !p.deletedAt) ?? null;
+      if (!equipment) return HttpResponse.json({ errors: [{ message: "Equipo no encontrado" }] });
+      if (equipment.status === "in_repair") {
+        return HttpResponse.json({
+          errors: [{ message: "El equipo está en reparación: no se puede reservar" }],
+        });
+      }
+      // Hay equipos con estado "retired" sin deletedAt: tampoco se reservan
+      if (equipment.status === "retired") {
+        return HttpResponse.json({
+          errors: [{ message: "El equipo está dado de baja: no se puede reservar" }],
+        });
+      }
+    } else if (input.resourceType === "location") {
+      location = activeLocation(input.locationId) ?? null;
+      if (!location) return HttpResponse.json({ errors: [{ message: "Ubicación no encontrada" }] });
+    } else {
+      return HttpResponse.json({ errors: [{ message: "Elegí un equipo o un espacio" }] });
+    }
+    const fields = { startsAt: input.startsAt, endsAt: input.endsAt, purpose: input.purpose };
+    const resourceId = (equipment ?? location)!.id;
+    const error =
+      firstError(validateReservation(fields)) ??
+      reservationOverlapError(input.resourceType, resourceId, fields.startsAt, fields.endsAt);
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    const now = new Date().toISOString();
+    const reservation: Reservation = {
+      id: nextId("rsv-", mockReservations, 3),
+      resourceType: input.resourceType,
+      equipment,
+      location,
+      user: caller,
+      purpose: fields.purpose.trim(),
+      startsAt: new Date(fields.startsAt).toISOString(),
+      endsAt: new Date(fields.endsAt).toISOString(),
+      status: "pending",
+      reviewedBy: null,
+      rejectionReason: null,
+      cancelledBy: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    mockReservations.push(reservation);
+    return HttpResponse.json({ data: { createReservation: reservation } });
+  }),
+
+  graphql.mutation("ApproveReservation", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    syncReservations();
+    const { id } = variables as { id: string };
+    const reservation = mockReservations.find((r) => r.id === id);
+    if (!reservation) return HttpResponse.json({ errors: [{ message: "Reserva no encontrada" }] });
+    if (reservation.status !== "pending") {
+      return HttpResponse.json({
+        errors: [{ message: invalidReservationTransition(reservation, "aprobar") }],
+      });
+    }
+    if (Date.parse(reservation.endsAt) <= Date.now()) {
+      return HttpResponse.json({
+        errors: [{ message: "La reserva ya terminó: no se puede aprobar" }],
+      });
+    }
+    // Entre dos pedidos para el mismo horario, el que se aprueba primero gana
+    const overlap = reservationOverlapError(
+      reservation.resourceType,
+      reservationResourceId(reservation)!,
+      reservation.startsAt,
+      reservation.endsAt,
+      reservation.id,
+    );
+    if (overlap) return HttpResponse.json({ errors: [{ message: overlap }] });
+    reservation.status = "approved";
+    reservation.reviewedBy = caller;
+    reservation.updatedAt = new Date().toISOString();
+    syncReservations();
+    return HttpResponse.json({ data: { approveReservation: reservation } });
+  }),
+
+  graphql.mutation("RejectReservation", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    syncReservations();
+    const { id, reason } = variables as { id: string; reason: string };
+    const reservation = mockReservations.find((r) => r.id === id);
+    if (!reservation) return HttpResponse.json({ errors: [{ message: "Reserva no encontrada" }] });
+    if (reservation.status !== "pending") {
+      return HttpResponse.json({
+        errors: [{ message: invalidReservationTransition(reservation, "rechazar") }],
+      });
+    }
+    // El solicitante ve el motivo: tiene que decir algo
+    if ((reason ?? "").trim().length < 5) {
+      return HttpResponse.json({
+        errors: [{ message: "Indicá el motivo del rechazo (mínimo 5 caracteres)" }],
+      });
+    }
+    reservation.status = "rejected";
+    reservation.reviewedBy = caller;
+    reservation.rejectionReason = reason.trim();
+    reservation.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ data: { rejectReservation: reservation } });
+  }),
+
+  graphql.mutation("UpdateReservation", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    syncReservations();
+    const { id, input } = variables as {
+      id: string;
+      input: Partial<{ startsAt: string; endsAt: string; purpose: string }>;
+    };
+    const reservation = mockReservations.find((r) => r.id === id);
+    if (!reservation) return HttpResponse.json({ errors: [{ message: "Reserva no encontrada" }] });
+    // Lo que ya empezo o se cerro no se reprograma
+    if (reservation.status !== "pending" && reservation.status !== "approved") {
+      return HttpResponse.json({
+        errors: [{ message: invalidReservationTransition(reservation, "modificar") }],
+      });
+    }
+    const fields = {
+      startsAt: input.startsAt ?? reservation.startsAt,
+      endsAt: input.endsAt ?? reservation.endsAt,
+      purpose: input.purpose ?? reservation.purpose,
+    };
+    const error =
+      firstError(validateReservation(fields)) ??
+      reservationOverlapError(
+        reservation.resourceType,
+        reservationResourceId(reservation)!,
+        fields.startsAt,
+        fields.endsAt,
+        reservation.id,
+      );
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    Object.assign(reservation, {
+      startsAt: new Date(fields.startsAt).toISOString(),
+      endsAt: new Date(fields.endsAt).toISOString(),
+      purpose: fields.purpose.trim(),
+      updatedAt: new Date().toISOString(),
+    });
+    syncReservations();
+    return HttpResponse.json({ data: { updateReservation: reservation } });
+  }),
+
+  graphql.mutation("CancelReservation", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    syncReservations();
+    const { id } = variables as { id: string };
+    const reservation = mockReservations.find((r) => r.id === id);
+    if (!reservation) return HttpResponse.json({ errors: [{ message: "Reserva no encontrada" }] });
+    const staff = isStaff(caller);
+    if (!staff && reservation.user.id !== caller.id) return HttpResponse.json(FORBIDDEN);
+    // El solicitante cancela lo que todavia no empezo; el staff, tambien lo que esta en curso
+    const cancellable: ReservationStatus[] = staff
+      ? ["pending", "approved", "active"]
+      : ["pending", "approved"];
+    if (!cancellable.includes(reservation.status)) {
+      return HttpResponse.json({
+        errors: [{ message: invalidReservationTransition(reservation, "cancelar") }],
+      });
+    }
+    reservation.status = "cancelled";
+    reservation.cancelledBy = caller;
+    reservation.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ data: { cancelReservation: reservation } });
   }),
 
   // ── Comentarios ────────────────────────────────────────────────────────────
@@ -1408,6 +1691,16 @@ export const handlers = [
     const { id } = variables as { id: string };
     const location = activeLocation(id);
     if (!location) return HttpResponse.json({ errors: [{ message: "Ubicación no encontrada" }] });
+    syncReservations();
+    if (
+      mockReservations.some(
+        (r) => r.location?.id === id && OPEN_RESERVATION_STATUSES.has(r.status),
+      )
+    ) {
+      return HttpResponse.json({
+        errors: [{ message: "No se puede eliminar: la ubicación tiene reservas vigentes" }],
+      });
+    }
     const count = productsIn(id).length;
     if (count > 0) {
       return HttpResponse.json({

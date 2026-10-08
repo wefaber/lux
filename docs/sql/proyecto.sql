@@ -157,6 +157,40 @@ CREATE TABLE IF NOT EXISTS nota_tecnica (
     CHECK (timestamp IS NOT NULL)
 );
 
+-- Reserva de un equipo o de un espacio (ubicacion) por un rango de fechas.
+-- Ciclo: pendiente -> aprobada | rechazada -> en_curso -> finalizada | cancelada.
+-- Dos reservas aprobadas o en curso del mismo recurso no se superponen (lo
+-- controla la aplicacion al crear, aprobar y modificar).
+CREATE TABLE IF NOT EXISTS reserva (
+    id VARCHAR(100) PRIMARY KEY NOT NULL,
+    tipo_recurso VARCHAR(20) NOT NULL,
+    equipo_id VARCHAR(100),
+    ubicacion_id VARCHAR(100),
+    usuario_id VARCHAR(100) NOT NULL,
+    motivo VARCHAR(300) NOT NULL,
+    fecha_inicio DATETIME NOT NULL,
+    fecha_fin DATETIME NOT NULL,
+    estado VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+    revisada_por VARCHAR(100),
+    motivo_rechazo VARCHAR(500),
+    cancelada_por VARCHAR(100),
+    fecha_creacion DATETIME NOT NULL,
+    CONSTRAINT fk_reserva_equipo_id FOREIGN KEY (equipo_id) REFERENCES equipo(id),
+    CONSTRAINT fk_reserva_ubicacion_id FOREIGN KEY (ubicacion_id) REFERENCES ubicacion(id),
+    CONSTRAINT fk_reserva_usuario_id FOREIGN KEY (usuario_id) REFERENCES usuario(id),
+    CONSTRAINT fk_reserva_revisada_por FOREIGN KEY (revisada_por) REFERENCES usuario(id),
+    CONSTRAINT fk_reserva_cancelada_por FOREIGN KEY (cancelada_por) REFERENCES usuario(id),
+    CHECK (tipo_recurso IN ('equipo', 'espacio')),
+    -- Exactamente un recurso, segun el tipo
+    CHECK ((tipo_recurso = 'equipo' AND equipo_id IS NOT NULL AND ubicacion_id IS NULL)
+        OR (tipo_recurso = 'espacio' AND ubicacion_id IS NOT NULL AND equipo_id IS NULL)),
+    CHECK (estado IN ('pendiente', 'aprobada', 'rechazada', 'en_curso', 'finalizada', 'cancelada')),
+    CHECK (fecha_fin > fecha_inicio),
+    CHECK (estado <> 'rechazada' OR motivo_rechazo IS NOT NULL)
+);
+CREATE INDEX idx_reserva_equipo ON reserva (equipo_id, fecha_inicio, fecha_fin);
+CREATE INDEX idx_reserva_ubicacion ON reserva (ubicacion_id, fecha_inicio, fecha_fin);
+
 -- Hilo de un ticket o solicitud de servicio. entidad_id apunta a ticket o a
 -- solicitud_servicio segun entidad_tipo, por eso no lleva clave foranea.
 CREATE TABLE IF NOT EXISTS comentario (

@@ -6,6 +6,7 @@ import {
   Ticket,
   BookOpen,
   Wrench,
+  CalendarClock,
   User,
 } from "lucide-react";
 import { ROUTES } from "@/lib/constants";
@@ -33,6 +34,7 @@ const NAV_ITEMS: NavItem[] = [
   { icon: Ticket, label: "Tickets", to: ROUTES.TICKETS, inTabBar: true },
   { icon: BookOpen, label: "Préstamos", to: ROUTES.LOANS, staffOnly: true, inTabBar: true },
   { icon: Wrench, label: "Solicitudes", to: ROUTES.SERVICES, inTabBar: true },
+  { icon: CalendarClock, label: "Reservas", to: ROUTES.RESERVATIONS, inTabBar: true },
   { icon: User, label: "Perfil", to: ROUTES.PROFILE, inTabBar: true },
 ];
 

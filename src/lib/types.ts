@@ -143,6 +143,35 @@ export interface Intervention {
   updatedAt: string;
 } // Intervencion registrada sobre un equipo, con o sin ticket
 
+export type ReservationStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "active"
+  | "completed"
+  | "cancelled"; // pending -> approved | rejected -> active -> completed | cancelled
+export type ReservationResource = "equipment" | "location"; // Un equipo o un espacio
+
+export interface Reservation {
+  id: string;
+  resourceType: ReservationResource;
+  /** El equipo reservado (si resourceType es equipment) */
+  equipment: Product | null;
+  /** El espacio reservado (si resourceType es location) */
+  location: Location | null;
+  user: User;
+  purpose: string;
+  startsAt: string;
+  endsAt: string;
+  status: ReservationStatus;
+  /** Quien la aprobo o rechazo */
+  reviewedBy: User | null;
+  rejectionReason: string | null;
+  cancelledBy: User | null;
+  createdAt: string;
+  updatedAt: string;
+} // Reserva de un equipo o espacio por un rango de fechas
+
 export type CommentEntity = "ticket" | "service_request"; // Que se puede comentar
 
 export interface Comment {

@@ -22,6 +22,8 @@ export const schema = `
     locations: [Location!]!
     interventions(equipmentId: ID!): [Intervention!]!
     comments(entityType: String!, entityId: ID!): [Comment!]!
+    reservations(status: String): [Reservation!]!
+    reservation(id: ID!): Reservation
   }
 
   type Mutation {
@@ -56,6 +58,28 @@ export const schema = `
     createIntervention(input: InterventionInput!): Intervention!
     updateIntervention(id: ID!, input: InterventionUpdateInput!): Intervention!
     createComment(input: CommentInput!): Comment!
+    createReservation(input: ReservationInput!): Reservation!
+    approveReservation(id: ID!): Reservation!
+    rejectReservation(id: ID!, reason: String!): Reservation!
+    updateReservation(id: ID!, input: ReservationUpdateInput!): Reservation!
+    cancelReservation(id: ID!): Reservation!
+  }
+
+  type Reservation {
+    id: ID!
+    resourceType: String!
+    equipment: Product
+    location: Location
+    user: User!
+    purpose: String!
+    startsAt: String!
+    endsAt: String!
+    status: String!
+    reviewedBy: User
+    rejectionReason: String
+    cancelledBy: User
+    createdAt: String!
+    updatedAt: String!
   }
 
   type Comment {
@@ -303,6 +327,21 @@ export const schema = `
     partNumber: String
     issues: String
     locationId: ID
+  }
+
+  input ReservationInput {
+    resourceType: String!
+    equipmentId: ID
+    locationId: ID
+    startsAt: String!
+    endsAt: String!
+    purpose: String!
+  }
+
+  input ReservationUpdateInput {
+    startsAt: String
+    endsAt: String
+    purpose: String
   }
 
   input CommentInput {

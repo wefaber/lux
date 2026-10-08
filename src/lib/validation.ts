@@ -158,6 +158,53 @@ export function validateLocation(l: LocationFields): FieldErrors<keyof LocationF
   ]);
 }
 
+export interface ReservationFields {
+  startsAt: string;
+  endsAt: string;
+  purpose: string;
+}
+
+const MAX_RESERVATION_DAYS = 14;
+
+// Reserva: rango que empieza en el futuro, termina despues de empezar y no se
+// extiende mas de dos semanas, con un motivo que se entienda
+export function validateReservation(
+  r: ReservationFields,
+  now: number = Date.now(),
+): FieldErrors<keyof ReservationFields> {
+  const start = new Date(r.startsAt).getTime();
+  const end = new Date(r.endsAt).getTime();
+  const purpose = r.purpose.trim();
+  return collect<keyof ReservationFields>([
+    [
+      "startsAt",
+      Number.isNaN(start)
+        ? "Fecha de inicio inválida"
+        : start < now - 60_000
+          ? "La reserva no puede empezar en el pasado"
+          : null,
+    ],
+    [
+      "endsAt",
+      Number.isNaN(end)
+        ? "Fecha de fin inválida"
+        : !Number.isNaN(start) && end <= start
+          ? "El fin tiene que ser posterior al inicio"
+          : !Number.isNaN(start) && end - start > MAX_RESERVATION_DAYS * 86_400_000
+            ? `Una reserva dura como máximo ${MAX_RESERVATION_DAYS} días`
+            : null,
+    ],
+    [
+      "purpose",
+      purpose.length < 5
+        ? "Motivo: mínimo 5 caracteres"
+        : purpose.length > 300
+          ? "Motivo: máximo 300 caracteres"
+          : null,
+    ],
+  ]);
+}
+
 // Comentario: ni vacio ni un texto interminable
 export function validateComment(body: string): string | null {
   const text = body.trim();
