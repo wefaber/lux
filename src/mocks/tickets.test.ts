@@ -35,6 +35,13 @@ describe("#24 cualquier rol puede crear tickets", () => {
     expect(ticket(id).submittedBy.id).toBe(TECNICO);
     expect(ticket(id).status).toBe("pending");
   });
+
+  test("los tickets nuevos siguen la numeración correlativa", async () => {
+    const [a, b] = [await newTicket(), await newTicket()];
+    expect(a).toMatch(/^tkt-\d{3}$/);
+    expect(Number(b.slice(4))).toBe(Number(a.slice(4)) + 1);
+    expect(new Set(mockTickets.map((t) => t.id)).size).toBe(mockTickets.length);
+  });
 });
 
 describe("#23 ciclo de vida del ticket", () => {

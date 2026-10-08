@@ -112,7 +112,14 @@ export const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
-      { path: "loans", element: <LoansPage /> },
+      {
+        path: "loans",
+        element: (
+          <ProtectedRoute roles={STAFF_ROLES}>
+            <LoansPage />
+          </ProtectedRoute>
+        ),
+      },
       { path: "service-requests", element: <ServiceList /> },
       { path: "service-requests/:id", element: <ServiceDetail /> },
       { path: "profile", element: <ProfilePage /> },

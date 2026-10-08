@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
@@ -9,7 +9,13 @@ import type { ServiceRequest, ServiceStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  AnimatePresence,
+} from "@/components/ui/dialog";
 import { ServiceForm } from "./ServiceForm";
 
 const SERVICES_QUERY = `
@@ -39,7 +45,9 @@ export function ServiceList() {
   const [statusFilter, setStatusFilter] = useState<ServiceStatus | "">(""); // Obtencion de status para filtros
   // "" todos, "none" sin asignar, o el id del responsable
   const [assigneeFilter, setAssigneeFilter] = useState("");
-  const [createOpen, setCreateOpen] = useState(false);
+  // ?nuevo=1 abre el formulario directo (acceso "Pedir un servicio" del inicio)
+  const [searchParams] = useSearchParams();
+  const [createOpen, setCreateOpen] = useState(() => searchParams.get("nuevo") === "1");
 
   const isSolicitante = !hasRole("root_admin", "admin", "tecnico");
 
@@ -153,7 +161,10 @@ export function ServiceList() {
                     <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
                       {SERVICE_TYPE_LABELS[s.type]}
                     </td>
-                    <td className="px-6 py-4 text-sm text-foreground max-w-[200px]">
+                    <td
+                      className="px-6 py-4 text-sm text-foreground max-w-xs truncate"
+                      title={s.description}
+                    >
                       {truncate(s.description, 60)}
                     </td>
                     <td className="px-6 py-4">
@@ -186,19 +197,26 @@ export function ServiceList() {
         </div>
       )}
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Nueva solicitud de servicio</DialogTitle>
-          </DialogHeader>
-          <ServiceForm
-            onSuccess={() => {
-              setCreateOpen(false);
-              refetch();
-            }}
-          />
-        </DialogContent>
-      </Dialog>
+      {/* AnimatePresence propio, como en TicketList: sin el, la animacion de salida
+          del dialogo queda atada a la de la pagina y, si se abrio al entrar
+          (?nuevo=1), al cerrarlo la pagina entera se queda invisible */}
+      <AnimatePresence>
+        {createOpen && (
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Nueva solicitud de servicio</DialogTitle>
+              </DialogHeader>
+              <ServiceForm
+                onSuccess={() => {
+                  setCreateOpen(false);
+                  refetch();
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
