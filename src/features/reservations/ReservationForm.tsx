@@ -28,9 +28,6 @@ const UPDATE_MUTATION = `
   mutation UpdateReservation($id: ID!, $input: ReservationUpdateInput!) { updateReservation(id: $id, input: $input) { id } }
 `;
 
-const SELECT_CLASS =
-  "flex h-10 w-full rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring";
-
 export function resourceName(r: Pick<Reservation, "equipment" | "location">): string {
   if (r.equipment) return `${r.equipment.machineId} · ${r.equipment.brand} ${r.equipment.model}`;
   return r.location?.name ?? "—";
@@ -157,22 +154,29 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
                 {resourceType === "equipment" ? "Equipo" : "Espacio"}
               </Label>
               {resourceType === "equipment" ? (
-                <select
+                // Mismo buscador que el equipo de un ticket: por ID, marca, modelo o ubicacion
+                <SearchSelect
                   id="rsv-resource"
+                  items={products}
                   value={equipmentId}
-                  onChange={(e) => {
-                    setEquipmentId(e.target.value);
+                  onChange={(eqId) => {
+                    setEquipmentId(eqId);
                     setFieldErrors((er) => ({ ...er, resource: undefined }));
                   }}
-                  className={SELECT_CLASS}
-                >
-                  <option value="">Elegí un equipo</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.machineId} · {p.brand} {p.model} ({p.location})
-                    </option>
-                  ))}
-                </select>
+                  getKey={(p) => p.id}
+                  getLabel={(p) => `${p.machineId} · ${p.brand} ${p.model}`}
+                  getSearchText={(p) => `${p.machineId} ${p.kind} ${p.brand} ${p.model} ${p.location}`}
+                  placeholder="Buscar: proyector, L1-PC3, Laboratorio 1..."
+                  renderOption={(p) => (
+                    <>
+                      <span className="font-mono text-xs text-primary font-semibold">{p.machineId}</span>
+                      <span className="text-foreground">
+                        {p.brand} {p.model}
+                      </span>
+                      <span className="ml-auto text-xs text-muted-foreground">{p.location}</span>
+                    </>
+                  )}
+                />
               ) : (
                 <SearchSelect
                   id="rsv-resource"
