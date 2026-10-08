@@ -12,6 +12,7 @@ import type { Product, Reservation, ReservationResource } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchSelect } from "@/components/ui/search-select";
 import { Textarea } from "@/components/ui/textarea";
 import { DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -173,22 +174,24 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
                   ))}
                 </select>
               ) : (
-                <select
+                <SearchSelect
                   id="rsv-resource"
+                  items={locations}
                   value={locationId}
-                  onChange={(e) => {
-                    setLocationId(e.target.value);
+                  onChange={(locId) => {
+                    setLocationId(locId);
                     setFieldErrors((er) => ({ ...er, resource: undefined }));
                   }}
-                  className={SELECT_CLASS}
-                >
-                  <option value="">Elegí un espacio</option>
-                  {locations.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name}
-                    </option>
-                  ))}
-                </select>
+                  getKey={(l) => l.id}
+                  getLabel={(l) => `${l.name} (${l.code})`}
+                  placeholder="Buscar: laboratorio 2, L2..."
+                  renderOption={(l) => (
+                    <>
+                      <span className="font-mono text-xs text-primary font-semibold">{l.code}</span>
+                      <span className="text-foreground">{l.name}</span>
+                    </>
+                  )}
+                />
               )}
               {fieldError("resource")}
             </div>

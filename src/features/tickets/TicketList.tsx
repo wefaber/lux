@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { QrScanner } from "@/components/ui/QrScanner";
+import { SearchSelect } from "@/components/ui/search-select";
 
 const TICKETS_QUERY = `
   query GetTickets($submittedById: ID) {
@@ -69,7 +70,6 @@ export function TicketList() {
     equipmentId: searchParams.get("equipo") ?? "",
   })); // Settear formulario con variables: title, desc, category, equipmentId
   const [saving, setSaving] = useState(false);
-  const [machineSearch, setMachineSearch] = useState("");
 
   const isSolicitante = !hasRole("root_admin", "admin", "tecnico");
 
@@ -84,13 +84,6 @@ export function TicketList() {
 
   const selectedProduct = products.find((p) => p.id === form.equipmentId) ?? null;
 
-  const filteredProducts = machineSearch
-    ? products.filter(
-        (p) =>
-          p.machineId.toLowerCase().includes(machineSearch.toLowerCase()) ||
-          `${p.brand} ${p.model}`.toLowerCase().includes(machineSearch.toLowerCase()),
-      )
-    : products;
 
   const tickets = (data?.tickets ?? []).filter((t) => {
     const matchSearch = !search || t.title.toLowerCase().includes(search.toLowerCase());
@@ -112,7 +105,6 @@ export function TicketList() {
       });
       setCreateOpen(false);
       setForm({ title: "", description: "", category: "hardware", equipmentId: "" });
-      setMachineSearch("");
       refetch();
     } finally {
       setSaving(false);
@@ -294,50 +286,29 @@ export function TicketList() {
                 <div className="space-y-1.5">
                   <Label>Equipo (opcional)</Label>
                   <div className="flex gap-2">
-                    <div className="flex-1 relative">
-                      <Input
+                    <div className="flex-1">
+                      <SearchSelect
+                        items={products}
+                        value={form.equipmentId}
+                        onChange={(equipmentId) => setForm((f) => ({ ...f, equipmentId }))}
+                        getKey={(p) => p.id}
+                        getLabel={(p) => `${p.machineId} · ${p.brand} ${p.model}`}
                         placeholder="Buscar por ID o nombre..."
-                        value={
-                          selectedProduct
-                            ? `${selectedProduct.machineId} · ${selectedProduct.brand} ${selectedProduct.model}`
-                            : machineSearch
-                        }
-                        onChange={(e) => {
-                          setMachineSearch(e.target.value);
-                          if (!e.target.value) setForm((f) => ({ ...f, equipmentId: "" }));
-                        }}
-                        onFocus={() => {
-                          if (selectedProduct) {
-                            setForm((f) => ({ ...f, equipmentId: "" }));
-                            setMachineSearch("");
-                          }
-                        }}
+                        direction="up"
+                        renderOption={(p) => (
+                          <>
+                            <span className="font-mono text-xs text-primary font-semibold">
+                              {p.machineId}
+                            </span>
+                            <span className="text-muted-foreground">
+                              {p.brand} {p.model}
+                            </span>
+                            <span className="ml-auto text-xs text-muted-foreground">
+                              {p.location}
+                            </span>
+                          </>
+                        )}
                       />
-                      {machineSearch && !selectedProduct && filteredProducts.length > 0 && (
-                        <div className="absolute z-50 bottom-full mb-1 left-0 right-0 bg-popover border border-border rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                          {filteredProducts.slice(0, 8).map((p) => (
-                            <button
-                              key={p.id}
-                              type="button"
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center gap-2"
-                              onClick={() => {
-                                setForm((f) => ({ ...f, equipmentId: p.id }));
-                                setMachineSearch("");
-                              }}
-                            >
-                              <span className="font-mono text-xs text-primary font-semibold">
-                                {p.machineId}
-                              </span>
-                              <span className="text-muted-foreground">
-                                {p.brand} {p.model}
-                              </span>
-                              <span className="ml-auto text-xs text-muted-foreground">
-                                {p.location}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
                     <Button
                       type="button"

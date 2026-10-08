@@ -15,6 +15,7 @@ import type { Component, Product } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchSelect } from "@/components/ui/search-select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
@@ -85,7 +86,7 @@ const EMPTY_FORM: FormState = {
   partNumber: "",
   status: "available",
   issues: "",
-  locationId: "", // vacio = la primera ubicacion disponible
+  locationId: "", // se elige buscando, como el equipo de un ticket
   name: "",
   manufacturer: "",
   isFactory: true,
@@ -152,7 +153,7 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
   );
   const takenIds = (idsData?.products ?? []).filter((p) => p.id !== id).map((p) => p.machineId);
   const { locations } = useLocations();
-  const locationId = form.locationId || locations[0]?.id || "";
+  const locationId = form.locationId;
   const location = locations.find((l) => l.id === locationId);
   const suggestion =
     mode === "product" ? suggestMachineId(form.kind, location?.code, takenIds) : null;
@@ -174,6 +175,11 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
         : validateComponent(form);
     if (mode === "product" && takenIds.includes(form.machineId.trim().toUpperCase())) {
       errors.machineId = `Ya existe un equipo con ID ${form.machineId.trim().toUpperCase()}`;
+    }
+    // Sin ubicacion, el error va en su campo y no como "ID invalido"
+    if (mode === "product" && !location) {
+      errors.locationId = "Elegí la ubicación";
+      if (errors.machineId === "Ubicación inválida") delete errors.machineId;
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
@@ -281,18 +287,27 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="location">Ubicación</Label>
-                    <select
+                    <SearchSelect
                       id="location"
+                      items={locations}
                       value={locationId}
-                      onChange={(e) => update("locationId", e.target.value)}
-                      className={SELECT_CLASS}
-                    >
-                      {locations.map((l) => (
-                        <option key={l.id} value={l.id}>
-                          {l.name} ({l.code})
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(locId) => update("locationId", locId)}
+                      getKey={(l) => l.id}
+                      getLabel={(l) => `${l.name} (${l.code})`}
+                      placeholder="Buscar: laboratorio 2, L2..."
+                      aria-invalid={Boolean(fieldErrors.locationId)}
+                      renderOption={(l) => (
+                        <>
+                          <span className="font-mono text-xs text-primary font-semibold">
+                            {l.code}
+                          </span>
+                          <span className="text-foreground">{l.name}</span>
+                        </>
+                      )}
+                    />
+                    {fieldErrors.locationId && (
+                      <p className="text-xs text-destructive">{fieldErrors.locationId}</p>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-1.5">
