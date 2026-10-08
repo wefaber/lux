@@ -11,6 +11,10 @@ const CLAIM = `mutation ClaimServiceRequest($id: ID!) { claimServiceRequest(id: 
 const ASSIGN = `mutation AssignServiceRequest($id: ID!, $technicianId: ID!) { assignServiceRequest(id: $id, technicianId: $technicianId) { id } }`;
 const UPDATE = `mutation UpdateServiceRequest($id: ID!, $input: ServiceRequestUpdateInput!) { updateServiceRequest(id: $id, input: $input) { id } }`;
 
+// Ids de la semilla, tomados antes de que los tests creen solicitudes nuevas
+// (las nuevas tienen el mismo formato svc-NNN, asi que no se distinguen por el id)
+const SEED_IDS = new Set(mockServices.map((s) => s.id));
+
 function service(id: string) {
   return mockServices.find((s) => s.id === id)!;
 }
@@ -30,6 +34,13 @@ async function newService(): Promise<string> {
 describe("#25 tomar y asignar solicitudes de servicio", () => {
   test("una solicitud nueva nace sin responsable", async () => {
     expect(service(await newService()).assignedTo).toBeNull();
+  });
+
+  test("las solicitudes nuevas siguen la numeración correlativa", async () => {
+    const [a, b] = [await newService(), await newService()];
+    expect(a).toMatch(/^svc-\d{3}$/);
+    expect(Number(b.slice(4))).toBe(Number(a.slice(4)) + 1);
+    expect(new Set(mockServices.map((s) => s.id)).size).toBe(mockServices.length);
   });
 
   test("el técnico la toma y nadie más puede tomarla", async () => {
@@ -75,7 +86,7 @@ describe("#25 tomar y asignar solicitudes de servicio", () => {
   });
 
   test("la semilla tiene responsable en las solicitudes en curso y no en las pendientes", () => {
-    for (const s of mockServices.filter((x) => /^svc-\d{3}$/.test(x.id))) {
+    for (const s of mockServices.filter((x) => SEED_IDS.has(x.id))) {
       if (["approved", "in_progress", "completed"].includes(s.status)) {
         expect(s.assignedTo).not.toBeNull();
       }

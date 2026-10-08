@@ -33,6 +33,25 @@ function filterByStatus<T extends { status: string }>(items: T[], status?: strin
   return items.filter((i) => i.status === status);
 }
 
+// Siguiente id correlativo de una coleccion, con el mismo formato que los datos
+// de ejemplo: "tkt-015" -> "tkt-016". Antes se usaba Date.now(), que rompia la
+// numeracion (tkt-1791397200123) y repetia el id si se creaban dos en el mismo ms.
+function nextId(prefix: string, items: Array<{ id: string }>, pad = 0): string {
+  const max = items.reduce((n, { id }) => {
+    const suffix = id.startsWith(prefix) ? id.slice(prefix.length) : "";
+    return /^\d+$/.test(suffix) ? Math.max(n, Number(suffix)) : n;
+  }, 0);
+  return prefix + String(max + 1).padStart(pad, "0");
+}
+
+// Los usuarios de ejemplo se numeran por rol: u-sol-12, u-tec-3, u-admin-2
+const USER_ID_PREFIX: Record<UserRole, string> = {
+  root_admin: "u-root-",
+  admin: "u-admin-",
+  tecnico: "u-tec-",
+  solicitante: "u-sol-",
+};
+
 const STAFF_ROLES: UserRole[] = ["root_admin", "admin", "tecnico"];
 const ELEVATED_ROLES: UserRole[] = ["root_admin", "admin"];
 
@@ -466,7 +485,7 @@ export const handlers = [
       ? (mockProducts.find((p) => p.id === input.equipmentId) ?? null)
       : null;
     const newTicket: Ticket = {
-      id: `tkt-${Date.now()}`,
+      id: nextId("tkt-", mockTickets, 3),
       title: input.title,
       description: input.description,
       category: input.category as Ticket["category"],
@@ -617,7 +636,7 @@ export const handlers = [
       ? mockComponents.filter((c) => input.componentIds!.includes(c.id))
       : [];
     const newLoan: Loan = {
-      id: `loan-${Date.now()}`,
+      id: nextId("loan-", mockLoans, 3),
       equipment,
       user: loanUser,
       status: "pending",
@@ -741,7 +760,7 @@ export const handlers = [
       };
     };
     const newService: ServiceRequest = {
-      id: `svc-${Date.now()}`,
+      id: nextId("svc-", mockServices, 3),
       type: input.type as ServiceRequest["type"],
       status: "pending",
       requestedBy: user,
@@ -836,7 +855,7 @@ export const handlers = [
       };
     };
     const newUser: User = {
-      id: `u-${Date.now()}`,
+      id: nextId(USER_ID_PREFIX[input.role as UserRole] ?? "u-", mockUsers),
       name: input.name,
       dni: input.dni,
       email: input.email,
@@ -910,7 +929,7 @@ export const handlers = [
     const error = firstError(validateProduct(fields)) ?? duplicateProductError(fields);
     if (error) return HttpResponse.json({ errors: [{ message: error }] });
     const newProduct: Product = {
-      id: `prod-${Date.now()}`,
+      id: nextId("prod-", mockProducts),
       type: "product",
       ...fields,
       status: fields.status as Product["status"],
@@ -1010,7 +1029,7 @@ export const handlers = [
     const error = firstError(validateComponent(fields));
     if (error) return HttpResponse.json({ errors: [{ message: error }] });
     const newComponent: Component = {
-      id: `comp-${Date.now()}`,
+      id: nextId("comp-", mockComponents),
       type: "component",
       ...fields,
       productId: fields.productId ?? null,
