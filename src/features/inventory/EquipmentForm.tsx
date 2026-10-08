@@ -122,10 +122,11 @@ export function EquipmentForm({ mode }: EquipmentFormProps) {
     );
   }
 
-  const initial: FormState =
-    record.type === "product"
-      ? { ...EMPTY_FORM, ...record, issues: record.issues ?? "" }
-      : { ...EMPTY_FORM, ...record };
+  // Se distingue por cual vino (product o component) y no por record.type: la query
+  // no pide `type`, y una API GraphQL real solo devuelve los campos pedidos
+  const initial: FormState = data?.product
+    ? { ...EMPTY_FORM, ...data.product, issues: data.product.issues ?? "" }
+    : { ...EMPTY_FORM, ...data?.component };
 
   return <EquipmentFormFields mode={mode} id={id} initial={initial} />;
 }
