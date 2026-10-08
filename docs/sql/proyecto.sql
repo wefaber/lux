@@ -157,6 +157,25 @@ CREATE TABLE IF NOT EXISTS nota_tecnica (
     CHECK (timestamp IS NOT NULL)
 );
 
+-- Trabajo hecho sobre un equipo (mantenimiento, limpieza, cambio de piezas...).
+-- ticket_id es opcional: solo si la intervencion surgio de un ticket.
+CREATE TABLE IF NOT EXISTS intervencion (
+    id VARCHAR(100) PRIMARY KEY NOT NULL,
+    equipo_id VARCHAR(100) NOT NULL,
+    tecnico_id VARCHAR(100) NOT NULL,
+    ticket_id VARCHAR(100),
+    tipo VARCHAR(50) NOT NULL,
+    descripcion VARCHAR(1000) NOT NULL,
+    piezas_reemplazadas VARCHAR(300),
+    fecha_realizacion DATETIME NOT NULL,
+    fecha_registro DATETIME NOT NULL,
+    CONSTRAINT fk_intervencion_equipo_id FOREIGN KEY (equipo_id) REFERENCES equipo(id),
+    CONSTRAINT fk_intervencion_tecnico_id FOREIGN KEY (tecnico_id) REFERENCES usuario(id),
+    CONSTRAINT fk_intervencion_ticket_id FOREIGN KEY (ticket_id) REFERENCES ticket(id),
+    CHECK (tipo IN ('mantenimiento_preventivo', 'reparacion', 'cambio_componente', 'limpieza', 'actualizacion_software', 'otra')),
+    CHECK (LENGTH(descripcion) BETWEEN 10 AND 1000)
+);
+
 CREATE TABLE IF NOT EXISTS solicitud_servicio (
     id VARCHAR(100) PRIMARY KEY NOT NULL,
     solicitante_id VARCHAR(100),

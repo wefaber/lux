@@ -24,6 +24,18 @@ export function formatDateTime(iso: string): string {
   });
 } // Parseo de fecha y hora
 
+// <input type="datetime-local"> trabaja en hora local y sin zona ("2026-10-08T14:30");
+// la API, en ISO UTC. Estas dos funciones pasan de uno a otro.
+export function toDateTimeInput(iso: string | Date = new Date()): string {
+  const d = new Date(iso);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
+export function fromDateTimeInput(value: string): string {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString();
+}
+
 export function formatRelativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diff / 60_000);

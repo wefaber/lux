@@ -2,15 +2,18 @@ import { graphql, HttpResponse } from "msw";
 import { mockUsers, mockPasswords } from "./data/users";
 import { mockProducts, mockComponents } from "./data/equipment";
 import { mockLocations } from "./data/locations";
+import { mockInterventions } from "./data/interventions";
 import { mockTickets } from "./data/tickets";
 import { mockLoans } from "./data/loans";
 import { mockServices } from "./data/services";
 import { mockActivityLogs } from "./generators";
 import {
   validateComponent,
+  validateIntervention,
   validateLocation,
   validateProduct,
   type FieldErrors,
+  type InterventionFields,
   type LocationFields,
 } from "@/lib/validation";
 import {
@@ -23,6 +26,8 @@ import type {
   User,
   UserRole,
   Location,
+  Intervention,
+  InterventionType,
   Product,
   Component,
   Ticket,
@@ -139,6 +144,15 @@ function duplicateProductError(
   if (others.some((p) => p.serialNumber === fields.serialNumber)) {
     return `Ya existe un equipo con n° de serie ${fields.serialNumber}`;
   }
+  return null;
+}
+
+// Si la intervencion dice venir de un ticket, tiene que ser un ticket de ese equipo
+function interventionTicketError(ticketId: string | null, equipmentId: string): string | null {
+  if (!ticketId) return null;
+  const ticket = mockTickets.find((t) => t.id === ticketId);
+  if (!ticket) return "El ticket no existe";
+  if (ticket.equipmentId !== equipmentId) return "Ese ticket no corresponde a este equipo";
   return null;
 }
 
@@ -1187,6 +1201,91 @@ export const handlers = [
     if (ticket.status === "pending") ticket.status = "in_progress";
     ticket.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { assignTicket: ticket } });
+  }),
+
+  // ── Intervenciones ─────────────────────────────────────────────────────────
+  // Trabajo hecho sobre un equipo, con o sin ticket. Como el inventario, es del staff
+
+  graphql.query("GetInterventions", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { equipmentId } = variables as { equipmentId: string };
+    const interventions = mockInterventions
+      .filter((i) => i.equipmentId === equipmentId)
+      .toSorted((a, b) => b.performedAt.localeCompare(a.performedAt));
+    return HttpResponse.json({ data: { interventions } });
+  }),
+
+  graphql.mutation("CreateIntervention", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { input } = variables as {
+      input: Partial<InterventionFields> & { equipmentId: string; ticketId?: string | null };
+    };
+    const product = mockProducts.find((p) => p.id === input.equipmentId);
+    if (!product) return HttpResponse.json({ errors: [{ message: "Equipo no encontrado" }] });
+    if (product.deletedAt) {
+      return HttpResponse.json({
+        errors: [{ message: "No se registran intervenciones en un equipo dado de baja" }],
+      });
+    }
+    const now = new Date().toISOString();
+    const fields: InterventionFields = {
+      type: input.type ?? "",
+      description: (input.description ?? "").trim(),
+      partsReplaced: input.partsReplaced?.trim() || null,
+      performedAt: input.performedAt ?? now,
+    };
+    const ticketId = input.ticketId || null;
+    const error =
+      firstError(validateIntervention(fields)) ?? interventionTicketError(ticketId, product.id);
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    const intervention: Intervention = {
+      id: nextId("int-", mockInterventions, 3),
+      equipmentId: product.id,
+      technician: caller,
+      ...fields,
+      type: fields.type as InterventionType,
+      performedAt: new Date(fields.performedAt).toISOString(),
+      ticketId,
+      createdAt: now,
+      updatedAt: now,
+    };
+    mockInterventions.push(intervention);
+    return HttpResponse.json({ data: { createIntervention: intervention } });
+  }),
+
+  graphql.mutation("UpdateIntervention", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { id, input } = variables as {
+      id: string;
+      input: Partial<InterventionFields> & { ticketId?: string | null };
+    };
+    const intervention = mockInterventions.find((i) => i.id === id);
+    if (!intervention) {
+      return HttpResponse.json({ errors: [{ message: "Intervención no encontrada" }] });
+    }
+    // El equipo y el tecnico que la registro no cambian; lo demas, si se manda
+    const fields: InterventionFields = {
+      type: input.type ?? intervention.type,
+      description: (input.description ?? intervention.description).trim(),
+      partsReplaced:
+        input.partsReplaced !== undefined
+          ? input.partsReplaced?.trim() || null
+          : intervention.partsReplaced,
+      performedAt: input.performedAt ?? intervention.performedAt,
+    };
+    const ticketId = input.ticketId !== undefined ? input.ticketId || null : intervention.ticketId;
+    const error =
+      firstError(validateIntervention(fields)) ??
+      interventionTicketError(ticketId, intervention.equipmentId);
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    Object.assign(intervention, fields, {
+      type: fields.type as InterventionType,
+      performedAt: new Date(fields.performedAt).toISOString(),
+      ticketId,
+      updatedAt: new Date().toISOString(),
+    });
+    return HttpResponse.json({ data: { updateIntervention: intervention } });
   }),
 
   // ── Ubicaciones ────────────────────────────────────────────────────────────

@@ -121,6 +121,28 @@ export interface ServiceRequest {
   updatedAt: string;
 } // Interfaz de servicio
 
+export type InterventionType =
+  | "preventive_maintenance"
+  | "corrective_repair"
+  | "component_replacement"
+  | "cleaning"
+  | "software_update"
+  | "other"; // Tipo de trabajo hecho sobre un equipo
+
+export interface Intervention {
+  id: string;
+  equipmentId: string;
+  technician: User;
+  type: InterventionType;
+  description: string;
+  partsReplaced: string | null;
+  /** Ticket del que surgio, si surgio de uno */
+  ticketId: string | null;
+  performedAt: string;
+  createdAt: string;
+  updatedAt: string;
+} // Intervencion registrada sobre un equipo, con o sin ticket
+
 export interface ActivityLog {
   id: string;
   userId: string;

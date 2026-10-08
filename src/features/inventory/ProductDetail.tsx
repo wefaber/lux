@@ -14,6 +14,7 @@ import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import { QrCode } from "@/components/ui/QrCode";
 import { RetireEquipmentDialog } from "./RetireEquipmentDialog";
 import { EquipmentHistory } from "./EquipmentHistory";
+import { EquipmentInterventions } from "./EquipmentInterventions";
 
 const PRODUCT_QUERY = `
   query GetProduct($id: ID!) {
@@ -237,6 +238,7 @@ export function ProductDetail() {
             </CardContent>
           </Card>
 
+          {isStaff && <EquipmentInterventions equipmentId={product.id} canEdit={canEdit} />}
           {isStaff && <EquipmentHistory equipmentId={product.id} />}
         </motion.div>
       ) : (

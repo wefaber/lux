@@ -6,6 +6,7 @@ import type {
   ServiceType,
   TicketCategory,
   UserRole,
+  InterventionType,
 } from "./types";
 
 export const AUTH_STORAGE_KEY = "lux_auth"; // Clave de localStorage compartida entre useAuth y gql()
@@ -110,6 +111,15 @@ export const TICKET_CATEGORY_LABELS: Record<TicketCategory, string> = {
   network: "Red",
   other: "Otro",
 }; // Labels de categorias de ticket
+
+export const INTERVENTION_TYPE_LABELS: Record<InterventionType, string> = {
+  preventive_maintenance: "Mantenimiento preventivo",
+  corrective_repair: "Reparación",
+  component_replacement: "Cambio de componente",
+  cleaning: "Limpieza",
+  software_update: "Actualización de software",
+  other: "Otra",
+}; // Labels de tipos de intervencion
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   root_admin: "Super Admin",

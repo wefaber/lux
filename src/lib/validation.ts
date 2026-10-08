@@ -1,4 +1,4 @@
-import { KIND_MACHINE_CODE } from "./constants";
+import { INTERVENTION_TYPE_LABELS, KIND_MACHINE_CODE } from "./constants";
 
 // Reglas de nomenclatura de equipos. Las usan el formulario (feedback por
 // campo) y los handlers (ultima barrera), para que no diverjan.
@@ -28,6 +28,13 @@ export interface ComponentFields {
   manufacturer: string;
   serialNumber: string;
   partNumber: string;
+}
+
+export interface InterventionFields {
+  type: string;
+  description: string;
+  partsReplaced: string | null;
+  performedAt: string;
 }
 
 export interface LocationFields {
@@ -148,6 +155,38 @@ export function validateLocation(l: LocationFields): FieldErrors<keyof LocationF
   return collect<keyof LocationFields>([
     ["name", validateName(l.name, "Nombre")],
     ["code", LOCATION_CODE_PATTERN.test(code) ? null : "Código: de 1 a 3 letras (ej: L, LAB)"],
+  ]);
+}
+
+// Intervencion: tipo conocido, descripcion util y fecha que ya paso
+export function validateIntervention(
+  i: InterventionFields,
+  now: number = Date.now(),
+): FieldErrors<keyof InterventionFields> {
+  const description = i.description.trim();
+  const performedAt = new Date(i.performedAt).getTime();
+  return collect<keyof InterventionFields>([
+    ["type", i.type in INTERVENTION_TYPE_LABELS ? null : "Elegí el tipo de intervención"],
+    [
+      "description",
+      description.length < 10
+        ? "Descripción: mínimo 10 caracteres"
+        : description.length > 1000
+          ? "Descripción: máximo 1000 caracteres"
+          : null,
+    ],
+    [
+      "partsReplaced",
+      (i.partsReplaced ?? "").trim().length > 300 ? "Piezas: máximo 300 caracteres" : null,
+    ],
+    [
+      "performedAt",
+      Number.isNaN(performedAt)
+        ? "Fecha inválida"
+        : performedAt > now + 60_000
+          ? "La fecha no puede ser futura"
+          : null,
+    ],
   ]);
 }
 
