@@ -1,72 +1,17 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import {
-  LayoutDashboard,
-  Package,
-  Monitor,
-  Ticket,
-  BookOpen,
-  Wrench,
-  User,
-  ChevronLeft,
-  ChevronRight,
-  Zap,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ROUTES, SPRING_TRANSITION } from "@/lib/constants";
+import { SPRING_TRANSITION } from "@/lib/constants";
 import { useAuth } from "@/hooks/useAuth";
-
-const navItems = [
-  {
-    icon: LayoutDashboard,
-    label: "Inicio",
-    to: ROUTES.DASHBOARD,
-    roles: ["root_admin", "admin", "tecnico", "solicitante"] as const,
-  },
-  {
-    icon: Package,
-    label: "Inventario",
-    to: ROUTES.INVENTORY,
-    roles: ["root_admin", "admin", "tecnico", "solicitante"] as const,
-  },
-  {
-    icon: Monitor,
-    label: "Estado de Equipos",
-    to: ROUTES.EQUIPMENT_STATUS,
-    roles: ["root_admin", "admin", "tecnico", "solicitante"] as const,
-  },
-  {
-    icon: Ticket,
-    label: "Tickets",
-    to: ROUTES.TICKETS,
-    roles: ["root_admin", "admin", "tecnico", "solicitante"] as const,
-  },
-  {
-    icon: BookOpen,
-    label: "Préstamos",
-    to: ROUTES.LOANS,
-    roles: ["root_admin", "admin", "tecnico", "solicitante"] as const,
-  },
-  {
-    icon: Wrench,
-    label: "Solicitudes",
-    to: ROUTES.SERVICES,
-    roles: ["root_admin", "admin", "tecnico", "solicitante"] as const,
-  },
-  {
-    icon: User,
-    label: "Perfil",
-    to: ROUTES.PROFILE,
-    roles: ["root_admin", "admin", "tecnico", "solicitante"] as const,
-  },
-]; // Navegacion por el sidebar con iconoos, labels, rutas y roles como constantes de verificacion
+import { navItemsFor } from "./navItems";
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { user } = useAuth();
 
-  const visibleItems = navItems.filter((item) => user && item.roles.some((r) => r === user.role)); // Visibilidad de items en base a roles
+  const visibleItems = navItemsFor(user?.role); // El usuario final no ve las secciones del personal
 
   return (
     <motion.aside
@@ -101,11 +46,11 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 px-2 py-2 space-y-2 overflow-y-auto">
-        {visibleItems.map(({ icon: Icon, label, to }) => (
+        {visibleItems.map(({ icon: Icon, label, to, end }) => (
           <NavLink
             key={to}
             to={to}
-            end={to === ROUTES.DASHBOARD}
+            end={end}
             className={({ isActive }) =>
               cn(
                 "flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-all duration-200 cursor-pointer",
