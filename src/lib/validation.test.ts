@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { suggestMachineId, validateCode, validateMachineId, validateName } from "./validation";
 import { mockComponents, mockProducts } from "@/mocks/data/equipment";
 import { mockLocations } from "@/mocks/data/locations";
-import { validateComponent, validateLocation, validateProduct } from "./validation";
+import { locationCode, validateComponent, validateLocation, validateProduct } from "./validation";
 
 describe("validateName", () => {
   test.each([
@@ -20,48 +20,62 @@ describe("validateName", () => {
   );
 });
 
-const LAB = { name: "Laboratorios", code: "L" };
-const ADM = { name: "Administración", code: "A" };
+const LAB1 = { name: "Laboratorio 1", code: "L1" };
+const ADM1 = { name: "Administración 1", code: "A1" };
 
 describe("validateMachineId", () => {
-  test("respeta ubicación y tipo", () => {
-    expect(validateMachineId("L1-PC3", "AIO", LAB)).toBeNull();
-    expect(validateMachineId("A2-IMP1", "Impresora", ADM)).toBeNull();
-    expect(validateMachineId("L0-PC1", "AIO", LAB)).toBe("Los números arrancan en 1");
-    expect(validateMachineId("L1-PRY1", "AIO", LAB)).not.toBeNull();
-    expect(validateMachineId("S1-PC1", "AIO", LAB)).toBe(
-      'Un equipo en Laboratorios empieza con "L". Ej: L1-PC1',
+  test("respeta ubicación y tipo: L1-PC3 es la PC 3 del Laboratorio 1", () => {
+    expect(validateMachineId("L1-PC3", "AIO", LAB1)).toBeNull();
+    expect(validateMachineId("A1-IMP1", "Impresora", ADM1)).toBeNull();
+    expect(validateMachineId("L1-PC0", "AIO", LAB1)).toBe("Los números arrancan en 1");
+    expect(validateMachineId("L1-PRY1", "AIO", LAB1)).not.toBeNull();
+    expect(validateMachineId("S1-PC1", "AIO", LAB1)).toBe(
+      'Un equipo en Laboratorio 1 empieza con "L1-". Ej: L1-PC1',
     );
   });
 
-  test("acepta códigos de ubicación de hasta 3 letras", () => {
-    const taller = { name: "Taller", code: "TAL" };
-    expect(validateMachineId("TAL2-PC1", "Desktop", taller)).toBeNull();
-    expect(validateMachineId("TA2-PC1", "Desktop", taller)).not.toBeNull();
+  test("el número del laboratorio es parte del código: L2 no es el Laboratorio 1", () => {
+    expect(validateMachineId("L2-PC1", "AIO", LAB1)).not.toBeNull();
+    const lab12 = { name: "Laboratorio 12", code: "L12" };
+    expect(validateMachineId("L12-PC1", "Desktop", lab12)).toBeNull();
   });
 
   test("sin ubicación válida no hay ID válido", () => {
     expect(validateMachineId("L1-PC1", "AIO", undefined)).toBe("Ubicación inválida");
   });
 
-  test("sugiere el próximo número libre", () => {
-    expect(suggestMachineId("AIO", "L", ["L1-PC1", "L1-PC4", "S1-PC9"])).toBe("L1-PC5");
-    expect(suggestMachineId("Proyector", "S", [])).toBe("S1-PRY1");
+  test("sugiere el próximo número libre de esa ubicación", () => {
+    expect(suggestMachineId("AIO", "L1", ["L1-PC1", "L1-PC4", "L2-PC7", "S1-PC9"])).toBe("L1-PC5");
+    expect(suggestMachineId("AIO", "L2", ["L1-PC1", "L1-PC4", "L2-PC7"])).toBe("L2-PC8");
+    expect(suggestMachineId("Proyector", "S1", [])).toBe("S1-PRY1");
     expect(suggestMachineId("AIO", undefined, [])).toBeNull();
   });
 });
 
+describe("locationCode", () => {
+  test("es la letra del tipo más el número", () => {
+    expect(locationCode("laboratory", 2)).toBe("L2");
+    expect(locationCode("classroom", 10)).toBe("S10");
+    expect(locationCode("administration", 1)).toBe("A1");
+    expect(locationCode("laboratory", 0)).toBeNull();
+    expect(locationCode("laboratory", 100)).toBeNull();
+    expect(locationCode("pasillo", 1)).toBeNull();
+  });
+});
+
 describe("validateLocation", () => {
-  test("acepta nombre legible y código de 1 a 3 letras", () => {
-    expect(validateLocation({ name: "Laboratorio 2", code: "L" })).toEqual({});
-    expect(validateLocation({ name: "Taller", code: "tal" })).toEqual({});
+  test("acepta tipo, número y nombre legible", () => {
+    expect(validateLocation({ kind: "laboratory", number: 2, name: "Laboratorio 2" })).toEqual({});
+    expect(
+      validateLocation({ kind: "laboratory", number: 3, name: "Laboratorio 3 (Electrónica)" }),
+    ).toEqual({});
   });
 
-  test("rechaza códigos con números o largos y nombres sin sentido", () => {
-    expect(validateLocation({ name: "Taller", code: "L2" }).code).toBeDefined();
-    expect(validateLocation({ name: "Taller", code: "LABO" }).code).toBeDefined();
-    expect(validateLocation({ name: "Taller", code: "" }).code).toBeDefined();
-    expect(validateLocation({ name: "asdasd", code: "A" }).name).toBeDefined();
+  test("rechaza tipo desconocido, número fuera de rango y nombres sin sentido", () => {
+    expect(validateLocation({ kind: "pasillo", number: 1, name: "Pasillo" }).kind).toBeDefined();
+    expect(validateLocation({ kind: "laboratory", number: 0, name: "Lab" }).number).toBeDefined();
+    expect(validateLocation({ kind: "laboratory", number: 1.5, name: "Lab" }).number).toBeDefined();
+    expect(validateLocation({ kind: "laboratory", number: 1, name: "asdasd" }).name).toBeDefined();
   });
 });
 
@@ -80,6 +94,9 @@ test("todos los equipos y componentes de la semilla cumplen la nomenclatura", ()
     expect(location?.name).toBe(p.location);
     expect(validateProduct({ ...p, location })).toEqual({});
   }
-  for (const l of mockLocations) expect(validateLocation(l)).toEqual({});
+  for (const l of mockLocations) {
+    expect(validateLocation(l)).toEqual({});
+    expect(l.code).toBe(locationCode(l.kind, l.number)!);
+  }
   for (const c of mockComponents) expect(validateComponent(c)).toEqual({});
 });

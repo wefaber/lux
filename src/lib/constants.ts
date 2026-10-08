@@ -7,6 +7,7 @@ import type {
   TicketCategory,
   UserRole,
   InterventionType,
+  LocationKind,
   ReservationResource,
   ReservationStatus,
 } from "./types";
@@ -114,6 +115,21 @@ export const TICKET_CATEGORY_LABELS: Record<TicketCategory, string> = {
   network: "Red",
   other: "Otro",
 }; // Labels de categorias de ticket
+
+export const LOCATION_KIND_LABELS: Record<LocationKind, string> = {
+  laboratory: "Laboratorio",
+  classroom: "Salón",
+  administration: "Administración",
+  other: "Otro",
+}; // Tipos de ubicacion
+
+// Letra de cada tipo: L1 = Laboratorio 1, S2 = Salon 2, A1 = Administracion 1
+export const LOCATION_KIND_LETTER: Record<LocationKind, string> = {
+  laboratory: "L",
+  classroom: "S",
+  administration: "A",
+  other: "O",
+};
 
 export const RESERVATION_STATUS_CONFIG: Record<
   ReservationStatus,

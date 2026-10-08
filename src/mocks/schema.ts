@@ -106,7 +106,11 @@ export const schema = `
 
   type Location {
     id: ID!
+    # laboratory | classroom | administration | other
+    kind: String!
+    number: Int!
     name: String!
+    # Letra del tipo + numero: L1 = Laboratorio 1
     code: String!
     productCount: Int!
     createdAt: String!
@@ -368,13 +372,15 @@ export const schema = `
   }
 
   input LocationInput {
+    kind: String!
+    number: Int!
     name: String!
-    code: String!
   }
 
   input LocationUpdateInput {
+    kind: String
+    number: Int
     name: String
-    code: String
   }
 
   input ComponentUpdateInput {

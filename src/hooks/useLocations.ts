@@ -4,7 +4,7 @@ import type { Location } from "@/lib/types";
 
 export const LOCATIONS_QUERY = `
   query GetLocations {
-    locations { id name code productCount createdAt updatedAt deletedAt }
+    locations { id kind number name code productCount createdAt updatedAt deletedAt }
   }
 `;
 

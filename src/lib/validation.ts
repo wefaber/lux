@@ -1,4 +1,5 @@
-import { INTERVENTION_TYPE_LABELS, KIND_MACHINE_CODE } from "./constants";
+import { INTERVENTION_TYPE_LABELS, KIND_MACHINE_CODE, LOCATION_KIND_LETTER } from "./constants";
+import type { LocationKind } from "./types";
 
 // Reglas de nomenclatura de equipos. Las usan el formulario (feedback por
 // campo) y los handlers (ultima barrera), para que no diverjan.
@@ -38,13 +39,22 @@ export interface InterventionFields {
 }
 
 export interface LocationFields {
+  kind: string;
+  number: number;
   name: string;
-  code: string;
 }
 
-// {codigo de ubicacion}{n° de area}-{codigo de tipo}{n° correlativo}: L1-PC3, S1-PRY2, LAB2-PC1
-const MACHINE_ID_PATTERN = /^([A-Z]{1,3})(\d{1,2})-([A-Z]{2,3})(\d{1,3})$/;
-const LOCATION_CODE_PATTERN = /^[A-Z]{1,3}$/;
+// {codigo de ubicacion}-{codigo de tipo}{n° correlativo}: L1-PC3 es la PC 3 del
+// Laboratorio 1, S2-PRY1 el proyector 1 del Salon 2
+const MACHINE_ID_PATTERN = /^([A-Z]\d{1,2})-([A-Z]{2,3})(\d{1,3})$/;
+
+// Letra del tipo + numero: Laboratorio 1 -> L1
+export function locationCode(kind: string, number: number): string | null {
+  const letter = LOCATION_KIND_LETTER[kind as LocationKind];
+  return letter && Number.isInteger(number) && number >= 1 && number <= 99
+    ? `${letter}${number}`
+    : null;
+}
 const NAME_CHARS = /^[\p{L}\d .\-/+&()']+$/u;
 const CODE_PATTERN = /^[A-Z0-9][A-Z0-9\-/.]{2,39}$/i;
 const KEYBOARD_ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
@@ -66,7 +76,7 @@ function isKeyboardRun(word: string): boolean {
 
 export function machineIdPrefix(kind: string, locationCode: string | undefined): string | null {
   const kindCode = KIND_MACHINE_CODE[kind];
-  return locationCode && kindCode ? `${locationCode}1-${kindCode}` : null;
+  return locationCode && kindCode ? `${locationCode}-${kindCode}` : null;
 }
 
 // Proximo ID libre para el area 1 de la ubicacion, como sugerencia
@@ -94,14 +104,14 @@ export function validateMachineId(
   const kindCode = KIND_MACHINE_CODE[kind];
   if (!location || !locationCode) return "Ubicación inválida";
   if (!kindCode) return "Tipo de equipo inválido";
-  const example = `${locationCode}1-${kindCode}1`;
+  const example = `${locationCode}-${kindCode}1`;
   const match = MACHINE_ID_PATTERN.exec(id);
   if (!match) return `Formato inválido. Ej: ${example}`;
   if (match[1] !== locationCode) {
-    return `Un equipo en ${location.name} empieza con "${locationCode}". Ej: ${example}`;
+    return `Un equipo en ${location.name} empieza con "${locationCode}-". Ej: ${example}`;
   }
-  if (match[3] !== kindCode) return `Un ${kind} usa el código "${kindCode}". Ej: ${example}`;
-  if (Number(match[2]) === 0 || Number(match[4]) === 0) return "Los números arrancan en 1";
+  if (match[2] !== kindCode) return `Un ${kind} usa el código "${kindCode}". Ej: ${example}`;
+  if (Number(match[3]) === 0) return "Los números arrancan en 1";
   return null;
 }
 
@@ -151,10 +161,15 @@ export function validateProduct(p: ProductFields): FieldErrors<keyof ProductFiel
 
 // Ubicacion: nombre legible y codigo de 1 a 3 letras (arranca los IDs de maquina)
 export function validateLocation(l: LocationFields): FieldErrors<keyof LocationFields> {
-  const code = l.code.trim().toUpperCase();
   return collect<keyof LocationFields>([
+    ["kind", l.kind in LOCATION_KIND_LETTER ? null : "Elegí el tipo de ubicación"],
+    [
+      "number",
+      Number.isInteger(l.number) && l.number >= 1 && l.number <= 99
+        ? null
+        : "Número: entero entre 1 y 99",
+    ],
     ["name", validateName(l.name, "Nombre")],
-    ["code", LOCATION_CODE_PATTERN.test(code) ? null : "Código: de 1 a 3 letras (ej: L, LAB)"],
   ]);
 }
 

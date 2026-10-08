@@ -13,10 +13,15 @@ export interface User {
 
 export type EquipmentStatus = "available" | "in_use" | "in_repair" | "retired"; // Estado del equipamiento
 
+export type LocationKind = "laboratory" | "classroom" | "administration" | "other"; // Tipo de ubicacion
+
 export interface Location {
   id: string;
+  kind: LocationKind;
+  /** Numero dentro de su tipo: Laboratorio 1, Laboratorio 2... */
+  number: number;
   name: string;
-  /** 1 a 3 letras: arranca el ID de maquina de sus equipos (L1-PC3) */
+  /** Letra del tipo + numero (L1 = Laboratorio 1): arranca el ID de sus equipos, L1-PC3 */
   code: string;
   /** Equipos activos en la ubicacion (calculado por el servidor) */
   productCount: number;

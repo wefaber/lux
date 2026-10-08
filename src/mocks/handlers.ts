@@ -13,6 +13,7 @@ import {
   validateComment,
   validateComponent,
   validateIntervention,
+  locationCode,
   validateLocation,
   validateProduct,
   validateReservation,
@@ -31,6 +32,7 @@ import type {
   User,
   UserRole,
   Location,
+  LocationKind,
   Intervention,
   InterventionType,
   Comment,
@@ -255,14 +257,16 @@ function normalizeName(name: string): string {
   return name.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
 
-// Nombre y codigo no se repiten entre las ubicaciones vigentes
-function duplicateLocationError(fields: LocationFields, exceptId?: string): string | null {
+// Nombre y codigo (tipo + numero) no se repiten entre las ubicaciones vigentes
+function duplicateLocationError(
+  fields: LocationFields & { code: string },
+  exceptId?: string,
+): string | null {
   const others = mockLocations.filter((l) => l.deletedAt === null && l.id !== exceptId);
+  const sameCode = others.find((l) => l.code === fields.code);
+  if (sameCode) return `Ya existe ${sameCode.name} (${fields.code})`;
   if (others.some((l) => normalizeName(l.name) === normalizeName(fields.name))) {
     return `Ya existe una ubicación llamada ${fields.name}`;
-  }
-  if (others.some((l) => l.code === fields.code)) {
-    return `El código ${fields.code} ya lo usa otra ubicación`;
   }
   return null;
 }
@@ -1642,13 +1646,20 @@ export const handlers = [
   graphql.mutation("CreateLocation", ({ request, variables }) => {
     if (!hasRole(getCaller(request), STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
     const { input } = variables as { input: LocationFields };
-    const fields = { name: input.name.trim(), code: input.code.trim().toUpperCase() };
-    const error = firstError(validateLocation(fields)) ?? duplicateLocationError(fields);
-    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    const fields = { kind: input.kind, number: Number(input.number), name: input.name.trim() };
+    const code = locationCode(fields.kind, fields.number);
+    const error =
+      firstError(validateLocation(fields)) ??
+      (code ? duplicateLocationError({ ...fields, code }) : "Ubicación inválida");
+    if (error || !code) {
+      return HttpResponse.json({ errors: [{ message: error ?? "Ubicación inválida" }] });
+    }
     const now = new Date().toISOString();
     const location: Location = {
       id: nextId("loc-", mockLocations),
       ...fields,
+      kind: fields.kind as LocationKind,
+      code,
       productCount: 0,
       createdAt: now,
       updatedAt: now,
@@ -1664,23 +1675,34 @@ export const handlers = [
     const location = activeLocation(id);
     if (!location) return HttpResponse.json({ errors: [{ message: "Ubicación no encontrada" }] });
     const fields = {
+      kind: input.kind ?? location.kind,
+      number: input.number !== undefined ? Number(input.number) : location.number,
       name: (input.name ?? location.name).trim(),
-      code: (input.code ?? location.code).trim().toUpperCase(),
     };
-    const error = firstError(validateLocation(fields)) ?? duplicateLocationError(fields, id);
-    if (error) return HttpResponse.json({ errors: [{ message: error }] });
-    // El codigo arranca el ID de maquina de cada equipo: cambiarlo los dejaria mal nombrados
+    const code = locationCode(fields.kind, fields.number);
+    const error =
+      firstError(validateLocation(fields)) ??
+      (code ? duplicateLocationError({ ...fields, code }, id) : "Ubicación inválida");
+    if (error || !code) {
+      return HttpResponse.json({ errors: [{ message: error ?? "Ubicación inválida" }] });
+    }
+    // Tipo y numero forman el codigo, que arranca el ID de maquina de cada equipo:
+    // cambiarlos con equipos adentro los dejaria mal nombrados
     const products = productsIn(id);
-    if (fields.code !== location.code && products.length > 0) {
+    if (code !== location.code && products.length > 0) {
       return HttpResponse.json({
         errors: [
           {
-            message: `No se puede cambiar el código: ${products.length} equipo(s) lo usan en su ID de máquina`,
+            message: `No se puede cambiar el tipo ni el número: ${products.length} equipo(s) usan ${location.code} en su ID de máquina`,
           },
         ],
       });
     }
-    Object.assign(location, fields, { updatedAt: new Date().toISOString() });
+    Object.assign(location, fields, {
+      kind: fields.kind as LocationKind,
+      code,
+      updatedAt: new Date().toISOString(),
+    });
     // Los equipos guardan el nombre para mostrarlo: se actualiza con el renombre
     for (const p of products) p.location = location.name;
     return HttpResponse.json({ data: { updateLocation: withProductCount(location) } });

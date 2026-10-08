@@ -299,7 +299,7 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
                   {field("machineId", "ID de máquina", { mono: true, upper: true })}
                   {suggestion && (
                     <p className="text-xs text-muted-foreground">
-                      Formato: ubicación y área, tipo y número. Próximo libre:{" "}
+                      Formato: ubicación, tipo y número (L1-PC3 = PC 3 del Laboratorio 1). Próximo libre:{" "}
                       <button
                         type="button"
                         className="font-mono text-primary font-semibold hover:underline cursor-pointer"

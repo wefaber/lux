@@ -11,13 +11,20 @@ USE lux;
 CREATE TABLE IF NOT EXISTS ubicacion (
     id VARCHAR(100) PRIMARY KEY NOT NULL,
     nombre VARCHAR(200) UNIQUE,
-    -- 1 a 3 letras: arranca el ID de maquina de sus equipos (L1-PC3)
+    -- Cada ubicacion es un lugar concreto: Laboratorio 1, Salon 2...
+    tipo VARCHAR(20) NOT NULL,
+    numero INT NOT NULL,
+    -- Letra del tipo + numero (L1 = Laboratorio 1): arranca el ID de maquina de
+    -- sus equipos (L1-PC3). Lo deriva la aplicacion de tipo y numero.
     codigo VARCHAR(3) NOT NULL UNIQUE,
     -- Baja logica: no se borra para no perder el historial de sus equipos
     fecha_baja DATETIME,
     CHECK (nombre IS NOT NULL AND nombre <> ''),
     CHECK (LENGTH(nombre) BETWEEN 3 AND 200),
-    CHECK (codigo REGEXP '^[A-Z]{1,3}$')
+    CHECK (tipo IN ('laboratorio', 'salon', 'administracion', 'otro')),
+    CHECK (numero BETWEEN 1 AND 99),
+    CHECK (codigo REGEXP '^[LSAO][0-9]{1,2}$'),
+    UNIQUE (tipo, numero)
 );
 
 CREATE TABLE IF NOT EXISTS producto (
@@ -296,10 +303,10 @@ CREATE TABLE IF NOT EXISTS log_auditoria (
 
 --- Inserts
 
-INSERT INTO ubicacion (id, nombre, codigo) VALUES
-('1', 'Oficina Central', 'OC'),
-('2', 'Sucursal Norte', 'SN'),
-('3', 'Sucursal Sur', 'SS');
+INSERT INTO ubicacion (id, nombre, tipo, numero, codigo) VALUES
+('1', 'Laboratorio 1', 'laboratorio', 1, 'L1'),
+('2', 'Salon 1', 'salon', 1, 'S1'),
+('3', 'Administracion 1', 'administracion', 1, 'A1');
 
 INSERT INTO producto (id, modelo, fabricante, tipo, nro_parte) VALUES
 ('1', 'Laptop Pro 15', 'TechCorp', 'Laptop', 'TC-LP15-001'),

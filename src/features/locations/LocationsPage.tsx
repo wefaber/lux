@@ -2,8 +2,14 @@ import { useState, type FormEvent } from "react";
 import { Plus, Pencil, Trash2, MapPin } from "lucide-react";
 import { useLocations } from "@/hooks/useLocations";
 import { gql, formatDate, cn } from "@/lib/utils";
-import { validateLocation, type FieldErrors, type LocationFields } from "@/lib/validation";
-import type { Location } from "@/lib/types";
+import {
+  locationCode,
+  validateLocation,
+  type FieldErrors,
+  type LocationFields,
+} from "@/lib/validation";
+import { LOCATION_KIND_LABELS } from "@/lib/constants";
+import type { Location, LocationKind } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,7 +52,7 @@ export function LocationsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Ubicaciones</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Lugares del instituto donde hay equipos. El código arranca su ID de máquina (L1-PC3).
+            Laboratorios, salones y oficinas. El código (L1 = Laboratorio 1) arranca el ID de sus equipos: L1-PC3.
           </p>
         </div>
         <Button size="sm" onClick={() => setEditing("new")}>
@@ -77,7 +83,7 @@ export function LocationsPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border">
-                {["Código", "Nombre", "Equipos", "Actualizada", ""].map((h) => (
+                {["Código", "Nombre", "Tipo", "Equipos", "Actualizada", ""].map((h) => (
                   <th
                     key={h}
                     className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
@@ -101,6 +107,9 @@ export function LocationsPage() {
                       <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
                       {l.name}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-muted-foreground">
+                    {LOCATION_KIND_LABELS[l.kind]}
                   </td>
                   <td className="px-6 py-4 text-sm text-muted-foreground">{l.productCount}</td>
                   <td className="px-6 py-4 text-xs text-muted-foreground">
@@ -142,6 +151,7 @@ export function LocationsPage() {
               // key: al pasar de una ubicacion a otra el formulario arranca de cero
               key={editing === "new" ? "new" : editing.id}
               location={editing === "new" ? null : editing}
+              existing={locations}
               onDone={done}
               onCancel={() => setEditing(null)}
             />
@@ -156,24 +166,39 @@ export function LocationsPage() {
 
 interface LocationFormProps {
   location: Location | null;
+  /** Las ya registradas, para proponer el proximo numero libre de cada tipo */
+  existing: Location[];
   onDone: () => void;
   onCancel: () => void;
 }
 
-function LocationForm({ location, onDone, onCancel }: LocationFormProps) {
-  const [form, setForm] = useState<LocationFields>({
-    name: location?.name ?? "",
-    code: location?.code ?? "",
+function LocationForm({ location, existing, onDone, onCancel }: LocationFormProps) {
+  // Proximo numero libre del tipo: con Laboratorio 1 y 2 registrados, propone el 3
+  const nextNumber = (kind: string) =>
+    Math.max(0, ...existing.filter((l) => l.kind === kind).map((l) => l.number)) + 1;
+  const [form, setForm] = useState<LocationFields>(() => {
+    const kind = location?.kind ?? "laboratory";
+    const number = location?.number ?? nextNumber(kind);
+    return { kind, number, name: location?.name ?? `${LOCATION_KIND_LABELS[kind]} ${number}` };
   });
+  // Mientras no se escriba un nombre propio, sigue al tipo y numero (Laboratorio 3)
+  const [nameTouched, setNameTouched] = useState(location !== null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<keyof LocationFields>>({});
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  // Con equipos, el codigo queda fijo: es parte del ID de maquina de cada uno
+  // Con equipos, tipo y numero quedan fijos: forman el codigo de su ID de maquina
   const codeLocked = (location?.productCount ?? 0) > 0;
+  const code = locationCode(form.kind, form.number);
 
-  const update = (k: keyof LocationFields, v: string) => {
-    setForm((f) => ({ ...f, [k]: v }));
-    setFieldErrors((e) => ({ ...e, [k]: undefined }));
+  const autoName = (kind: string, number: number) =>
+    `${LOCATION_KIND_LABELS[kind as LocationKind]} ${Number.isInteger(number) ? number : ""}`.trim();
+
+  const update = <K extends keyof LocationFields>(k: K, v: LocationFields[K]) => {
+    setForm((f) => {
+      const next = { ...f, [k]: v };
+      return nameTouched || k === "name" ? next : { ...next, name: autoName(next.kind, next.number) };
+    });
+    setFieldErrors((e) => ({ ...e, [k]: undefined, ...(nameTouched ? {} : { name: undefined }) }));
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -184,7 +209,7 @@ function LocationForm({ location, onDone, onCancel }: LocationFormProps) {
     setSaving(true);
     setError("");
     try {
-      const input = { name: form.name.trim(), code: form.code.trim().toUpperCase() };
+      const input = { kind: form.kind, number: form.number, name: form.name.trim() };
       await (location
         ? gql(UPDATE_LOCATION_MUTATION, { id: location.id, input })
         : gql(CREATE_LOCATION_MUTATION, { input }));
@@ -196,45 +221,79 @@ function LocationForm({ location, onDone, onCancel }: LocationFormProps) {
     }
   };
 
+  const fieldError = (k: keyof LocationFields) =>
+    fieldErrors[k] && <p className="text-xs text-destructive">{fieldErrors[k]}</p>;
+
   return (
     <form onSubmit={handleSubmit} noValidate>
       <DialogHeader>
         <DialogTitle>{location ? "Editar ubicación" : "Nueva ubicación"}</DialogTitle>
       </DialogHeader>
       <div className="space-y-4">
+        <div className="grid grid-cols-[1fr_6rem] gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="loc-kind">Tipo</Label>
+            <select
+              id="loc-kind"
+              value={form.kind}
+              onChange={(e) => {
+                const kind = e.target.value;
+                // Al cambiar de tipo, el numero pasa al proximo libre de ese tipo
+                setForm((f) => {
+                  const number = location ? f.number : nextNumber(kind);
+                  return {
+                    kind,
+                    number,
+                    name: nameTouched ? f.name : autoName(kind, number),
+                  };
+                });
+                setFieldErrors({});
+              }}
+              disabled={codeLocked}
+              className="flex h-10 w-full rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring disabled:opacity-50"
+            >
+              {Object.entries(LOCATION_KIND_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            {fieldError("kind")}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="loc-number">Número</Label>
+            <Input
+              id="loc-number"
+              type="number"
+              min={1}
+              max={99}
+              value={Number.isNaN(form.number) ? "" : form.number}
+              onChange={(e) => update("number", e.target.valueAsNumber)}
+              disabled={codeLocked}
+            />
+          </div>
+        </div>
+        {fieldError("number")}
+        <p className="text-xs text-muted-foreground">
+          {codeLocked
+            ? `Código ${location?.code}: no se puede cambiar, ${location?.productCount} equipo(s) lo usan en su ID de máquina.`
+            : code
+              ? `Código: ${code}. Sus equipos se nombran ${code}-PC1, ${code}-PRY1…`
+              : "El código sale del tipo y el número (L1 = Laboratorio 1)."}
+        </p>
         <div className="space-y-1.5">
           <Label htmlFor="loc-name">Nombre</Label>
           <Input
             id="loc-name"
             placeholder="Ej: Laboratorio 3"
             value={form.name}
-            onChange={(e) => update("name", e.target.value)}
+            onChange={(e) => {
+              setNameTouched(true);
+              update("name", e.target.value);
+            }}
             aria-invalid={Boolean(fieldErrors.name)}
-            autoFocus
           />
-          {fieldErrors.name && <p className="text-xs text-destructive">{fieldErrors.name}</p>}
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="loc-code">Código</Label>
-          <Input
-            id="loc-code"
-            placeholder="Ej: L"
-            value={form.code}
-            onChange={(e) => update("code", e.target.value.toUpperCase())}
-            maxLength={3}
-            disabled={codeLocked}
-            className="font-mono uppercase"
-            aria-invalid={Boolean(fieldErrors.code)}
-          />
-          {fieldErrors.code ? (
-            <p className="text-xs text-destructive">{fieldErrors.code}</p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              {codeLocked
-                ? `No se puede cambiar: ${location?.productCount} equipo(s) lo usan en su ID de máquina.`
-                : "De 1 a 3 letras. Los equipos de esta ubicación se nombran con él: L1-PC3."}
-            </p>
-          )}
+          {fieldError("name")}
         </div>
         {error && (
           <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
