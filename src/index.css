@@ -339,6 +339,15 @@ html.dark[data-contrast="high"] {
   * {
     @apply border-border outline-ring/50;
   }
+
+  /* Tablas: una celda nunca parte su texto ("svc-" arriba y "001" abajo,
+     "Ver" / "detalle"). Si con la letra elegida la tabla no entra, se desplaza
+     de costado dentro de su contenedor overflow-x-auto en vez de aplastar las
+     columnas. Una celda puntual puede volver a partir con whitespace-normal. */
+  table th,
+  table td {
+    white-space: nowrap;
+  }
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-family, var(--font-sans));

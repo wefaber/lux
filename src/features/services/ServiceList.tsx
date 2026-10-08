@@ -161,7 +161,10 @@ export function ServiceList() {
                     <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
                       {SERVICE_TYPE_LABELS[s.type]}
                     </td>
-                    <td className="px-6 py-4 text-sm text-foreground max-w-[200px]">
+                    <td
+                      className="px-6 py-4 text-sm text-foreground max-w-xs truncate"
+                      title={s.description}
+                    >
                       {truncate(s.description, 60)}
                     </td>
                     <td className="px-6 py-4">
