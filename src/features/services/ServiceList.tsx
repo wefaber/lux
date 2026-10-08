@@ -9,7 +9,13 @@ import type { ServiceRequest, ServiceStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  AnimatePresence,
+} from "@/components/ui/dialog";
 import { ServiceForm } from "./ServiceForm";
 
 const SERVICES_QUERY = `
@@ -188,19 +194,26 @@ export function ServiceList() {
         </div>
       )}
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Nueva solicitud de servicio</DialogTitle>
-          </DialogHeader>
-          <ServiceForm
-            onSuccess={() => {
-              setCreateOpen(false);
-              refetch();
-            }}
-          />
-        </DialogContent>
-      </Dialog>
+      {/* AnimatePresence propio, como en TicketList: sin el, la animacion de salida
+          del dialogo queda atada a la de la pagina y, si se abrio al entrar
+          (?nuevo=1), al cerrarlo la pagina entera se queda invisible */}
+      <AnimatePresence>
+        {createOpen && (
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Nueva solicitud de servicio</DialogTitle>
+              </DialogHeader>
+              <ServiceForm
+                onSuccess={() => {
+                  setCreateOpen(false);
+                  refetch();
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
