@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
@@ -39,7 +39,9 @@ export function ServiceList() {
   const [statusFilter, setStatusFilter] = useState<ServiceStatus | "">(""); // Obtencion de status para filtros
   // "" todos, "none" sin asignar, o el id del responsable
   const [assigneeFilter, setAssigneeFilter] = useState("");
-  const [createOpen, setCreateOpen] = useState(false);
+  // ?nuevo=1 abre el formulario directo (acceso "Pedir un servicio" del inicio)
+  const [searchParams] = useSearchParams();
+  const [createOpen, setCreateOpen] = useState(() => searchParams.get("nuevo") === "1");
 
   const isSolicitante = !hasRole("root_admin", "admin", "tecnico");
 

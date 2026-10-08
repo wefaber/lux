@@ -369,6 +369,21 @@ export const handlers = [
       pendingServices: services.filter((s) => s.status === "pending").length,
       ticketsByStatus,
       servicesByPeriod,
+      // La carga de trabajo del area solo viaja al staff: al solicitante ni se le manda
+      workQueue: staff
+        ? {
+            unassignedTickets: mockTickets.filter((t) => t.status === "pending" && !t.assignedTo)
+              .length,
+            ticketsInProgress: mockTickets.filter(
+              (t) => t.status === "in_progress" || t.status === "in_resolution",
+            ).length,
+            pendingServices: mockServices.filter((s) => s.status === "pending").length,
+            overdueLoans: mockLoans.filter((l) => l.status === "overdue").length,
+            equipmentInRepair: mockProducts.filter(
+              (p) => p.deletedAt === null && p.status === "in_repair",
+            ).length,
+          }
+        : null,
     };
 
     return HttpResponse.json({ data: { dashboardStats: stats } });

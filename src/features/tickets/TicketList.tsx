@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Plus, Search, AlertCircle, Camera } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
@@ -58,14 +58,16 @@ export function TicketList() {
   const { user, hasRole } = useAuth();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TicketStatus | "">("");
-  const [createOpen, setCreateOpen] = useState(false);
+  // ?nuevo=1 abre el formulario y ?equipo=<id> lo trae elegido (accesos del inicio)
+  const [searchParams] = useSearchParams();
+  const [createOpen, setCreateOpen] = useState(() => searchParams.get("nuevo") === "1");
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => ({
     title: "",
     description: "",
     category: "hardware",
-    equipmentId: "",
-  }); // Settear formulario con variables: title, desc, category, equipmentId
+    equipmentId: searchParams.get("equipo") ?? "",
+  })); // Settear formulario con variables: title, desc, category, equipmentId
   const [saving, setSaving] = useState(false);
   const [machineSearch, setMachineSearch] = useState("");
 

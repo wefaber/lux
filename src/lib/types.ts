@@ -126,7 +126,17 @@ export interface DashboardStats {
   pendingServices: number;
   ticketsByStatus: Array<{ status: TicketStatus; count: number }>;
   servicesByPeriod: Array<{ date: string; count: number }>;
+  /** Carga de trabajo del area: solo llega para el personal, null para el solicitante */
+  workQueue: WorkQueue | null;
 } // Interfaz de datos del dashboard
+
+export interface WorkQueue {
+  unassignedTickets: number;
+  ticketsInProgress: number;
+  pendingServices: number;
+  overdueLoans: number;
+  equipmentInRepair: number;
+} // Lo que esta esperando a alguien del area
 
 export interface Reports {
   overdueLoans: Array<{

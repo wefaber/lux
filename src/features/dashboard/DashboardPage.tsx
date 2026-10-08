@@ -15,6 +15,10 @@ import { LuxPieChart } from "@/components/charts/PieChart";
 import { LuxBarChart } from "@/components/charts/BarChart";
 import { CardSkeleton, ChartSkeleton } from "@/components/skeletons/CardSkeleton";
 import { Button } from "@/components/ui/button";
+import { isStaff } from "@/lib/roles";
+import { MetricCard } from "./MetricCard";
+import { WorkQueue } from "./WorkQueue";
+import { RequesterHome } from "./RequesterHome";
 
 const DASHBOARD_QUERY = `
  query GetDashboardStats($period: String) {
@@ -25,6 +29,7 @@ const DASHBOARD_QUERY = `
  pendingServices
  ticketsByStatus { status count }
  servicesByPeriod { date count }
+ workQueue { unassignedTickets ticketsInProgress pendingServices overdueLoans equipmentInRepair }
  }
  }
 `;
@@ -36,34 +41,16 @@ const TICKET_COLORS: Record<TicketStatus, string> = {
   resolved: "rgb(52,199,89)",
 }; // Seteo de colores de tickets
 
-interface MetricCardProps {
-  icon: React.ElementType;
-  label: string;
-  value: number | string;
-  color: string;
-}
-
-function MetricCard({ icon: Icon, label, value, color }: MetricCardProps) {
-  return (
-    <div className="rounded-2xl border border-border/70 bg-card/40 backdrop-blur-xl p-6 transition-all duration-300 hover:border-primary/20 hover:bg-card/75 hover:shadow-md hover:-translate-y-[2px]">
-      <div
-        className="inline-flex h-10 w-10 items-center justify-center rounded-xl mb-4"
-        style={{ backgroundColor: `${color}12` }}
-      >
-        <Icon className="h-5 w-5" style={{ color }} />
-      </div>
-      <p className="text-xs text-muted-foreground uppercase tracking-widest font-semibold mb-1">
-        {label}
-      </p>
-      <p className="text-3xl font-bold tracking-tight text-foreground">{value}</p>
-    </div>
-  );
-}
-
+// Vista dividida por rol: el personal del area ve el tablero del sistema y su
+// carga de trabajo; el usuario final, su inicio.
 export function DashboardPage() {
+  const { user } = useAuth();
+  return isStaff(user?.role) ? <StaffDashboard /> : <RequesterHome />;
+}
+
+function StaffDashboard() {
   const { user, hasRole } = useAuth();
   const [period, setPeriod] = useState<DashboardPeriod>("7d"); // Periodo del grafico de solicitudes
-  const isStaff = hasRole("root_admin", "admin", "tecnico");
   const { data, isLoading, error } = useAsync<{ dashboardStats: DashboardStats }>(
     () => gql(DASHBOARD_QUERY, { period }),
     [period],
@@ -113,7 +100,7 @@ export function DashboardPage() {
             Buenos días, {user?.name.split(" ")[0]}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {isStaff ? "Resumen del sistema" : "Tu actividad"} · ITI CETP
+            Resumen del sistema · ITI CETP
           </p>
         </div>
         <div className="flex gap-2">
@@ -138,6 +125,8 @@ export function DashboardPage() {
         </div>
       </div>
 
+      {stats?.workQueue && <WorkQueue queue={stats.workQueue} />}
+
       {isInitialLoading ? (
         <CardSkeleton count={4} />
       ) : error ? (
@@ -153,25 +142,25 @@ export function DashboardPage() {
         >
           <MetricCard
             icon={Package}
-            label={isStaff ? "Equipos totales" : "Equipos disponibles"}
+            label="Equipos totales"
             value={stats?.totalEquipment ?? 0}
             color="rgb(0,122,255)"
           />
           <MetricCard
             icon={Ticket}
-            label={isStaff ? "Tickets abiertos" : "Mis tickets abiertos"}
+            label="Tickets abiertos"
             value={stats?.openTickets ?? 0}
             color="rgb(255,159,10)"
           />
           <MetricCard
             icon={BookOpen}
-            label={isStaff ? "Préstamos activos" : "Mis préstamos activos"}
+            label="Préstamos activos"
             value={stats?.activeLoans ?? 0}
             color="rgb(52,199,89)"
           />
           <MetricCard
             icon={Wrench}
-            label={isStaff ? "Solicitudes pendientes" : "Mis solicitudes pendientes"}
+            label="Solicitudes pendientes"
             value={stats?.pendingServices ?? 0}
             color="rgb(255,69,58)"
           />

@@ -107,6 +107,26 @@ describe("#28 el alcance de las lecturas lo decide el servidor", () => {
     expect(global.totalEquipment).toBe(mockProducts.filter((p) => p.deletedAt === null).length);
     expect(stats.openTickets).toBeLessThan(global.openTickets);
   });
+
+  test("la carga de trabajo del area solo le llega al staff", async () => {
+    const own = (await gqlAs<{ dashboardStats: DashboardStats }>(SOLICITANTE, STATS)).data!
+      .dashboardStats;
+    expect(own.workQueue).toBeNull();
+
+    const staff = (await gqlAs<{ dashboardStats: DashboardStats }>(TECNICO, STATS)).data!
+      .dashboardStats;
+    expect(staff.workQueue).toEqual({
+      unassignedTickets: mockTickets.filter((t) => t.status === "pending" && !t.assignedTo).length,
+      ticketsInProgress: mockTickets.filter((t) =>
+        ["in_progress", "in_resolution"].includes(t.status),
+      ).length,
+      pendingServices: mockServices.filter((s) => s.status === "pending").length,
+      overdueLoans: mockLoans.filter((l) => l.status === "overdue").length,
+      equipmentInRepair: mockProducts.filter(
+        (p) => p.deletedAt === null && p.status === "in_repair",
+      ).length,
+    });
+  });
 });
 
 describe("#26 métricas de solicitudes reales y por período", () => {
