@@ -191,7 +191,7 @@ export function TicketList() {
                   (h) => (
                     <th
                       key={h}
-                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                      className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                     >
                       {h}
                     </th>
@@ -207,8 +207,8 @@ export function TicketList() {
                     key={t.id}
                     className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                   >
-                    <td className="px-6 py-4 text-xs text-muted-foreground font-mono">{t.id}</td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3 text-xs text-muted-foreground font-mono">{t.id}</td>
+                    <td className="px-4 py-3">
                       <Link
                         to={`${ROUTES.TICKETS}/${t.id}`}
                         className="text-sm font-semibold text-foreground hover:underline"
@@ -216,21 +216,21 @@ export function TicketList() {
                         {truncate(t.title, 48)}
                       </Link>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <Badge color={statusConf.color} withDot>
                         {statusConf.label}
                       </Badge>
                     </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
+                    <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                       {TICKET_CATEGORY_LABELS[t.category]}
                     </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
+                    <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                       {t.assignedTo?.name ?? "—"}
                     </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
+                    <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                       {t.submittedBy.name}
                     </td>
-                    <td className="px-6 py-4 text-xs text-muted-foreground">
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
                       {formatDate(t.createdAt)}
                     </td>
                   </tr>

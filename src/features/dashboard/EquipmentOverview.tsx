@@ -111,7 +111,7 @@ export function EquipmentOverview() {
                   (h) => (
                     <th
                       key={h}
-                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                      className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                     >
                       {h}
                     </th>
@@ -127,23 +127,23 @@ export function EquipmentOverview() {
                     key={p.id}
                     className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                   >
-                    <td className="px-6 py-4 font-mono text-xs font-semibold text-primary">
+                    <td className="px-4 py-3 font-mono text-xs font-semibold text-primary">
                       {p.machineId}
                     </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground">{p.kind}</td>
-                    <td className="px-6 py-4 text-sm text-foreground">
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{p.kind}</td>
+                    <td className="px-4 py-3 text-sm text-foreground">
                       {p.brand} {p.model}
                     </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground">{p.location}</td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{p.location}</td>
+                    <td className="px-4 py-3">
                       <Badge color={statusConf.color} withDot>
                         {statusConf.label}
                       </Badge>
                     </td>
-                    <td className="px-6 py-4 text-xs text-muted-foreground max-w-[200px] truncate">
+                    <td className="px-4 py-3 text-xs text-muted-foreground min-w-48 max-w-xs whitespace-normal">
                       {p.issues ?? "—"}
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-4 py-3 text-right">
                       <Button variant="secondary" size="sm" asChild>
                         <Link to={`${ROUTES.TICKETS}?nuevo=1&equipo=${p.id}`}>Reportar</Link>
                       </Button>

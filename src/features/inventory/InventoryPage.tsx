@@ -176,7 +176,7 @@ export function InventoryPage() {
                     ].map((h) => (
                       <th
                         key={h}
-                        className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                        className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                       >
                         {h}
                       </th>
@@ -191,7 +191,7 @@ export function InventoryPage() {
                         key={p.id}
                         className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                       >
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3">
                           <Link to={`${ROUTES.INVENTORY}/${p.id}`} className="hover:underline">
                             <p className="text-sm font-semibold text-foreground">
                               {p.brand} {p.model}
@@ -203,21 +203,21 @@ export function InventoryPage() {
                             </p>
                           </Link>
                         </td>
-                        <td className="px-6 py-4 text-xs text-muted-foreground font-mono">
+                        <td className="px-4 py-3 text-xs text-muted-foreground font-mono">
                           {p.serialNumber}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3">
                           <Badge color={statusConf.color} withDot>
                             {statusConf.label}
                           </Badge>
                         </td>
-                        <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
+                        <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                           {p.location}
                         </td>
-                        <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
+                        <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                           {p.components.length}
                         </td>
-                        <td className="px-6 py-4 text-xs text-muted-foreground">
+                        <td className="px-4 py-3 text-xs text-muted-foreground">
                           {formatDate(p.updatedAt)}
                         </td>
                       </tr>
@@ -256,7 +256,7 @@ export function InventoryPage() {
                     ].map((h) => (
                       <th
                         key={h}
-                        className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                        className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                       >
                         {h}
                       </th>
@@ -269,7 +269,7 @@ export function InventoryPage() {
                       key={c.id}
                       className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                     >
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-3">
                         <Link
                           to={`${ROUTES.INVENTORY}/componente/${c.id}`}
                           className="hover:underline"
@@ -278,23 +278,23 @@ export function InventoryPage() {
                           <p className="text-xs text-muted-foreground font-medium">{c.model}</p>
                         </Link>
                       </td>
-                      <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
+                      <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                         {c.manufacturer}
                       </td>
-                      <td className="px-6 py-4 text-xs text-muted-foreground font-mono">
+                      <td className="px-4 py-3 text-xs text-muted-foreground font-mono">
                         {c.serialNumber}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-3">
                         <Badge color={c.isFactory ? "success" : "muted"} withDot={c.isFactory}>
                           {c.isFactory ? "Sí" : "No"}
                         </Badge>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-3">
                         <Badge color={c.isWorking ? "success" : "destructive"} withDot>
                           {c.isWorking ? "Sí" : "No"}
                         </Badge>
                       </td>
-                      <td className="px-6 py-4 text-xs text-muted-foreground">
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
                         {formatDate(c.updatedAt)}
                       </td>
                     </tr>

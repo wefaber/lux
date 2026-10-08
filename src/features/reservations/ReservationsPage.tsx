@@ -156,7 +156,7 @@ export function ReservationsPage() {
                 {columns.map((h) => (
                   <th
                     key={h}
-                    className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                   >
                     {h}
                   </th>
@@ -173,34 +173,34 @@ export function ReservationsPage() {
                     key={r.id}
                     className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                   >
-                    <td className="px-6 py-4 text-xs text-muted-foreground font-mono">{r.id}</td>
-                    <td className="px-6 py-4 text-sm font-semibold text-foreground">
+                    <td className="px-4 py-3 text-xs text-muted-foreground font-mono">{r.id}</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-foreground">
                       <span className="inline-flex items-center gap-2">
                         <ResourceIcon className="h-3.5 w-3.5 text-muted-foreground" />
                         {resourceName(r)}
                       </span>
                     </td>
                     {staff && (
-                      <td className="px-6 py-4 text-sm text-muted-foreground">{r.user.name}</td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">{r.user.name}</td>
                     )}
-                    <td className="px-6 py-4 text-xs text-muted-foreground">
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
                       {formatDateTime(r.startsAt)}
                     </td>
-                    <td className="px-6 py-4 text-xs text-muted-foreground">
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
                       {formatDateTime(r.endsAt)}
                     </td>
                     <td
-                      className="px-6 py-4 text-sm text-foreground max-w-xs truncate"
+                      className="px-4 py-3 text-sm text-foreground min-w-48 max-w-xs whitespace-normal"
                       title={r.purpose}
                     >
                       {r.purpose}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <Badge color={statusConf.color} withDot>
                         {statusConf.label}
                       </Badge>
                       {r.status === "rejected" && r.rejectionReason && (
-                        <p className="text-xs text-muted-foreground mt-1 max-w-56 truncate" title={r.rejectionReason}>
+                        <p className="text-xs text-muted-foreground mt-1 max-w-56 whitespace-normal">
                           {r.rejectionReason}
                         </p>
                       )}
@@ -210,7 +210,7 @@ export function ReservationsPage() {
                         </p>
                       )}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <div className="flex justify-end gap-1.5">
                         {staff && r.status === "pending" && (
                           <>

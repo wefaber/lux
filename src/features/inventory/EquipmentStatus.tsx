@@ -83,7 +83,7 @@ export function EquipmentStatus() {
                   (h) => (
                     <th
                       key={h}
-                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                      className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                     >
                       {h}
                     </th>
@@ -102,20 +102,20 @@ export function EquipmentStatus() {
                     transition={{ ...SPRING_TRANSITION, delay: i * 0.02 }}
                     className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                   >
-                    <td className="px-6 py-4 text-sm text-foreground">{p.location}</td>
-                    <td className="px-6 py-4 text-xs text-muted-foreground font-mono">
+                    <td className="px-4 py-3 text-sm text-foreground">{p.location}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground font-mono">
                       {p.serialNumber}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <Badge color={statusConf.color}>{statusConf.label}</Badge>
                     </td>
-                    <td className="px-6 py-4 text-xs text-muted-foreground">
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
                       {new Date(p.updatedAt).toLocaleDateString("es-UY")}
                     </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground">{p.kind}</td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{p.kind}</td>
+                    <td className="px-4 py-3">
                       {p.issues ? (
-                        <span className="text-xs text-warning truncate max-w-[160px] block">
+                        <span className="text-xs text-warning block min-w-40 max-w-xs whitespace-normal">
                           {p.issues}
                         </span>
                       ) : (

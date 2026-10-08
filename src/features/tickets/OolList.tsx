@@ -66,7 +66,7 @@ export function OolList() {
                 {["ID", "Título", "Categoría", "Solicitante", "Fecha", ""].map((h) => (
                   <th
                     key={h}
-                    className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                   >
                     {h}
                   </th>
@@ -82,8 +82,8 @@ export function OolList() {
                   transition={{ ...SPRING_TRANSITION, delay: i * 0.04 }}
                   className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                 >
-                  <td className="px-6 py-4 text-xs text-muted-foreground font-mono">{t.id}</td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3 text-xs text-muted-foreground font-mono">{t.id}</td>
+                  <td className="px-4 py-3">
                     <Link
                       to={`${ROUTES.TICKETS}/${t.id}`}
                       className="text-sm font-medium text-foreground hover:underline"
@@ -91,14 +91,14 @@ export function OolList() {
                       {t.title}
                     </Link>
                   </td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground">
+                  <td className="px-4 py-3 text-sm text-muted-foreground">
                     {TICKET_CATEGORY_LABELS[t.category]}
                   </td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground">{t.submittedBy.name}</td>
-                  <td className="px-6 py-4 text-xs text-muted-foreground">
+                  <td className="px-4 py-3 text-sm text-muted-foreground">{t.submittedBy.name}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">
                     {formatDate(t.createdAt)}
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3">
                     <Button size="sm" variant="secondary" onClick={() => handleClaim(t.id)}>
                       <UserCheck className="h-3.5 w-3.5" />
                       Tomar

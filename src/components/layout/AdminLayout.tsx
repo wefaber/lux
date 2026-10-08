@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { Outlet, NavLink, Link, useNavigate } from "react-router-dom";
 import { Users, Shield, ActivitySquare, ArrowLeft, Zap, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -6,6 +7,7 @@ import { ThemeSwitcher } from "@/components/accessibility/ThemeSwitcher";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { useResponsiveTables } from "@/hooks/useResponsiveTables";
 
 const adminNav = [
   { icon: Users, label: "Usuarios", to: ROUTES.ADMIN_USERS },
@@ -26,6 +28,8 @@ function initials(name: string): string {
 export function AdminLayout() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const mainRef = useRef<HTMLElement>(null);
+  useResponsiveTables(mainRef); // tablas que no entran -> tarjetas
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -126,7 +130,7 @@ export function AdminLayout() {
             </NavLink>
           ))}
         </nav>
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <main ref={mainRef} className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <Outlet />
         </main>
       </div>
