@@ -11,8 +11,13 @@ USE lux;
 CREATE TABLE IF NOT EXISTS ubicacion (
     id VARCHAR(100) PRIMARY KEY NOT NULL,
     nombre VARCHAR(200) UNIQUE,
+    -- 1 a 3 letras: arranca el ID de maquina de sus equipos (L1-PC3)
+    codigo VARCHAR(3) NOT NULL UNIQUE,
+    -- Baja logica: no se borra para no perder el historial de sus equipos
+    fecha_baja DATETIME,
     CHECK (nombre IS NOT NULL AND nombre <> ''),
-    CHECK (LENGTH(nombre) BETWEEN 3 AND 200)
+    CHECK (LENGTH(nombre) BETWEEN 3 AND 200),
+    CHECK (codigo REGEXP '^[A-Z]{1,3}$')
 );
 
 CREATE TABLE IF NOT EXISTS producto (
@@ -223,10 +228,10 @@ CREATE TABLE IF NOT EXISTS log_auditoria (
 
 --- Inserts
 
-INSERT INTO ubicacion (id, nombre) VALUES
-('1', 'Oficina Central'),
-('2', 'Sucursal Norte'),
-('3', 'Sucursal Sur');
+INSERT INTO ubicacion (id, nombre, codigo) VALUES
+('1', 'Oficina Central', 'OC'),
+('2', 'Sucursal Norte', 'SN'),
+('3', 'Sucursal Sur', 'SS');
 
 INSERT INTO producto (id, modelo, fabricante, tipo, nro_parte) VALUES
 ('1', 'Laptop Pro 15', 'TechCorp', 'Laptop', 'TC-LP15-001'),

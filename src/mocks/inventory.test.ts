@@ -23,7 +23,7 @@ function validInput(overrides: Record<string, unknown> = {}) {
   return {
     machineId: `L9-PC${seq}`,
     kind: "Desktop",
-    location: "Laboratorios",
+    locationId: "loc-1",
     brand: "Lenovo",
     model: "ThinkCentre M70",
     serialNumber: `SN-TEST-${seq}`,
@@ -71,7 +71,7 @@ describe("#2 nomenclatura al crear equipos", () => {
     const dupId = await create({
       machineId: existing.machineId,
       kind: existing.kind,
-      location: existing.location,
+      locationId: existing.locationId,
     });
     expect(dupId.errors?.[0].message).toBe(`Ya existe un equipo con ID ${existing.machineId}`);
     const dupSerial = await create({ serialNumber: existing.serialNumber });
@@ -106,7 +106,7 @@ describe("#19 editar equipos", () => {
 
   test("valida la edición igual que el alta", async () => {
     const id = (await create()).data!.createProduct.id;
-    const res = await gqlAs(TECNICO, UPDATE, { id, input: { location: "Salones" } });
+    const res = await gqlAs(TECNICO, UPDATE, { id, input: { locationId: "loc-2" } });
     expect(res.errors?.[0].message).toContain('Un equipo en Salones empieza con "S"');
   });
 

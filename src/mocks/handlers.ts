@@ -1,11 +1,18 @@
 import { graphql, HttpResponse } from "msw";
 import { mockUsers, mockPasswords } from "./data/users";
 import { mockProducts, mockComponents } from "./data/equipment";
+import { mockLocations } from "./data/locations";
 import { mockTickets } from "./data/tickets";
 import { mockLoans } from "./data/loans";
 import { mockServices } from "./data/services";
 import { mockActivityLogs } from "./generators";
-import { validateComponent, validateProduct, type FieldErrors } from "@/lib/validation";
+import {
+  validateComponent,
+  validateLocation,
+  validateProduct,
+  type FieldErrors,
+  type LocationFields,
+} from "@/lib/validation";
 import {
   LOAN_STATUS_CONFIG,
   TICKET_STATUS_CONFIG,
@@ -15,6 +22,7 @@ import {
 import type {
   User,
   UserRole,
+  Location,
   Product,
   Component,
   Ticket,
@@ -134,6 +142,36 @@ function duplicateProductError(
   return null;
 }
 
+// Ubicacion vigente por id: a una dada de baja no se le asignan equipos
+function activeLocation(id: string | undefined): Location | undefined {
+  return mockLocations.find((l) => l.id === id && l.deletedAt === null);
+}
+
+function productsIn(locationId: string): Product[] {
+  return mockProducts.filter((p) => p.deletedAt === null && p.locationId === locationId);
+}
+
+function withProductCount(location: Location): Location {
+  return { ...location, productCount: productsIn(location.id).length };
+}
+
+// "Administración" y "administracion" son la misma ubicacion
+function normalizeName(name: string): string {
+  return name.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+}
+
+// Nombre y codigo no se repiten entre las ubicaciones vigentes
+function duplicateLocationError(fields: LocationFields, exceptId?: string): string | null {
+  const others = mockLocations.filter((l) => l.deletedAt === null && l.id !== exceptId);
+  if (others.some((l) => normalizeName(l.name) === normalizeName(fields.name))) {
+    return `Ya existe una ubicación llamada ${fields.name}`;
+  }
+  if (others.some((l) => l.code === fields.code)) {
+    return `El código ${fields.code} ya lo usa otra ubicación`;
+  }
+  return null;
+}
+
 const CLOSED_SERVICE_STATUSES = new Set<ServiceStatus>(["completed", "rejected"]);
 
 // Horas entre el alta y la resolucion, redondeadas a un decimal
@@ -193,9 +231,9 @@ export const handlers = [
 
   graphql.query("GetProducts", ({ request, variables }) => {
     if (!getCaller(request)) return HttpResponse.json(UNAUTHENTICATED);
-    const { status, location, availableForLoan } = variables as {
+    const { status, locationId, availableForLoan } = variables as {
       status?: string;
-      location?: string;
+      locationId?: string;
       availableForLoan?: boolean;
     };
     let products = mockProducts.filter((p) => p.deletedAt === null);
@@ -204,7 +242,7 @@ export const handlers = [
     if (availableForLoan) {
       products = products.filter((p) => p.status === "available" && !hasOpenLoan(p.id));
     }
-    if (location) products = products.filter((p) => p.location === location);
+    if (locationId) products = products.filter((p) => p.locationId === locationId);
     return HttpResponse.json({ data: { products } });
   }),
 
@@ -915,26 +953,31 @@ export const handlers = [
         partNumber: string;
         status: string;
         issues?: string;
-        location: string;
+        locationId: string;
       };
     };
+    const location = activeLocation(input.locationId);
     const fields = {
-      ...input,
       machineId: input.machineId.trim().toUpperCase(),
+      kind: input.kind,
+      location,
       brand: input.brand.trim(),
       model: input.model.trim(),
       serialNumber: input.serialNumber.trim().toUpperCase(),
       partNumber: input.partNumber.trim().toUpperCase(),
     };
     const error = firstError(validateProduct(fields)) ?? duplicateProductError(fields);
-    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    if (error || !location) {
+      return HttpResponse.json({ errors: [{ message: error ?? "Ubicación inválida" }] });
+    }
     const newProduct: Product = {
       id: nextId("prod-", mockProducts),
       type: "product",
       ...fields,
-      status: fields.status as Product["status"],
-      location: fields.location as Product["location"],
-      issues: fields.issues?.trim() || null,
+      status: input.status as Product["status"],
+      locationId: location.id,
+      location: location.name,
+      issues: input.issues?.trim() || null,
       components: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -953,7 +996,7 @@ export const handlers = [
       input: Partial<
         Pick<
           Product,
-          "machineId" | "kind" | "brand" | "model" | "serialNumber" | "partNumber" | "location"
+          "machineId" | "kind" | "brand" | "model" | "serialNumber" | "partNumber" | "locationId"
         > & { issues: string | null }
       >;
     };
@@ -961,18 +1004,25 @@ export const handlers = [
     if (!product) return HttpResponse.json({ errors: [{ message: "Producto no encontrado" }] });
     // Solo campos descriptivos: lo que no se manda queda como estaba. El estado
     // lo mueven los prestamos y la baja, no la edicion.
+    const location = activeLocation(input.locationId ?? product.locationId);
     const next = {
       machineId: (input.machineId ?? product.machineId).trim().toUpperCase(),
       kind: input.kind ?? product.kind,
-      location: input.location ?? product.location,
+      location,
       brand: (input.brand ?? product.brand).trim(),
       model: (input.model ?? product.model).trim(),
       serialNumber: (input.serialNumber ?? product.serialNumber).trim().toUpperCase(),
       partNumber: (input.partNumber ?? product.partNumber).trim().toUpperCase(),
     };
     const error = firstError(validateProduct(next)) ?? duplicateProductError(next, product.id);
-    if (error) return HttpResponse.json({ errors: [{ message: error }] });
-    Object.assign(product, next, { updatedAt: new Date().toISOString() });
+    if (error || !location) {
+      return HttpResponse.json({ errors: [{ message: error ?? "Ubicación inválida" }] });
+    }
+    Object.assign(product, next, {
+      locationId: location.id,
+      location: location.name,
+      updatedAt: new Date().toISOString(),
+    });
     if (input.issues !== undefined) product.issues = input.issues?.trim() || null;
     return HttpResponse.json({ data: { updateProduct: product } });
   }),
@@ -1137,5 +1187,80 @@ export const handlers = [
     if (ticket.status === "pending") ticket.status = "in_progress";
     ticket.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { assignTicket: ticket } });
+  }),
+
+  // ── Ubicaciones ────────────────────────────────────────────────────────────
+  // Cualquiera con sesion las consulta (filtros y formularios); el ABM es del staff
+
+  graphql.query("GetLocations", ({ request }) => {
+    if (!getCaller(request)) return HttpResponse.json(UNAUTHENTICATED);
+    const locations = mockLocations.filter((l) => l.deletedAt === null).map(withProductCount);
+    return HttpResponse.json({ data: { locations } });
+  }),
+
+  graphql.mutation("CreateLocation", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { input } = variables as { input: LocationFields };
+    const fields = { name: input.name.trim(), code: input.code.trim().toUpperCase() };
+    const error = firstError(validateLocation(fields)) ?? duplicateLocationError(fields);
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    const now = new Date().toISOString();
+    const location: Location = {
+      id: nextId("loc-", mockLocations),
+      ...fields,
+      productCount: 0,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    };
+    mockLocations.push(location);
+    return HttpResponse.json({ data: { createLocation: location } });
+  }),
+
+  graphql.mutation("UpdateLocation", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { id, input } = variables as { id: string; input: Partial<LocationFields> };
+    const location = activeLocation(id);
+    if (!location) return HttpResponse.json({ errors: [{ message: "Ubicación no encontrada" }] });
+    const fields = {
+      name: (input.name ?? location.name).trim(),
+      code: (input.code ?? location.code).trim().toUpperCase(),
+    };
+    const error = firstError(validateLocation(fields)) ?? duplicateLocationError(fields, id);
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    // El codigo arranca el ID de maquina de cada equipo: cambiarlo los dejaria mal nombrados
+    const products = productsIn(id);
+    if (fields.code !== location.code && products.length > 0) {
+      return HttpResponse.json({
+        errors: [
+          {
+            message: `No se puede cambiar el código: ${products.length} equipo(s) lo usan en su ID de máquina`,
+          },
+        ],
+      });
+    }
+    Object.assign(location, fields, { updatedAt: new Date().toISOString() });
+    // Los equipos guardan el nombre para mostrarlo: se actualiza con el renombre
+    for (const p of products) p.location = location.name;
+    return HttpResponse.json({ data: { updateLocation: withProductCount(location) } });
+  }),
+
+  graphql.mutation("SoftDeleteLocation", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { id } = variables as { id: string };
+    const location = activeLocation(id);
+    if (!location) return HttpResponse.json({ errors: [{ message: "Ubicación no encontrada" }] });
+    const count = productsIn(id).length;
+    if (count > 0) {
+      return HttpResponse.json({
+        errors: [
+          {
+            message: `No se puede eliminar: tiene ${count} equipo(s). Movelos a otra ubicación primero`,
+          },
+        ],
+      });
+    }
+    location.deletedAt = new Date().toISOString();
+    return HttpResponse.json({ data: { softDeleteLocation: true } });
   }),
 ];

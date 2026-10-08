@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Plus, Search, Package, Cpu } from "lucide-react";
+import { Plus, Search, Package, Cpu, MapPin } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
+import { useLocations } from "@/hooks/useLocations";
 import { gql, formatDate, cn } from "@/lib/utils";
 import { EQUIPMENT_STATUS_CONFIG, ROUTES } from "@/lib/constants";
-import type { Product, Component, EquipmentStatus, Location } from "@/lib/types";
+import type { Product, Component, EquipmentStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,8 +14,8 @@ import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 const PRODUCTS_QUERY = `
-  query GetProducts($status: String, $location: String) {
-    products(status: $status, location: $location) {
+  query GetProducts($status: String, $locationId: ID) {
+    products(status: $status, locationId: $locationId) {
       id type machineId kind brand model serialNumber partNumber status issues location
       components { id name model manufacturer serialNumber partNumber isFactory isWorking }
       createdAt updatedAt deletedAt
@@ -34,13 +35,14 @@ export function InventoryPage() {
   const { hasRole } = useAuth();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<EquipmentStatus | "">("");
-  const [locationFilter, setLocationFilter] = useState<Location | "">("");
+  const [locationFilter, setLocationFilter] = useState(""); // id de ubicacion, "" = todas
+  const { locations } = useLocations();
 
   const { data: productsData, isLoading: loadingProducts } = useAsync<{ products: Product[] }>(
     () =>
       gql(PRODUCTS_QUERY, {
         status: statusFilter || undefined,
-        location: locationFilter || undefined,
+        locationId: locationFilter || undefined,
       }),
     [statusFilter, locationFilter],
   );
@@ -69,7 +71,7 @@ export function InventoryPage() {
 
   return (
     <div className="space-y-6 max-w-full">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Inventario</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
@@ -77,7 +79,13 @@ export function InventoryPage() {
           </p>
         </div>
         {canEdit && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" size="sm" asChild>
+              <Link to={ROUTES.LOCATIONS}>
+                <MapPin className="h-3.5 w-3.5" />
+                Ubicaciones
+              </Link>
+            </Button>
             <Button variant="secondary" size="sm" asChild>
               <Link to={`${ROUTES.INVENTORY}/nuevo-componente`}>
                 <Cpu className="h-3.5 w-3.5" />
@@ -117,14 +125,15 @@ export function InventoryPage() {
         </select>
         <select
           value={locationFilter}
-          onChange={(e) => setLocationFilter(e.target.value as Location | "")}
+          onChange={(e) => setLocationFilter(e.target.value)}
           className="h-10 rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer"
         >
           <option value="">Todas las ubicaciones</option>
-          <option value="Laboratorios">Laboratorios</option>
-          <option value="Salones">Salones</option>
-          <option value="Administración">Administración</option>
-          <option value="Otros">Otros</option>
+          {locations.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.name}
+            </option>
+          ))}
         </select>
       </div>
 

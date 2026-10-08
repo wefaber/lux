@@ -1,15 +1,21 @@
-import { KIND_MACHINE_CODE, LOCATION_CODES } from "./constants";
-import type { Location } from "./types";
+import { KIND_MACHINE_CODE } from "./constants";
 
 // Reglas de nomenclatura de equipos. Las usan el formulario (feedback por
 // campo) y los handlers (ultima barrera), para que no diverjan.
 
 export type FieldErrors<K extends string> = Partial<Record<K, string>>;
 
+/** Lo que la nomenclatura necesita saber de la ubicacion */
+export interface LocationRef {
+  name: string;
+  code: string;
+}
+
 export interface ProductFields {
   machineId: string;
   kind: string;
-  location: string;
+  /** undefined si el id de ubicacion no existe o fue dada de baja */
+  location: LocationRef | undefined;
   brand: string;
   model: string;
   serialNumber: string;
@@ -24,8 +30,14 @@ export interface ComponentFields {
   partNumber: string;
 }
 
-// {codigo de ubicacion}{n° de area}-{codigo de tipo}{n° correlativo}: L1-PC3, S1-PRY2
-const MACHINE_ID_PATTERN = /^([A-Z])(\d{1,2})-([A-Z]{2,3})(\d{1,3})$/;
+export interface LocationFields {
+  name: string;
+  code: string;
+}
+
+// {codigo de ubicacion}{n° de area}-{codigo de tipo}{n° correlativo}: L1-PC3, S1-PRY2, LAB2-PC1
+const MACHINE_ID_PATTERN = /^([A-Z]{1,3})(\d{1,2})-([A-Z]{2,3})(\d{1,3})$/;
+const LOCATION_CODE_PATTERN = /^[A-Z]{1,3}$/;
 const NAME_CHARS = /^[\p{L}\d .\-/+&()']+$/u;
 const CODE_PATTERN = /^[A-Z0-9][A-Z0-9\-/.]{2,39}$/i;
 const KEYBOARD_ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
@@ -45,15 +57,18 @@ function isKeyboardRun(word: string): boolean {
   return false;
 }
 
-export function machineIdPrefix(kind: string, location: string): string | null {
-  const locationCode = LOCATION_CODES[location as Location];
+export function machineIdPrefix(kind: string, locationCode: string | undefined): string | null {
   const kindCode = KIND_MACHINE_CODE[kind];
   return locationCode && kindCode ? `${locationCode}1-${kindCode}` : null;
 }
 
 // Proximo ID libre para el area 1 de la ubicacion, como sugerencia
-export function suggestMachineId(kind: string, location: string, taken: string[]): string | null {
-  const prefix = machineIdPrefix(kind, location);
+export function suggestMachineId(
+  kind: string,
+  locationCode: string | undefined,
+  taken: string[],
+): string | null {
+  const prefix = machineIdPrefix(kind, locationCode);
   if (!prefix) return null;
   const used = taken
     .filter((id) => id.startsWith(prefix))
@@ -65,18 +80,18 @@ export function suggestMachineId(kind: string, location: string, taken: string[]
 export function validateMachineId(
   machineId: string,
   kind: string,
-  location: string,
+  location: LocationRef | undefined,
 ): string | null {
   const id = machineId.trim().toUpperCase();
-  const locationCode = LOCATION_CODES[location as Location];
+  const locationCode = location?.code;
   const kindCode = KIND_MACHINE_CODE[kind];
-  if (!locationCode) return "Ubicación inválida";
+  if (!location || !locationCode) return "Ubicación inválida";
   if (!kindCode) return "Tipo de equipo inválido";
   const example = `${locationCode}1-${kindCode}1`;
   const match = MACHINE_ID_PATTERN.exec(id);
   if (!match) return `Formato inválido. Ej: ${example}`;
   if (match[1] !== locationCode) {
-    return `Un equipo en ${location} empieza con "${locationCode}". Ej: ${example}`;
+    return `Un equipo en ${location.name} empieza con "${locationCode}". Ej: ${example}`;
   }
   if (match[3] !== kindCode) return `Un ${kind} usa el código "${kindCode}". Ej: ${example}`;
   if (Number(match[2]) === 0 || Number(match[4]) === 0) return "Los números arrancan en 1";
@@ -124,6 +139,15 @@ export function validateProduct(p: ProductFields): FieldErrors<keyof ProductFiel
     ["model", validateName(p.model, "Modelo")],
     ["serialNumber", validateCode(p.serialNumber, "N° de serie")],
     ["partNumber", validateCode(p.partNumber, "Part number")],
+  ]);
+}
+
+// Ubicacion: nombre legible y codigo de 1 a 3 letras (arranca los IDs de maquina)
+export function validateLocation(l: LocationFields): FieldErrors<keyof LocationFields> {
+  const code = l.code.trim().toUpperCase();
+  return collect<keyof LocationFields>([
+    ["name", validateName(l.name, "Nombre")],
+    ["code", LOCATION_CODE_PATTERN.test(code) ? null : "Código: de 1 a 3 letras (ej: L, LAB)"],
   ]);
 }
 

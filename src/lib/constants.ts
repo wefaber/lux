@@ -6,7 +6,6 @@ import type {
   ServiceType,
   TicketCategory,
   UserRole,
-  Location,
 } from "./types";
 
 export const AUTH_STORAGE_KEY = "lux_auth"; // Clave de localStorage compartida entre useAuth y gql()
@@ -18,6 +17,7 @@ export const ROUTES = {
   DASHBOARD: "/dashboard",
   INVENTORY: "/dashboard/inventory",
   EQUIPMENT_STATUS: "/dashboard/equipment-status",
+  LOCATIONS: "/dashboard/locations",
   TICKETS: "/dashboard/tickets",
   LOANS: "/dashboard/loans",
   SERVICES: "/dashboard/service-requests",
@@ -117,15 +117,6 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   tecnico: "Técnico",
   solicitante: "Solicitante",
 }; // Labels de roles
-
-export const LOCATIONS: Location[] = ["Laboratorios", "Salones", "Administración", "Otros"];
-
-export const LOCATION_CODES: Record<Location, string> = {
-  Laboratorios: "L",
-  Salones: "S",
-  Administración: "A",
-  Otros: "O",
-};
 
 export const KIND_MACHINE_CODE: Record<string, string> = {
   AIO: "PC",

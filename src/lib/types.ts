@@ -12,7 +12,18 @@ export interface User {
 } // Interfaces de usuario
 
 export type EquipmentStatus = "available" | "in_use" | "in_repair" | "retired"; // Estado del equipamiento
-export type Location = "Laboratorios" | "Salones" | "Administración" | "Otros"; // Ubicacion del equipamiento
+
+export interface Location {
+  id: string;
+  name: string;
+  /** 1 a 3 letras: arranca el ID de maquina de sus equipos (L1-PC3) */
+  code: string;
+  /** Equipos activos en la ubicacion (calculado por el servidor) */
+  productCount: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+} // Ubicacion del equipamiento
 
 export interface Product {
   id: string;
@@ -25,7 +36,9 @@ export interface Product {
   partNumber: string;
   status: EquipmentStatus;
   issues: string | null;
-  location: Location;
+  locationId: string;
+  /** Nombre de la ubicacion, para mostrar; lo mantiene el servidor si se renombra */
+  location: string;
   components: Component[];
   createdAt: string;
   updatedAt: string;

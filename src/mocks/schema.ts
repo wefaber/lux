@@ -4,7 +4,7 @@ export const schema = `
     me: User
     users(role: String, isActive: Boolean): [User!]!
     user(id: ID!): User
-    products(status: String, location: String, deletedAt: String, availableForLoan: Boolean): [Product!]!
+    products(status: String, locationId: ID, deletedAt: String, availableForLoan: Boolean): [Product!]!
     product(id: ID!): Product
     productByMachineId(machineId: String!): Product
     components(productId: ID, isWorking: Boolean): [Component!]!
@@ -19,6 +19,7 @@ export const schema = `
     dashboardStats(period: String): DashboardStats!
     reports: Reports!
     activityLogs(userId: ID, operation: String, startDate: String, endDate: String): [ActivityLog!]!
+    locations: [Location!]!
   }
 
   type Mutation {
@@ -47,6 +48,19 @@ export const schema = `
     claimServiceRequest(id: ID!): ServiceRequest!
     assignServiceRequest(id: ID!, technicianId: ID!): ServiceRequest!
     changePassword(currentPassword: String!, newPassword: String!): Boolean!
+    createLocation(input: LocationInput!): Location!
+    updateLocation(id: ID!, input: LocationUpdateInput!): Location!
+    softDeleteLocation(id: ID!): Boolean!
+  }
+
+  type Location {
+    id: ID!
+    name: String!
+    code: String!
+    productCount: Int!
+    createdAt: String!
+    updatedAt: String!
+    deletedAt: String
   }
 
   type AuthUser {
@@ -83,6 +97,7 @@ export const schema = `
     partNumber: String!
     status: String!
     issues: String
+    locationId: ID!
     location: String!
     components: [Component!]!
     createdAt: String!
@@ -249,7 +264,7 @@ export const schema = `
     partNumber: String!
     status: String!
     issues: String
-    location: String!
+    locationId: ID!
   }
 
   input ProductUpdateInput {
@@ -260,7 +275,17 @@ export const schema = `
     serialNumber: String
     partNumber: String
     issues: String
-    location: String
+    locationId: ID
+  }
+
+  input LocationInput {
+    name: String!
+    code: String!
+  }
+
+  input LocationUpdateInput {
+    name: String
+    code: String
   }
 
   input ComponentUpdateInput {
