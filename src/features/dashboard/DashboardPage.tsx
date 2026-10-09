@@ -19,6 +19,7 @@ import { isStaff } from "@/lib/roles";
 import { MetricCard } from "./MetricCard";
 import { WorkQueue } from "./WorkQueue";
 import { RequesterHome } from "./RequesterHome";
+import { OptionSelect } from "@/components/ui/option-select";
 
 const DASHBOARD_QUERY = `
  query GetDashboardStats($period: String) {
@@ -104,18 +105,13 @@ function StaffDashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <select
+          <OptionSelect
             aria-label="Período"
+            size="sm"
             value={period}
-            onChange={(e) => setPeriod(e.target.value as DashboardPeriod)}
-            className="h-8 rounded-lg border border-input bg-card/50 px-3 text-xs text-foreground focus:outline-none focus:border-ring cursor-pointer"
-          >
-            {DASHBOARD_PERIODS.map((p) => (
-              <option key={p} value={p}>
-                {DASHBOARD_PERIOD_LABELS[p]}
-              </option>
-            ))}
-          </select>
+            onValueChange={(v) => setPeriod(v as DashboardPeriod)}
+            options={DASHBOARD_PERIODS.map((p) => ({ value: p, label: DASHBOARD_PERIOD_LABELS[p] }))}
+          />
           {hasRole("root_admin", "admin") && (
             <Button variant="secondary" size="sm" onClick={handleExport} disabled={!stats}>
               <Download className="h-3.5 w-3.5" />

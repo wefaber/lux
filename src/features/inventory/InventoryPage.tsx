@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { OptionSelect } from "@/components/ui/option-select";
 
 const PRODUCTS_QUERY = `
   query GetProducts($status: String, $locationId: ID) {
@@ -112,29 +113,27 @@ export function InventoryPage() {
             className="pl-9"
           />
         </div>
-        <select
+        <OptionSelect
+          aria-label="Filtrar por estado"
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as EquipmentStatus | "")}
-          className="h-10 rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer"
-        >
-          <option value="">Todos los estados</option>
-          <option value="available">Disponible</option>
-          <option value="in_use">En uso</option>
-          <option value="in_repair">En reparación</option>
-          <option value="retired">Dado de baja</option>
-        </select>
-        <select
+          onValueChange={(v) => setStatusFilter(v as EquipmentStatus | "")}
+          options={[
+            { value: "", label: "Todos los estados" },
+            ...Object.entries(EQUIPMENT_STATUS_CONFIG).map(([value, conf]) => ({
+              value,
+              label: conf.label,
+            })),
+          ]}
+        />
+        <OptionSelect
+          aria-label="Filtrar por ubicación"
           value={locationFilter}
-          onChange={(e) => setLocationFilter(e.target.value)}
-          className="h-10 rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer"
-        >
-          <option value="">Todas las ubicaciones</option>
-          {locations.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
-            </option>
-          ))}
-        </select>
+          onValueChange={setLocationFilter}
+          options={[
+            { value: "", label: "Todas las ubicaciones" },
+            ...locations.map((l) => ({ value: l.id, label: l.name })),
+          ]}
+        />
       </div>
 
       <Tabs defaultValue="products">
