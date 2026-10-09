@@ -53,7 +53,7 @@ const SERVICE_COLUMNS = [
 export function ServiceList() {
   const { user, hasRole } = useAuth(); // Verificacion de roles con Auth
   const [statusFilter, setStatusFilter] = useState<ServiceStatus | "">(""); // Obtencion de status para filtros
-  // "" todos, "none" sin asignar, o el id del responsable
+  // "" todos, el id propio (asignadas a mi) o "none" sin asignar
   const [assigneeFilter, setAssigneeFilter] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
@@ -69,12 +69,6 @@ export function ServiceList() {
   ); // Fetch y refetch de datos
 
   const allServices = data?.serviceRequests ?? [];
-  const assignees = [
-    ...new Map(
-      allServices.flatMap((s) => (s.assignedTo ? [[s.assignedTo.id, s.assignedTo]] : [])),
-    ).values(),
-  ].toSorted((a, b) => a.name.localeCompare(b.name));
-
   const term = search.trim().toLowerCase();
   const idTerm = idQuery(term, "svc");
   const matchesId = (s: ServiceRequest) => idTerm !== null && s.id.toLowerCase().includes(idTerm);
@@ -164,11 +158,8 @@ export function ServiceList() {
               }}
               options={[
                 { value: "", label: "Todos los responsables" },
-                { value: "none", label: "Sin asignar" },
                 ...(user ? [{ value: user.id, label: "Asignadas a mí" }] : []),
-                ...assignees
-                  .filter((a) => a.id !== user?.id)
-                  .map((a) => ({ value: a.id, label: a.name })),
+                { value: "none", label: "Sin asignar" },
               ]}
             />
           )}
