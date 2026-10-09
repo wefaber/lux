@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { gql, formatDate } from "@/lib/utils";
-import { SERVICE_STATUS_CONFIG, SERVICE_TYPE_LABELS, ROUTES, ROLE_LABELS } from "@/lib/constants";
+import { SERVICE_STATUS_CONFIG, SERVICE_TYPE_LABELS, ROUTES } from "@/lib/constants";
 import type { ServiceRequest, ServiceStatus, User } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -151,7 +151,9 @@ export function ServiceDetail() {
           className="grid gap-4 xl:grid-cols-[minmax(0,42rem)_minmax(0,1fr)]"
         >
           <div className="space-y-4 min-w-0">
-            <Card>
+            {/* Por encima de "Actualizar estado": la lista del buscador de responsable
+                se despliega sobre esa tarjeta y no debajo de ella */}
+            <Card className="relative z-10">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>{SERVICE_TYPE_LABELS[service.type]}</CardTitle>
@@ -183,7 +185,7 @@ export function ServiceDetail() {
                     </label>
                     {canManage && !isClosed ? (
                       // Al salir del campo sin elegir a nadie vuelve a mostrar el asignado
-                      <div onBlur={() => setAssigneeSearch(null)}>
+                      <div className="max-w-60" onBlur={() => setAssigneeSearch(null)}>
                         <SearchSelect
                           id="service-assignee"
                           items={technicians}
@@ -199,15 +201,12 @@ export function ServiceDetail() {
                             }
                           }}
                           getKey={(t) => t.id}
-                          getLabel={(t) => t.name}
+                          getLabel={(t) => `${t.name} · ${t.dni}`}
                           getSearchText={(t) => `${t.name} ${t.dni}`}
                           placeholder="Buscar por nombre o cédula..."
                           renderOption={(t) => (
                             <>
                               <span className="text-foreground">{t.name}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {ROLE_LABELS[t.role]}
-                              </span>
                               <span className="ml-auto font-mono text-xs text-muted-foreground">
                                 {t.dni}
                               </span>
