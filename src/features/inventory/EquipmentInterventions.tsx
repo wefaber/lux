@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { OptionSelect } from "@/components/ui/option-select";
 
 const INTERVENTIONS_QUERY = `
   query GetInterventions($equipmentId: ID!) {
@@ -41,8 +42,6 @@ const UPDATE_MUTATION = `
   mutation UpdateIntervention($id: ID!, $input: InterventionUpdateInput!) { updateIntervention(id: $id, input: $input) { id } }
 `;
 
-const SELECT_CLASS =
-  "flex h-10 w-full rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring";
 
 interface EquipmentInterventionsProps {
   equipmentId: string;
@@ -235,19 +234,17 @@ function InterventionForm({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="int-type">Tipo</Label>
-            <select
+            <OptionSelect
               id="int-type"
+              className="w-full"
               value={form.type}
-              onChange={(e) => update("type", e.target.value as InterventionType | "")}
-              className={SELECT_CLASS}
-            >
-              <option value="">Elegí un tipo</option>
-              {Object.entries(INTERVENTION_TYPE_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
+              onValueChange={(v) => update("type", v as InterventionType | "")}
+              placeholder="Elegí un tipo"
+              options={Object.entries(INTERVENTION_TYPE_LABELS).map(([value, label]) => ({
+                value,
+                label,
+              }))}
+            />
             {fieldError("type")}
           </div>
           <div className="space-y-1.5">
@@ -285,19 +282,16 @@ function InterventionForm({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="int-ticket">Ticket de origen (opcional)</Label>
-          <select
+          <OptionSelect
             id="int-ticket"
+            className="w-full"
             value={form.ticketId}
-            onChange={(e) => update("ticketId", e.target.value)}
-            className={SELECT_CLASS}
-          >
-            <option value="">Sin ticket: intervención directa sobre el equipo</option>
-            {tickets.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.id} · {t.title}
-              </option>
-            ))}
-          </select>
+            onValueChange={(v) => update("ticketId", v)}
+            options={[
+              { value: "", label: "Sin ticket: intervención directa sobre el equipo" },
+              ...tickets.map((t) => ({ value: t.id, label: `${t.id} · ${t.title}` })),
+            ]}
+          />
         </div>
         {error && (
           <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">

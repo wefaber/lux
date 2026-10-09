@@ -1506,7 +1506,21 @@ export const handlers = [
     reservation.status = "cancelled";
     reservation.cancelledBy = caller;
     reservation.updatedAt = new Date().toISOString();
+    // Quien la aprobo no se entera de otra forma: le queda fijada con aviso
+    reservation.unseenCancellation = reservation.reviewedBy !== null;
     return HttpResponse.json({ data: { cancelReservation: reservation } });
+  }),
+
+  // Quien aprobo la reserva marca como vista la cancelacion: se desfija
+  graphql.mutation("AcknowledgeReservationCancellation", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    const { id } = variables as { id: string };
+    const reservation = mockReservations.find((r) => r.id === id);
+    if (!reservation) return HttpResponse.json({ errors: [{ message: "Reserva no encontrada" }] });
+    if (reservation.reviewedBy?.id !== caller.id) return HttpResponse.json(FORBIDDEN);
+    reservation.unseenCancellation = false;
+    return HttpResponse.json({ data: { acknowledgeReservationCancellation: { id } } });
   }),
 
   // ── Comentarios ────────────────────────────────────────────────────────────

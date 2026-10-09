@@ -29,6 +29,10 @@ import {
 } from "@/components/ui/select";
 import { QrScanner } from "@/components/ui/QrScanner";
 import { SearchSelect } from "@/components/ui/search-select";
+import { OptionSelect } from "@/components/ui/option-select";
+import { Pagination, clampPage } from "@/components/ui/pagination";
+import { PinMark, pinRowClass } from "@/components/ui/pin";
+import { idQuery, pinnedFirst, ticketPin } from "@/lib/pins";
 
 const TICKETS_QUERY = `
   query GetTickets($submittedById: ID) {
@@ -55,10 +59,14 @@ const CREATE_TICKET_MUTATION = `
   }
 `;
 
+// Tickets por pagina
+const PAGE_SIZE = 10;
+
 export function TicketList() {
   const { user, hasRole } = useAuth();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TicketStatus | "">("");
+  const [page, setPage] = useState(0);
   // ?nuevo=1 abre el formulario y ?equipo=<id> lo trae elegido (accesos del inicio)
   const [searchParams] = useSearchParams();
   const [createOpen, setCreateOpen] = useState(() => searchParams.get("nuevo") === "1");
@@ -85,11 +93,28 @@ export function TicketList() {
   const selectedProduct = products.find((p) => p.id === form.equipmentId) ?? null;
 
 
-  const tickets = (data?.tickets ?? []).filter((t) => {
-    const matchSearch = !search || t.title.toLowerCase().includes(search.toLowerCase());
+  const term = search.trim().toLowerCase();
+  const idTerm = idQuery(term, "tkt");
+  const matchesId = (t: Ticket) => idTerm !== null && t.id.toLowerCase().includes(idTerm);
+  const pin = (t: Ticket) => ticketPin(t, user?.id);
+
+  const matching = (data?.tickets ?? []).filter((t) => {
+    const matchSearch = !term || t.title.toLowerCase().includes(term) || matchesId(t);
     const matchStatus = !statusFilter || t.status === statusFilter;
     return matchSearch && matchStatus;
   }); // Comprueba que los tickets mostrados matcheen con los filtros
+
+  // Al staff los resueltos no le aparecen en la lista del dia a dia: se ven
+  // filtrando por estado o buscandolos por su ID. El solicitante ve todos los suyos
+  const hideResolved = !isSolicitante && !statusFilter;
+  const tickets = pinnedFirst(
+    hideResolved ? matching.filter((t) => t.status !== "resolved" || matchesId(t)) : matching,
+    pin,
+  );
+  const hiddenResolved = matching.length - tickets.length;
+
+  const current = clampPage(page, tickets.length, PAGE_SIZE);
+  const visible = tickets.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
 
   const handleCreate = async () => {
     if (!form.title.trim() || !form.description.trim()) return;
@@ -121,7 +146,7 @@ export function TicketList() {
   const showSkeleton = isLoading && !data;
 
   return (
-    <div className="space-y-6 max-w-full">
+    <div className="space-y-3 max-w-full">
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Tickets</h1>
@@ -148,24 +173,41 @@ export function TicketList() {
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute z-10 left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar tickets..."
+            placeholder="Buscar por título o ID (tkt-007)..."
+            aria-label="Buscar tickets por título o ID"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(0);
+            }}
             className="pl-9"
           />
         </div>
-        <select
+        <OptionSelect
+          aria-label="Filtrar por estado"
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as TicketStatus | "")}
-          className="h-10 rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer"
-        >
-          <option value="">Todos los estados</option>
-          <option value="pending">Pendiente</option>
-          <option value="in_progress">En progreso</option>
-          <option value="in_resolution">En resolución</option>
-          <option value="resolved">Resuelto</option>
-        </select>
+          onValueChange={(v) => {
+            setStatusFilter(v as TicketStatus | "");
+            setPage(0);
+          }}
+          options={[
+            { value: "", label: "Todos los estados" },
+            ...Object.entries(TICKET_STATUS_CONFIG).map(([value, conf]) => ({
+              value,
+              label: conf.label,
+            })),
+          ]}
+        />
       </div>
+
+      {hiddenResolved > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {hiddenResolved === 1
+            ? "1 ticket resuelto no se muestra."
+            : `${hiddenResolved} tickets resueltos no se muestran.`}{" "}
+          Para verlos, filtrá por estado «Resuelto» o buscalos por su ID.
+        </p>
+      )}
 
       {error && (
         <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
@@ -176,7 +218,9 @@ export function TicketList() {
       {showSkeleton ? (
         <TableSkeleton rows={8} cols={5} />
       ) : tickets.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground text-sm">No hay tickets</div>
+        <div className="text-center py-16 text-muted-foreground text-sm">
+          {hiddenResolved > 0 ? "No hay tickets abiertos" : "No hay tickets"}
+        </div>
       ) : (
         <div
           className={cn(
@@ -191,7 +235,7 @@ export function TicketList() {
                   (h) => (
                     <th
                       key={h}
-                      className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                      className="px-4 py-2 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                     >
                       {h}
                     </th>
@@ -200,15 +244,22 @@ export function TicketList() {
               </tr>
             </thead>
             <tbody>
-              {tickets.map((t) => {
+              {visible.map((t) => {
                 const statusConf = TICKET_STATUS_CONFIG[t.status];
+                const pinState = pin(t);
                 return (
                   <tr
                     key={t.id}
-                    className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                    className={cn(
+                      "border-b border-border last:border-0 transition-colors",
+                      pinRowClass(pinState),
+                    )}
                   >
-                    <td className="px-4 py-3 text-xs text-muted-foreground font-mono">{t.id}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-2 text-xs text-muted-foreground font-mono">
+                      <PinMark state={pinState} />
+                      {t.id}
+                    </td>
+                    <td className="px-4 py-2 min-w-48 max-w-72 whitespace-normal">
                       <Link
                         to={`${ROUTES.TICKETS}/${t.id}`}
                         className="text-sm font-semibold text-foreground hover:underline"
@@ -216,21 +267,21 @@ export function TicketList() {
                         {truncate(t.title, 48)}
                       </Link>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-2">
                       <Badge color={statusConf.color} withDot>
                         {statusConf.label}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
+                    <td className="px-4 py-2 text-sm text-muted-foreground font-medium">
                       {TICKET_CATEGORY_LABELS[t.category]}
                     </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
+                    <td className="px-4 py-2 text-sm text-muted-foreground font-medium whitespace-normal">
                       {t.assignedTo?.name ?? "—"}
                     </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
+                    <td className="px-4 py-2 text-sm text-muted-foreground font-medium whitespace-normal">
                       {t.submittedBy.name}
                     </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                    <td className="px-4 py-2 text-xs text-muted-foreground">
                       {formatDate(t.createdAt)}
                     </td>
                   </tr>
@@ -240,6 +291,8 @@ export function TicketList() {
           </table>
         </div>
       )}
+
+      <Pagination page={current} pageSize={PAGE_SIZE} total={tickets.length} onPageChange={setPage} />
 
       <AnimatePresence>
         {createOpen && (
