@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { gql, formatDate } from "@/lib/utils";
-import { SERVICE_STATUS_CONFIG, SERVICE_TYPE_LABELS, ROUTES } from "@/lib/constants";
+import { SERVICE_STATUS_CONFIG, SERVICE_TYPE_LABELS, ROUTES, ROLE_LABELS } from "@/lib/constants";
 import type { ServiceRequest, ServiceStatus, User } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -201,14 +201,20 @@ export function ServiceDetail() {
                             }
                           }}
                           getKey={(t) => t.id}
-                          getLabel={(t) => `${t.name} · ${t.dni}`}
+                          getLabel={(t) => `${t.dni} · ${t.name}`}
                           getSearchText={(t) => `${t.name} ${t.dni}`}
                           placeholder="Buscar por nombre o cédula..."
+                          // Como el equipo al crear un ticket: la cedula resaltada, el
+                          // nombre y el rol a la derecha. La lista es mas ancha que el campo
+                          listClassName="w-max min-w-full max-w-[min(26rem,80vw)] right-auto"
                           renderOption={(t) => (
                             <>
-                              <span className="text-foreground">{t.name}</span>
-                              <span className="ml-auto font-mono text-xs text-muted-foreground">
+                              <span className="font-mono text-xs text-primary font-semibold">
                                 {t.dni}
+                              </span>
+                              <span className="text-muted-foreground">{t.name}</span>
+                              <span className="ml-auto pl-4 text-xs text-muted-foreground">
+                                {ROLE_LABELS[t.role]}
                               </span>
                             </>
                           )}
