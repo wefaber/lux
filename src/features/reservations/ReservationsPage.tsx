@@ -86,9 +86,7 @@ export function ReservationsPage() {
   // Mismas reglas que el servidor: el solicitante cancela lo suyo antes de que
   // empiece; el staff gestiona todo y tambien corta una reserva en curso
   const canCancel = (r: Reservation) =>
-    staff
-      ? ["pending", "approved", "active"].includes(r.status)
-      : r.user.id === user?.id && ["pending", "approved"].includes(r.status);
+    r.user.id === user?.id && ["pending", "approved"].includes(r.status);
 
   // Columnas compactas para que la tabla entre entera en escritorio: el ID va
   // debajo del recurso y desde/hasta comparten una columna de horario
