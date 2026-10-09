@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   AnimatePresence,
   Dialog,
@@ -85,20 +86,11 @@ export function ReservationsPage() {
   // Mismas reglas que el servidor: el solicitante cancela lo suyo antes de que
   // empiece; el staff gestiona todo y tambien corta una reserva en curso
   const canCancel = (r: Reservation) =>
-    staff
-      ? ["pending", "approved", "active"].includes(r.status)
-      : r.user.id === user?.id && ["pending", "approved"].includes(r.status);
+    r.user.id === user?.id && ["pending", "approved"].includes(r.status);
 
-  const columns = [
-    "ID",
-    "Recurso",
-    ...(staff ? ["Solicitante"] : []),
-    "Desde",
-    "Hasta",
-    "Motivo",
-    "Estado",
-    "",
-  ];
+  // Columnas compactas para que la tabla entre entera en escritorio: el ID va
+  // debajo del recurso y desde/hasta comparten una columna de horario
+  const columns = ["Recurso", ...(staff ? ["Solicitante"] : []), "Horario", "Motivo", "Estado", ""];
 
   return (
     <div className="space-y-6 max-w-full">
@@ -150,6 +142,7 @@ export function ReservationsPage() {
             isLoading && "opacity-75 pointer-events-none",
           )}
         >
+          <TooltipProvider delayDuration={200}>
           <table className="w-full">
             <thead>
               <tr className="border-b border-border">
@@ -173,26 +166,24 @@ export function ReservationsPage() {
                     key={r.id}
                     className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                   >
-                    <td className="px-4 py-3 text-xs text-muted-foreground font-mono">{r.id}</td>
-                    <td className="px-4 py-3 text-sm font-semibold text-foreground">
-                      <span className="inline-flex items-center gap-2">
-                        <ResourceIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                    <td className="px-4 py-3 min-w-36 max-w-60 whitespace-normal">
+                      <span className="flex items-start gap-2 text-sm font-semibold text-foreground">
+                        <ResourceIcon className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
                         {resourceName(r)}
+                      </span>
+                      <span className="block pl-5.5 font-mono text-xs text-muted-foreground">
+                        {r.id}
                       </span>
                     </td>
                     {staff && (
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{r.user.name}</td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground whitespace-normal">
+                        {r.user.name}
+                      </td>
                     )}
                     <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {formatDateTime(r.startsAt)}
+                      <ReservationSchedule startsAt={r.startsAt} endsAt={r.endsAt} />
                     </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {formatDateTime(r.endsAt)}
-                    </td>
-                    <td
-                      className="px-4 py-3 text-sm text-foreground min-w-48 max-w-xs whitespace-normal"
-                      title={r.purpose}
-                    >
+                    <td className="px-4 py-3 text-sm text-foreground min-w-36 max-w-64 whitespace-normal">
                       {r.purpose}
                     </td>
                     <td className="px-4 py-3">
@@ -200,61 +191,54 @@ export function ReservationsPage() {
                         {statusConf.label}
                       </Badge>
                       {r.status === "rejected" && r.rejectionReason && (
-                        <p className="text-xs text-muted-foreground mt-1 max-w-56 whitespace-normal">
+                        <p className="text-xs text-muted-foreground mt-1 max-w-48 whitespace-normal">
                           {r.rejectionReason}
                         </p>
                       )}
                       {r.status === "cancelled" && r.cancelledBy && (
-                        <p className="text-xs text-muted-foreground mt-1">
+                        <p className="text-xs text-muted-foreground mt-1 max-w-48 whitespace-normal">
                           Cancelada por {r.cancelledBy.name}
                         </p>
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex justify-end gap-1.5">
+                      {/* Acciones con icono y su nombre en el tooltip: entran en una fila
+                          sin ensanchar la tabla */}
+                      <div className="flex justify-end gap-1">
                         {staff && r.status === "pending" && (
                           <>
-                            <Button
-                              size="sm"
-                              variant="secondary"
+                            <IconAction
+                              label="Aprobar"
+                              icon={CheckCircle}
+                              variant="success"
                               disabled={busy}
                               onClick={() => approve(r.id)}
-                            >
-                              <CheckCircle className="h-3.5 w-3.5" />
-                              Aprobar
-                            </Button>
-                            <Button
-                              size="sm"
+                            />
+                            <IconAction
+                              label="Rechazar"
+                              icon={XCircle}
                               variant="destructive"
                               disabled={busy}
                               onClick={() => setRejecting(r)}
-                            >
-                              <XCircle className="h-3.5 w-3.5" />
-                              Rechazar
-                            </Button>
+                            />
                           </>
                         )}
                         {staff && (r.status === "pending" || r.status === "approved") && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
+                          <IconAction
+                            label="Modificar"
+                            icon={CalendarClock}
                             disabled={busy}
                             onClick={() => setEditing(r)}
-                          >
-                            <CalendarClock className="h-3.5 w-3.5" />
-                            Modificar
-                          </Button>
+                          />
                         )}
                         {canCancel(r) && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
+                          <IconAction
+                            label="Cancelar"
+                            icon={Ban}
+                            variant="destructive"
                             disabled={busy}
                             onClick={() => setCancelling(r)}
-                          >
-                            <Ban className="h-3.5 w-3.5" />
-                            Cancelar
-                          </Button>
+                          />
                         )}
                       </div>
                     </td>
@@ -263,6 +247,7 @@ export function ReservationsPage() {
               })}
             </tbody>
           </table>
+          </TooltipProvider>
         </div>
       )}
 
@@ -293,6 +278,66 @@ export function ReservationsPage() {
         onCancel={() => setCancelling(null)}
       />
     </div>
+  );
+}
+
+interface IconActionProps {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  variant?: "success" | "destructive" | "ghost";
+  disabled?: boolean;
+  onClick: () => void;
+}
+
+// Boton de accion de una fila: solo el icono, con el nombre en el tooltip y
+// para lectores de pantalla
+function IconAction({ label, icon: Icon, variant = "ghost", disabled, onClick }: IconActionProps) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          size="sm"
+          variant={variant}
+          className="h-8 w-8 px-0"
+          aria-label={label}
+          disabled={disabled}
+          onClick={onClick}
+        >
+          <Icon className="h-4 w-4" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function day(d: Date): string {
+  return d.toLocaleDateString("es-UY", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function time(d: Date): string {
+  return d.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+// Mismo dia: la fecha y debajo el rango de horas. Varios dias: inicio y fin.
+function ReservationSchedule({ startsAt, endsAt }: { startsAt: string; endsAt: string }) {
+  const start = new Date(startsAt);
+  const end = new Date(endsAt);
+  if (day(start) === day(end)) {
+    return (
+      <span className="block leading-relaxed">
+        {day(start)}
+        <span className="block text-foreground font-medium">
+          {time(start)} – {time(end)}
+        </span>
+      </span>
+    );
+  }
+  return (
+    <span className="block leading-relaxed">
+      {day(start)} {time(start)}
+      <span className="block">→ {day(end)} {time(end)}</span>
+    </span>
   );
 }
 

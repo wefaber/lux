@@ -1495,13 +1495,10 @@ export const handlers = [
     const { id } = variables as { id: string };
     const reservation = mockReservations.find((r) => r.id === id);
     if (!reservation) return HttpResponse.json({ errors: [{ message: "Reserva no encontrada" }] });
-    const staff = isStaff(caller);
-    if (!staff && reservation.user.id !== caller.id) return HttpResponse.json(FORBIDDEN);
-    // El solicitante cancela lo que todavia no empezo; el staff, tambien lo que esta en curso
-    const cancellable: ReservationStatus[] = staff
-      ? ["pending", "approved", "active"]
-      : ["pending", "approved"];
-    if (!cancellable.includes(reservation.status)) {
+    // Solo quien la pidio la cancela, y antes de que empiece. El staff aprueba,
+    // rechaza o modifica, pero no cancela reservas ajenas
+    if (reservation.user.id !== caller.id) return HttpResponse.json(FORBIDDEN);
+    if (reservation.status !== "pending" && reservation.status !== "approved") {
       return HttpResponse.json({
         errors: [{ message: invalidReservationTransition(reservation, "cancelar") }],
       });
