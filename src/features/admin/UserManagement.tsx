@@ -103,7 +103,7 @@ export function UserManagement() {
                 {["Nombre", "Cédula", "Email", "Rol", "Estado", "Acciones"].map((h) => (
                   <th
                     key={h}
-                    className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                   >
                     {h}
                   </th>
@@ -116,10 +116,10 @@ export function UserManagement() {
                   key={u.id}
                   className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                 >
-                  <td className="px-6 py-4 text-sm font-semibold text-foreground">{u.name}</td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground font-mono">{u.dni}</td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground">{u.email}</td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3 text-sm font-semibold text-foreground">{u.name}</td>
+                  <td className="px-4 py-3 text-sm text-muted-foreground font-mono">{u.dni}</td>
+                  <td className="px-4 py-3 text-sm text-muted-foreground">{u.email}</td>
+                  <td className="px-4 py-3">
                     <Badge
                       color={
                         u.role === "root_admin"
@@ -134,12 +134,12 @@ export function UserManagement() {
                       {ROLE_LABELS[u.role]}
                     </Badge>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3">
                     <Badge color={u.isActive ? "success" : "destructive"} withDot={u.isActive}>
                       {u.isActive ? "Activo" : "Inactivo"}
                     </Badge>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3">
                     <div className="flex gap-2">
                       <Button size="sm" variant="ghost" onClick={() => setEditUser(u)}>
                         Editar

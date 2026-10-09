@@ -12,7 +12,23 @@ export interface User {
 } // Interfaces de usuario
 
 export type EquipmentStatus = "available" | "in_use" | "in_repair" | "retired"; // Estado del equipamiento
-export type Location = "Laboratorios" | "Salones" | "Administración" | "Otros"; // Ubicacion del equipamiento
+
+export type LocationKind = "laboratory" | "classroom" | "administration" | "other"; // Tipo de ubicacion
+
+export interface Location {
+  id: string;
+  kind: LocationKind;
+  /** Numero dentro de su tipo: Laboratorio 1, Laboratorio 2... */
+  number: number;
+  name: string;
+  /** Letra del tipo + numero (L1 = Laboratorio 1): arranca el ID de sus equipos, L1-PC3 */
+  code: string;
+  /** Equipos activos en la ubicacion (calculado por el servidor) */
+  productCount: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+} // Ubicacion del equipamiento
 
 export interface Product {
   id: string;
@@ -25,7 +41,9 @@ export interface Product {
   partNumber: string;
   status: EquipmentStatus;
   issues: string | null;
-  location: Location;
+  locationId: string;
+  /** Nombre de la ubicacion, para mostrar; lo mantiene el servidor si se renombra */
+  location: string;
   components: Component[];
   createdAt: string;
   updatedAt: string;
@@ -107,6 +125,68 @@ export interface ServiceRequest {
   createdAt: string;
   updatedAt: string;
 } // Interfaz de servicio
+
+export type InterventionType =
+  | "preventive_maintenance"
+  | "corrective_repair"
+  | "component_replacement"
+  | "cleaning"
+  | "software_update"
+  | "other"; // Tipo de trabajo hecho sobre un equipo
+
+export interface Intervention {
+  id: string;
+  equipmentId: string;
+  technician: User;
+  type: InterventionType;
+  description: string;
+  partsReplaced: string | null;
+  /** Ticket del que surgio, si surgio de uno */
+  ticketId: string | null;
+  performedAt: string;
+  createdAt: string;
+  updatedAt: string;
+} // Intervencion registrada sobre un equipo, con o sin ticket
+
+export type ReservationStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "active"
+  | "completed"
+  | "cancelled"; // pending -> approved | rejected -> active -> completed | cancelled
+export type ReservationResource = "equipment" | "location"; // Un equipo o un espacio
+
+export interface Reservation {
+  id: string;
+  resourceType: ReservationResource;
+  /** El equipo reservado (si resourceType es equipment) */
+  equipment: Product | null;
+  /** El espacio reservado (si resourceType es location) */
+  location: Location | null;
+  user: User;
+  purpose: string;
+  startsAt: string;
+  endsAt: string;
+  status: ReservationStatus;
+  /** Quien la aprobo o rechazo */
+  reviewedBy: User | null;
+  rejectionReason: string | null;
+  cancelledBy: User | null;
+  createdAt: string;
+  updatedAt: string;
+} // Reserva de un equipo o espacio por un rango de fechas
+
+export type CommentEntity = "ticket" | "service_request"; // Que se puede comentar
+
+export interface Comment {
+  id: string;
+  entityType: CommentEntity;
+  entityId: string;
+  author: User;
+  body: string;
+  createdAt: string;
+} // Comentario en el hilo de un ticket o solicitud
 
 export interface ActivityLog {
   id: string;

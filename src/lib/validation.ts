@@ -1,15 +1,22 @@
-import { KIND_MACHINE_CODE, LOCATION_CODES } from "./constants";
-import type { Location } from "./types";
+import { INTERVENTION_TYPE_LABELS, KIND_MACHINE_CODE, LOCATION_KIND_LETTER } from "./constants";
+import type { LocationKind } from "./types";
 
 // Reglas de nomenclatura de equipos. Las usan el formulario (feedback por
 // campo) y los handlers (ultima barrera), para que no diverjan.
 
 export type FieldErrors<K extends string> = Partial<Record<K, string>>;
 
+/** Lo que la nomenclatura necesita saber de la ubicacion */
+export interface LocationRef {
+  name: string;
+  code: string;
+}
+
 export interface ProductFields {
   machineId: string;
   kind: string;
-  location: string;
+  /** undefined si el id de ubicacion no existe o fue dada de baja */
+  location: LocationRef | undefined;
   brand: string;
   model: string;
   serialNumber: string;
@@ -24,8 +31,30 @@ export interface ComponentFields {
   partNumber: string;
 }
 
-// {codigo de ubicacion}{n° de area}-{codigo de tipo}{n° correlativo}: L1-PC3, S1-PRY2
-const MACHINE_ID_PATTERN = /^([A-Z])(\d{1,2})-([A-Z]{2,3})(\d{1,3})$/;
+export interface InterventionFields {
+  type: string;
+  description: string;
+  partsReplaced: string | null;
+  performedAt: string;
+}
+
+export interface LocationFields {
+  kind: string;
+  number: number;
+  name: string;
+}
+
+// {codigo de ubicacion}-{codigo de tipo}{n° correlativo}: L1-PC3 es la PC 3 del
+// Laboratorio 1, S2-PRY1 el proyector 1 del Salon 2
+const MACHINE_ID_PATTERN = /^([A-Z]\d{1,2})-([A-Z]{2,3})(\d{1,3})$/;
+
+// Letra del tipo + numero: Laboratorio 1 -> L1
+export function locationCode(kind: string, number: number): string | null {
+  const letter = LOCATION_KIND_LETTER[kind as LocationKind];
+  return letter && Number.isInteger(number) && number >= 1 && number <= 99
+    ? `${letter}${number}`
+    : null;
+}
 const NAME_CHARS = /^[\p{L}\d .\-/+&()']+$/u;
 const CODE_PATTERN = /^[A-Z0-9][A-Z0-9\-/.]{2,39}$/i;
 const KEYBOARD_ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
@@ -45,15 +74,18 @@ function isKeyboardRun(word: string): boolean {
   return false;
 }
 
-export function machineIdPrefix(kind: string, location: string): string | null {
-  const locationCode = LOCATION_CODES[location as Location];
+export function machineIdPrefix(kind: string, code: string | undefined): string | null {
   const kindCode = KIND_MACHINE_CODE[kind];
-  return locationCode && kindCode ? `${locationCode}1-${kindCode}` : null;
+  return code && kindCode ? `${code}-${kindCode}` : null;
 }
 
 // Proximo ID libre para el area 1 de la ubicacion, como sugerencia
-export function suggestMachineId(kind: string, location: string, taken: string[]): string | null {
-  const prefix = machineIdPrefix(kind, location);
+export function suggestMachineId(
+  kind: string,
+  code: string | undefined,
+  taken: string[],
+): string | null {
+  const prefix = machineIdPrefix(kind, code);
   if (!prefix) return null;
   const used = taken
     .filter((id) => id.startsWith(prefix))
@@ -65,21 +97,21 @@ export function suggestMachineId(kind: string, location: string, taken: string[]
 export function validateMachineId(
   machineId: string,
   kind: string,
-  location: string,
+  location: LocationRef | undefined,
 ): string | null {
   const id = machineId.trim().toUpperCase();
-  const locationCode = LOCATION_CODES[location as Location];
+  const code = location?.code;
   const kindCode = KIND_MACHINE_CODE[kind];
-  if (!locationCode) return "Ubicación inválida";
+  if (!location || !code) return "Ubicación inválida";
   if (!kindCode) return "Tipo de equipo inválido";
-  const example = `${locationCode}1-${kindCode}1`;
+  const example = `${code}-${kindCode}1`;
   const match = MACHINE_ID_PATTERN.exec(id);
   if (!match) return `Formato inválido. Ej: ${example}`;
-  if (match[1] !== locationCode) {
-    return `Un equipo en ${location} empieza con "${locationCode}". Ej: ${example}`;
+  if (match[1] !== code) {
+    return `Un equipo en ${location.name} empieza con "${code}-". Ej: ${example}`;
   }
-  if (match[3] !== kindCode) return `Un ${kind} usa el código "${kindCode}". Ej: ${example}`;
-  if (Number(match[2]) === 0 || Number(match[4]) === 0) return "Los números arrancan en 1";
+  if (match[2] !== kindCode) return `Un ${kind} usa el código "${kindCode}". Ej: ${example}`;
+  if (Number(match[3]) === 0) return "Los números arrancan en 1";
   return null;
 }
 
@@ -124,6 +156,107 @@ export function validateProduct(p: ProductFields): FieldErrors<keyof ProductFiel
     ["model", validateName(p.model, "Modelo")],
     ["serialNumber", validateCode(p.serialNumber, "N° de serie")],
     ["partNumber", validateCode(p.partNumber, "Part number")],
+  ]);
+}
+
+// Ubicacion: nombre legible y codigo de 1 a 3 letras (arranca los IDs de maquina)
+export function validateLocation(l: LocationFields): FieldErrors<keyof LocationFields> {
+  return collect<keyof LocationFields>([
+    ["kind", l.kind in LOCATION_KIND_LETTER ? null : "Elegí el tipo de ubicación"],
+    [
+      "number",
+      Number.isInteger(l.number) && l.number >= 1 && l.number <= 99
+        ? null
+        : "Número: entero entre 1 y 99",
+    ],
+    ["name", validateName(l.name, "Nombre")],
+  ]);
+}
+
+export interface ReservationFields {
+  startsAt: string;
+  endsAt: string;
+  purpose: string;
+}
+
+const MAX_RESERVATION_DAYS = 14;
+
+// Reserva: rango que empieza en el futuro, termina despues de empezar y no se
+// extiende mas de dos semanas, con un motivo que se entienda
+export function validateReservation(
+  r: ReservationFields,
+  now: number = Date.now(),
+): FieldErrors<keyof ReservationFields> {
+  const start = new Date(r.startsAt).getTime();
+  const end = new Date(r.endsAt).getTime();
+  const purpose = r.purpose.trim();
+  return collect<keyof ReservationFields>([
+    [
+      "startsAt",
+      Number.isNaN(start)
+        ? "Fecha de inicio inválida"
+        : start < now - 60_000
+          ? "La reserva no puede empezar en el pasado"
+          : null,
+    ],
+    [
+      "endsAt",
+      Number.isNaN(end)
+        ? "Fecha de fin inválida"
+        : !Number.isNaN(start) && end <= start
+          ? "El fin tiene que ser posterior al inicio"
+          : !Number.isNaN(start) && end - start > MAX_RESERVATION_DAYS * 86_400_000
+            ? `Una reserva dura como máximo ${MAX_RESERVATION_DAYS} días`
+            : null,
+    ],
+    [
+      "purpose",
+      purpose.length < 5
+        ? "Motivo: mínimo 5 caracteres"
+        : purpose.length > 300
+          ? "Motivo: máximo 300 caracteres"
+          : null,
+    ],
+  ]);
+}
+
+// Comentario: ni vacio ni un texto interminable
+export function validateComment(body: string): string | null {
+  const text = body.trim();
+  if (!text) return "El comentario no puede estar vacío";
+  if (text.length > 1000) return "El comentario no puede superar los 1000 caracteres";
+  return null;
+}
+
+// Intervencion: tipo conocido, descripcion util y fecha que ya paso
+export function validateIntervention(
+  i: InterventionFields,
+  now: number = Date.now(),
+): FieldErrors<keyof InterventionFields> {
+  const description = i.description.trim();
+  const performedAt = new Date(i.performedAt).getTime();
+  return collect<keyof InterventionFields>([
+    ["type", i.type in INTERVENTION_TYPE_LABELS ? null : "Elegí el tipo de intervención"],
+    [
+      "description",
+      description.length < 10
+        ? "Descripción: mínimo 10 caracteres"
+        : description.length > 1000
+          ? "Descripción: máximo 1000 caracteres"
+          : null,
+    ],
+    [
+      "partsReplaced",
+      (i.partsReplaced ?? "").trim().length > 300 ? "Piezas: máximo 300 caracteres" : null,
+    ],
+    [
+      "performedAt",
+      Number.isNaN(performedAt)
+        ? "Fecha inválida"
+        : performedAt > now + 60_000
+          ? "La fecha no puede ser futura"
+          : null,
+    ],
   ]);
 }
 

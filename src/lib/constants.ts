@@ -6,7 +6,10 @@ import type {
   ServiceType,
   TicketCategory,
   UserRole,
-  Location,
+  InterventionType,
+  LocationKind,
+  ReservationResource,
+  ReservationStatus,
 } from "./types";
 
 export const AUTH_STORAGE_KEY = "lux_auth"; // Clave de localStorage compartida entre useAuth y gql()
@@ -18,6 +21,8 @@ export const ROUTES = {
   DASHBOARD: "/dashboard",
   INVENTORY: "/dashboard/inventory",
   EQUIPMENT_STATUS: "/dashboard/equipment-status",
+  LOCATIONS: "/dashboard/locations",
+  RESERVATIONS: "/dashboard/reservations",
   TICKETS: "/dashboard/tickets",
   LOANS: "/dashboard/loans",
   SERVICES: "/dashboard/service-requests",
@@ -111,21 +116,53 @@ export const TICKET_CATEGORY_LABELS: Record<TicketCategory, string> = {
   other: "Otro",
 }; // Labels de categorias de ticket
 
+export const LOCATION_KIND_LABELS: Record<LocationKind, string> = {
+  laboratory: "Laboratorio",
+  classroom: "Salón",
+  administration: "Administración",
+  other: "Otro",
+}; // Tipos de ubicacion
+
+// Letra de cada tipo: L1 = Laboratorio 1, S2 = Salon 2, A1 = Administracion 1
+export const LOCATION_KIND_LETTER: Record<LocationKind, string> = {
+  laboratory: "L",
+  classroom: "S",
+  administration: "A",
+  other: "O",
+};
+
+export const RESERVATION_STATUS_CONFIG: Record<
+  ReservationStatus,
+  { label: string; color: "success" | "warning" | "info" | "destructive" | "muted" }
+> = {
+  pending: { label: "Pendiente", color: "warning" },
+  approved: { label: "Aprobada", color: "success" },
+  rejected: { label: "Rechazada", color: "destructive" },
+  active: { label: "En curso", color: "info" },
+  completed: { label: "Finalizada", color: "muted" },
+  cancelled: { label: "Cancelada", color: "muted" },
+}; // Configuracion de estados de reservas
+
+export const RESERVATION_RESOURCE_LABELS: Record<ReservationResource, string> = {
+  equipment: "Equipo",
+  location: "Espacio",
+}; // Que se reserva
+
+export const INTERVENTION_TYPE_LABELS: Record<InterventionType, string> = {
+  preventive_maintenance: "Mantenimiento preventivo",
+  corrective_repair: "Reparación",
+  component_replacement: "Cambio de componente",
+  cleaning: "Limpieza",
+  software_update: "Actualización de software",
+  other: "Otra",
+}; // Labels de tipos de intervencion
+
 export const ROLE_LABELS: Record<UserRole, string> = {
   root_admin: "Super Admin",
   admin: "Administrador",
   tecnico: "Técnico",
   solicitante: "Solicitante",
 }; // Labels de roles
-
-export const LOCATIONS: Location[] = ["Laboratorios", "Salones", "Administración", "Otros"];
-
-export const LOCATION_CODES: Record<Location, string> = {
-  Laboratorios: "L",
-  Salones: "S",
-  Administración: "A",
-  Otros: "O",
-};
 
 export const KIND_MACHINE_CODE: Record<string, string> = {
   AIO: "PC",

@@ -14,6 +14,7 @@ import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import { QrCode } from "@/components/ui/QrCode";
 import { RetireEquipmentDialog } from "./RetireEquipmentDialog";
 import { EquipmentHistory } from "./EquipmentHistory";
+import { EquipmentInterventions } from "./EquipmentInterventions";
 
 const PRODUCT_QUERY = `
   query GetProduct($id: ID!) {
@@ -52,13 +53,13 @@ export function ProductDetail() {
 
   return (
     <div className="space-y-6 max-w-full">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Button variant="ghost" size="icon" asChild>
           <Link to={ROUTES.INVENTORY}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <div className="flex-1">
+        <div className="flex-1 min-w-[12rem]">
           {isLoading ? (
             <div className="h-6 w-48 bg-muted rounded animate-pulse" />
           ) : (
@@ -133,7 +134,7 @@ export function ProductDetail() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="flex gap-8 items-start">
+              <div className="flex flex-col sm:flex-row gap-6 sm:gap-8 items-start">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 flex-1">
                   <DetailRow
                     label="ID de máquina"
@@ -237,6 +238,7 @@ export function ProductDetail() {
             </CardContent>
           </Card>
 
+          {isStaff && <EquipmentInterventions equipmentId={product.id} canEdit={canEdit} />}
           {isStaff && <EquipmentHistory equipmentId={product.id} />}
         </motion.div>
       ) : (

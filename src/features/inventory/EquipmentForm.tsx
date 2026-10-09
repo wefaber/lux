@@ -3,7 +3,8 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { gql } from "@/lib/utils";
 import { useAsync } from "@/hooks/useSkeleton";
-import { ROUTES, EQUIPMENT_KINDS, LOCATIONS } from "@/lib/constants";
+import { useLocations } from "@/hooks/useLocations";
+import { ROUTES, EQUIPMENT_KINDS } from "@/lib/constants";
 import {
   suggestMachineId,
   validateComponent,
@@ -14,6 +15,7 @@ import type { Component, Product } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchSelect } from "@/components/ui/search-select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
@@ -44,7 +46,7 @@ const UPDATE_COMPONENT_MUTATION = `
 
 const PRODUCT_QUERY = `
   query GetProduct($id: ID!) {
-    product(id: $id) { id machineId kind brand model serialNumber partNumber status issues location deletedAt }
+    product(id: $id) { id machineId kind brand model serialNumber partNumber status issues locationId location deletedAt }
   }
 `;
 
@@ -68,7 +70,7 @@ type FormState = {
   partNumber: string;
   status: string;
   issues: string;
-  location: string;
+  locationId: string;
   name: string;
   manufacturer: string;
   isFactory: boolean;
@@ -84,7 +86,7 @@ const EMPTY_FORM: FormState = {
   partNumber: "",
   status: "available",
   issues: "",
-  location: "Laboratorios",
+  locationId: "", // se elige buscando, como el equipo de un ticket
   name: "",
   manufacturer: "",
   isFactory: true,
@@ -122,10 +124,11 @@ export function EquipmentForm({ mode }: EquipmentFormProps) {
     );
   }
 
-  const initial: FormState =
-    record.type === "product"
-      ? { ...EMPTY_FORM, ...record, issues: record.issues ?? "" }
-      : { ...EMPTY_FORM, ...record };
+  // Se distingue por cual vino (product o component) y no por record.type: la query
+  // no pide `type`, y una API GraphQL real solo devuelve los campos pedidos
+  const initial: FormState = data?.product
+    ? { ...EMPTY_FORM, ...data.product, issues: data.product.issues ?? "" }
+    : { ...EMPTY_FORM, ...data?.component };
 
   return <EquipmentFormFields mode={mode} id={id} initial={initial} />;
 }
@@ -149,8 +152,11 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
     [mode],
   );
   const takenIds = (idsData?.products ?? []).filter((p) => p.id !== id).map((p) => p.machineId);
+  const { locations } = useLocations();
+  const locationId = form.locationId;
+  const location = locations.find((l) => l.id === locationId);
   const suggestion =
-    mode === "product" ? suggestMachineId(form.kind, form.location, takenIds) : null;
+    mode === "product" ? suggestMachineId(form.kind, location?.code, takenIds) : null;
 
   const update = <K extends keyof FormState>(k: K, v: FormState[K]) => {
     setForm((f) => ({ ...f, [k]: v }));
@@ -164,9 +170,16 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const errors: FieldErrors<keyof FormState> =
-      mode === "product" ? validateProduct(form) : validateComponent(form);
+      mode === "product"
+        ? (validateProduct({ ...form, location }) as FieldErrors<keyof FormState>)
+        : validateComponent(form);
     if (mode === "product" && takenIds.includes(form.machineId.trim().toUpperCase())) {
       errors.machineId = `Ya existe un equipo con ID ${form.machineId.trim().toUpperCase()}`;
+    }
+    // Sin ubicacion, el error va en su campo y no como "ID invalido"
+    if (mode === "product" && !location) {
+      errors.locationId = "Elegí la ubicación";
+      if (errors.machineId === "Ubicación inválida") delete errors.machineId;
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
@@ -183,7 +196,7 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
           serialNumber: form.serialNumber,
           partNumber: form.partNumber,
           issues: form.issues || null,
-          location: form.location,
+          locationId,
         };
         await (isEdit
           ? gql(UPDATE_PRODUCT_MUTATION, { id, input })
@@ -274,25 +287,34 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="location">Ubicación</Label>
-                    <select
+                    <SearchSelect
                       id="location"
-                      value={form.location}
-                      onChange={(e) => update("location", e.target.value)}
-                      className={SELECT_CLASS}
-                    >
-                      {LOCATIONS.map((l) => (
-                        <option key={l} value={l}>
-                          {l}
-                        </option>
-                      ))}
-                    </select>
+                      items={locations}
+                      value={locationId}
+                      onChange={(locId) => update("locationId", locId)}
+                      getKey={(l) => l.id}
+                      getLabel={(l) => `${l.name} (${l.code})`}
+                      placeholder="Buscar: laboratorio 2, L2..."
+                      aria-invalid={Boolean(fieldErrors.locationId)}
+                      renderOption={(l) => (
+                        <>
+                          <span className="font-mono text-xs text-primary font-semibold">
+                            {l.code}
+                          </span>
+                          <span className="text-foreground">{l.name}</span>
+                        </>
+                      )}
+                    />
+                    {fieldErrors.locationId && (
+                      <p className="text-xs text-destructive">{fieldErrors.locationId}</p>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-1.5">
                   {field("machineId", "ID de máquina", { mono: true, upper: true })}
                   {suggestion && (
                     <p className="text-xs text-muted-foreground">
-                      Formato: ubicación y área, tipo y número. Próximo libre:{" "}
+                      Formato: ubicación, tipo y número (L1-PC3 = PC 3 del Laboratorio 1). Próximo libre:{" "}
                       <button
                         type="button"
                         className="font-mono text-primary font-semibold hover:underline cursor-pointer"

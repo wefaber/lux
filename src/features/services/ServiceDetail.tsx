@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CommentThread } from "@/components/comments/CommentThread";
 
 const SERVICE_QUERY = `
  query GetServiceRequest($id: ID!) {
@@ -104,13 +105,13 @@ export function ServiceDetail() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Button variant="ghost" size="icon" asChild>
           <Link to={ROUTES.SERVICES}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <h1 className="text-xl font-semibold tracking-tight text-foreground flex-1">
+        <h1 className="text-xl font-semibold tracking-tight text-foreground flex-1 min-w-[12rem]">
           Solicitud de servicio
         </h1>
         {canManage && service && !service.assignedTo && !isClosed && (
@@ -269,6 +270,8 @@ export function ServiceDetail() {
               </CardContent>
             </Card>
           )}
+
+          <CommentThread entityType="service_request" entityId={service.id} />
         </motion.div>
       )}
     </div>

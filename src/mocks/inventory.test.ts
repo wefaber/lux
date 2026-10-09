@@ -21,9 +21,9 @@ let seq = 0;
 function validInput(overrides: Record<string, unknown> = {}) {
   seq++;
   return {
-    machineId: `L9-PC${seq}`,
+    machineId: `L1-PC${200 + seq}`,
     kind: "Desktop",
-    location: "Laboratorios",
+    locationId: "loc-1",
     brand: "Lenovo",
     model: "ThinkCentre M70",
     serialNumber: `SN-TEST-${seq}`,
@@ -45,10 +45,10 @@ function product(id: string) {
 
 describe("#2 nomenclatura al crear equipos", () => {
   test("acepta un equipo bien nombrado y normaliza mayúsculas", async () => {
-    const res = await create({ machineId: " l9-pc99 ", serialNumber: "sn-low-1" });
+    const res = await create({ machineId: " l1-pc99 ", serialNumber: "sn-low-1" });
     expect(res.errors).toBeUndefined();
     const p = product(res.data!.createProduct.id);
-    expect(p.machineId).toBe("L9-PC99");
+    expect(p.machineId).toBe("L1-PC99");
     expect(p.serialNumber).toBe("SN-LOW-1");
   });
 
@@ -56,7 +56,7 @@ describe("#2 nomenclatura al crear equipos", () => {
     [{ brand: "JJSJS" }, "Marca: no parece un nombre válido"],
     [{ model: "qwerty" }, "Modelo: no parece un nombre válido"],
     [{ machineId: "PC-1" }, "Formato inválido. Ej: L1-PC1"],
-    [{ machineId: "S1-PC1" }, 'Un equipo en Laboratorios empieza con "L". Ej: L1-PC1'],
+    [{ machineId: "S1-PC1" }, 'Un equipo en Laboratorio 1 empieza con "L1-". Ej: L1-PC1'],
     [{ machineId: "L1-MON1" }, 'Un Desktop usa el código "PC". Ej: L1-PC1'],
     [{ serialNumber: "ABCDEF" }, "N° de serie: tiene que incluir al menos un número"],
   ])("rechaza %p", async (overrides, message) => {
@@ -71,7 +71,7 @@ describe("#2 nomenclatura al crear equipos", () => {
     const dupId = await create({
       machineId: existing.machineId,
       kind: existing.kind,
-      location: existing.location,
+      locationId: existing.locationId,
     });
     expect(dupId.errors?.[0].message).toBe(`Ya existe un equipo con ID ${existing.machineId}`);
     const dupSerial = await create({ serialNumber: existing.serialNumber });
@@ -106,8 +106,8 @@ describe("#19 editar equipos", () => {
 
   test("valida la edición igual que el alta", async () => {
     const id = (await create()).data!.createProduct.id;
-    const res = await gqlAs(TECNICO, UPDATE, { id, input: { location: "Salones" } });
-    expect(res.errors?.[0].message).toContain('Un equipo en Salones empieza con "S"');
+    const res = await gqlAs(TECNICO, UPDATE, { id, input: { locationId: "loc-2" } });
+    expect(res.errors?.[0].message).toContain('Un equipo en Salón 1 empieza con "S1-"');
   });
 
   test("el solicitante no edita", async () => {

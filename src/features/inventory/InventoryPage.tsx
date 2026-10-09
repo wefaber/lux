@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Plus, Search, Package, Cpu } from "lucide-react";
+import { Plus, Search, Package, Cpu, MapPin } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
+import { useLocations } from "@/hooks/useLocations";
 import { gql, formatDate, cn } from "@/lib/utils";
 import { EQUIPMENT_STATUS_CONFIG, ROUTES } from "@/lib/constants";
-import type { Product, Component, EquipmentStatus, Location } from "@/lib/types";
+import type { Product, Component, EquipmentStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,8 +14,8 @@ import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 const PRODUCTS_QUERY = `
-  query GetProducts($status: String, $location: String) {
-    products(status: $status, location: $location) {
+  query GetProducts($status: String, $locationId: ID) {
+    products(status: $status, locationId: $locationId) {
       id type machineId kind brand model serialNumber partNumber status issues location
       components { id name model manufacturer serialNumber partNumber isFactory isWorking }
       createdAt updatedAt deletedAt
@@ -34,13 +35,14 @@ export function InventoryPage() {
   const { hasRole } = useAuth();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<EquipmentStatus | "">("");
-  const [locationFilter, setLocationFilter] = useState<Location | "">("");
+  const [locationFilter, setLocationFilter] = useState(""); // id de ubicacion, "" = todas
+  const { locations } = useLocations();
 
   const { data: productsData, isLoading: loadingProducts } = useAsync<{ products: Product[] }>(
     () =>
       gql(PRODUCTS_QUERY, {
         status: statusFilter || undefined,
-        location: locationFilter || undefined,
+        locationId: locationFilter || undefined,
       }),
     [statusFilter, locationFilter],
   );
@@ -69,7 +71,7 @@ export function InventoryPage() {
 
   return (
     <div className="space-y-6 max-w-full">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Inventario</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
@@ -77,7 +79,13 @@ export function InventoryPage() {
           </p>
         </div>
         {canEdit && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" size="sm" asChild>
+              <Link to={ROUTES.LOCATIONS}>
+                <MapPin className="h-3.5 w-3.5" />
+                Ubicaciones
+              </Link>
+            </Button>
             <Button variant="secondary" size="sm" asChild>
               <Link to={`${ROUTES.INVENTORY}/nuevo-componente`}>
                 <Cpu className="h-3.5 w-3.5" />
@@ -117,14 +125,15 @@ export function InventoryPage() {
         </select>
         <select
           value={locationFilter}
-          onChange={(e) => setLocationFilter(e.target.value as Location | "")}
+          onChange={(e) => setLocationFilter(e.target.value)}
           className="h-10 rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer"
         >
           <option value="">Todas las ubicaciones</option>
-          <option value="Laboratorios">Laboratorios</option>
-          <option value="Salones">Salones</option>
-          <option value="Administración">Administración</option>
-          <option value="Otros">Otros</option>
+          {locations.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.name}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -167,7 +176,7 @@ export function InventoryPage() {
                     ].map((h) => (
                       <th
                         key={h}
-                        className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                        className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                       >
                         {h}
                       </th>
@@ -182,7 +191,7 @@ export function InventoryPage() {
                         key={p.id}
                         className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                       >
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3">
                           <Link to={`${ROUTES.INVENTORY}/${p.id}`} className="hover:underline">
                             <p className="text-sm font-semibold text-foreground">
                               {p.brand} {p.model}
@@ -194,21 +203,21 @@ export function InventoryPage() {
                             </p>
                           </Link>
                         </td>
-                        <td className="px-6 py-4 text-xs text-muted-foreground font-mono">
+                        <td className="px-4 py-3 text-xs text-muted-foreground font-mono">
                           {p.serialNumber}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3">
                           <Badge color={statusConf.color} withDot>
                             {statusConf.label}
                           </Badge>
                         </td>
-                        <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
+                        <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                           {p.location}
                         </td>
-                        <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
+                        <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                           {p.components.length}
                         </td>
-                        <td className="px-6 py-4 text-xs text-muted-foreground">
+                        <td className="px-4 py-3 text-xs text-muted-foreground">
                           {formatDate(p.updatedAt)}
                         </td>
                       </tr>
@@ -247,7 +256,7 @@ export function InventoryPage() {
                     ].map((h) => (
                       <th
                         key={h}
-                        className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                        className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                       >
                         {h}
                       </th>
@@ -260,7 +269,7 @@ export function InventoryPage() {
                       key={c.id}
                       className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                     >
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-3">
                         <Link
                           to={`${ROUTES.INVENTORY}/componente/${c.id}`}
                           className="hover:underline"
@@ -269,23 +278,23 @@ export function InventoryPage() {
                           <p className="text-xs text-muted-foreground font-medium">{c.model}</p>
                         </Link>
                       </td>
-                      <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
+                      <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                         {c.manufacturer}
                       </td>
-                      <td className="px-6 py-4 text-xs text-muted-foreground font-mono">
+                      <td className="px-4 py-3 text-xs text-muted-foreground font-mono">
                         {c.serialNumber}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-3">
                         <Badge color={c.isFactory ? "success" : "muted"} withDot={c.isFactory}>
                           {c.isFactory ? "Sí" : "No"}
                         </Badge>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-3">
                         <Badge color={c.isWorking ? "success" : "destructive"} withDot>
                           {c.isWorking ? "Sí" : "No"}
                         </Badge>
                       </td>
-                      <td className="px-6 py-4 text-xs text-muted-foreground">
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
                         {formatDate(c.updatedAt)}
                       </td>
                     </tr>

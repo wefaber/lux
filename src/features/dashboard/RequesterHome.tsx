@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Ticket, Wrench, ChevronRight } from "lucide-react";
+import { Ticket, Wrench, CalendarClock, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAsync } from "@/hooks/useSkeleton";
 import { gql } from "@/lib/utils";
@@ -31,6 +31,13 @@ const QUICK_ACTIONS = [
     to: `${ROUTES.SERVICES}?nuevo=1`,
     color: "rgb(0,122,255)",
   },
+  {
+    icon: CalendarClock,
+    title: "Reservar un equipo o espacio",
+    detail: "Un proyector, una PC o un laboratorio para una fecha",
+    to: `${ROUTES.RESERVATIONS}?nuevo=1`,
+    color: "rgb(52,199,89)",
+  },
 ];
 
 // Inicio del usuario final: no es un tablero del sistema sino su punto de
@@ -54,7 +61,7 @@ export function RequesterHome() {
         </p>
       </div>
 
-      <section aria-label="Accesos rápidos" className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <section aria-label="Accesos rápidos" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {QUICK_ACTIONS.map(({ icon: Icon, title, detail, to, color }) => (
           <Link
             key={title}

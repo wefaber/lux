@@ -2,9 +2,10 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Search } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
+import { useLocations } from "@/hooks/useLocations";
 import { gql } from "@/lib/utils";
-import { EQUIPMENT_STATUS_CONFIG, LOCATIONS, ROUTES } from "@/lib/constants";
-import type { EquipmentStatus, Location, Product } from "@/lib/types";
+import { EQUIPMENT_STATUS_CONFIG, ROUTES } from "@/lib/constants";
+import type { EquipmentStatus, Product } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +13,7 @@ import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 
 const PRODUCTS_QUERY = `
   query GetProducts {
-    products { id machineId kind brand model location status issues }
+    products { id machineId kind brand model locationId location status issues }
   }
 `;
 
@@ -22,7 +23,8 @@ const SELECT_CLASS =
 // Lo que un solicitante mira antes de entrar a un laboratorio: como estan sus
 // maquinas, y desde ahi mismo reportar la que falla.
 export function EquipmentOverview() {
-  const [location, setLocation] = useState<Location | "">("");
+  const [locationId, setLocationId] = useState("");
+  const { locations } = useLocations();
   const [status, setStatus] = useState<EquipmentStatus | "">("");
   const [search, setSearch] = useState("");
   const { data, isLoading } = useAsync<{ products: Product[] }>(() => gql(PRODUCTS_QUERY), []);
@@ -30,7 +32,7 @@ export function EquipmentOverview() {
   const term = search.trim().toLowerCase();
   const products = (data?.products ?? []).filter(
     (p) =>
-      (!location || p.location === location) &&
+      (!locationId || p.locationId === locationId) &&
       (!status || p.status === status) &&
       (!term || `${p.machineId} ${p.kind} ${p.brand} ${p.model}`.toLowerCase().includes(term)),
   );
@@ -59,14 +61,14 @@ export function EquipmentOverview() {
       <div className="flex gap-3 flex-wrap">
         <select
           aria-label="Filtrar por ubicación"
-          value={location}
-          onChange={(e) => setLocation(e.target.value as Location | "")}
+          value={locationId}
+          onChange={(e) => setLocationId(e.target.value)}
           className={SELECT_CLASS}
         >
           <option value="">Todas las ubicaciones</option>
-          {LOCATIONS.map((l) => (
-            <option key={l} value={l}>
-              {l}
+          {locations.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.name}
             </option>
           ))}
         </select>
@@ -109,7 +111,7 @@ export function EquipmentOverview() {
                   (h) => (
                     <th
                       key={h}
-                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                      className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                     >
                       {h}
                     </th>
@@ -125,23 +127,23 @@ export function EquipmentOverview() {
                     key={p.id}
                     className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                   >
-                    <td className="px-6 py-4 font-mono text-xs font-semibold text-primary">
+                    <td className="px-4 py-3 font-mono text-xs font-semibold text-primary">
                       {p.machineId}
                     </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground">{p.kind}</td>
-                    <td className="px-6 py-4 text-sm text-foreground">
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{p.kind}</td>
+                    <td className="px-4 py-3 text-sm text-foreground">
                       {p.brand} {p.model}
                     </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground">{p.location}</td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{p.location}</td>
+                    <td className="px-4 py-3">
                       <Badge color={statusConf.color} withDot>
                         {statusConf.label}
                       </Badge>
                     </td>
-                    <td className="px-6 py-4 text-xs text-muted-foreground max-w-[200px] truncate">
+                    <td className="px-4 py-3 text-xs text-muted-foreground min-w-48 max-w-xs whitespace-normal">
                       {p.issues ?? "—"}
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-4 py-3 text-right">
                       <Button variant="secondary" size="sm" asChild>
                         <Link to={`${ROUTES.TICKETS}?nuevo=1&equipo=${p.id}`}>Reportar</Link>
                       </Button>

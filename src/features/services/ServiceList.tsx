@@ -142,7 +142,7 @@ export function ServiceList() {
                 {SERVICE_COLUMNS.map((h) => (
                   <th
                     key={h}
-                    className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                   >
                     {h}
                   </th>
@@ -157,31 +157,31 @@ export function ServiceList() {
                     key={s.id}
                     className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                   >
-                    <td className="px-6 py-4 text-xs text-muted-foreground font-mono">{s.id}</td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
+                    <td className="px-4 py-3 text-xs text-muted-foreground font-mono">{s.id}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                       {SERVICE_TYPE_LABELS[s.type]}
                     </td>
                     <td
-                      className="px-6 py-4 text-sm text-foreground max-w-xs truncate"
+                      className="px-4 py-3 text-sm text-foreground min-w-48 max-w-xs whitespace-normal"
                       title={s.description}
                     >
                       {truncate(s.description, 60)}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <Badge color={statusConf.color} withDot>
                         {statusConf.label}
                       </Badge>
                     </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
+                    <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                       {s.requestedBy.name}
                     </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
+                    <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                       {s.assignedTo?.name ?? "—"}
                     </td>
-                    <td className="px-6 py-4 text-xs text-muted-foreground">
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
                       {formatDate(s.createdAt)}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <Link
                         to={`${ROUTES.SERVICES}/${s.id}`}
                         className="text-xs text-primary hover:underline font-semibold"

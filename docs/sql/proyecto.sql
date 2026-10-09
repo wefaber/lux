@@ -11,8 +11,20 @@ USE lux;
 CREATE TABLE IF NOT EXISTS ubicacion (
     id VARCHAR(100) PRIMARY KEY NOT NULL,
     nombre VARCHAR(200) UNIQUE,
+    -- Cada ubicacion es un lugar concreto: Laboratorio 1, Salon 2...
+    tipo VARCHAR(20) NOT NULL,
+    numero INT NOT NULL,
+    -- Letra del tipo + numero (L1 = Laboratorio 1): arranca el ID de maquina de
+    -- sus equipos (L1-PC3). Lo deriva la aplicacion de tipo y numero.
+    codigo VARCHAR(3) NOT NULL UNIQUE,
+    -- Baja logica: no se borra para no perder el historial de sus equipos
+    fecha_baja DATETIME,
     CHECK (nombre IS NOT NULL AND nombre <> ''),
-    CHECK (LENGTH(nombre) BETWEEN 3 AND 200)
+    CHECK (LENGTH(nombre) BETWEEN 3 AND 200),
+    CHECK (tipo IN ('laboratorio', 'salon', 'administracion', 'otro')),
+    CHECK (numero BETWEEN 1 AND 99),
+    CHECK (codigo REGEXP '^[LSAO][0-9]{1,2}$'),
+    UNIQUE (tipo, numero)
 );
 
 CREATE TABLE IF NOT EXISTS producto (
@@ -152,6 +164,74 @@ CREATE TABLE IF NOT EXISTS nota_tecnica (
     CHECK (timestamp IS NOT NULL)
 );
 
+-- Reserva de un equipo o de un espacio (ubicacion) por un rango de fechas.
+-- Ciclo: pendiente -> aprobada | rechazada -> en_curso -> finalizada | cancelada.
+-- Dos reservas aprobadas o en curso del mismo recurso no se superponen (lo
+-- controla la aplicacion al crear, aprobar y modificar).
+CREATE TABLE IF NOT EXISTS reserva (
+    id VARCHAR(100) PRIMARY KEY NOT NULL,
+    tipo_recurso VARCHAR(20) NOT NULL,
+    equipo_id VARCHAR(100),
+    ubicacion_id VARCHAR(100),
+    usuario_id VARCHAR(100) NOT NULL,
+    motivo VARCHAR(300) NOT NULL,
+    fecha_inicio DATETIME NOT NULL,
+    fecha_fin DATETIME NOT NULL,
+    estado VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+    revisada_por VARCHAR(100),
+    motivo_rechazo VARCHAR(500),
+    cancelada_por VARCHAR(100),
+    fecha_creacion DATETIME NOT NULL,
+    CONSTRAINT fk_reserva_equipo_id FOREIGN KEY (equipo_id) REFERENCES equipo(id),
+    CONSTRAINT fk_reserva_ubicacion_id FOREIGN KEY (ubicacion_id) REFERENCES ubicacion(id),
+    CONSTRAINT fk_reserva_usuario_id FOREIGN KEY (usuario_id) REFERENCES usuario(id),
+    CONSTRAINT fk_reserva_revisada_por FOREIGN KEY (revisada_por) REFERENCES usuario(id),
+    CONSTRAINT fk_reserva_cancelada_por FOREIGN KEY (cancelada_por) REFERENCES usuario(id),
+    CHECK (tipo_recurso IN ('equipo', 'espacio')),
+    -- Exactamente un recurso, segun el tipo
+    CHECK ((tipo_recurso = 'equipo' AND equipo_id IS NOT NULL AND ubicacion_id IS NULL)
+        OR (tipo_recurso = 'espacio' AND ubicacion_id IS NOT NULL AND equipo_id IS NULL)),
+    CHECK (estado IN ('pendiente', 'aprobada', 'rechazada', 'en_curso', 'finalizada', 'cancelada')),
+    CHECK (fecha_fin > fecha_inicio),
+    CHECK (estado <> 'rechazada' OR motivo_rechazo IS NOT NULL)
+);
+CREATE INDEX idx_reserva_equipo ON reserva (equipo_id, fecha_inicio, fecha_fin);
+CREATE INDEX idx_reserva_ubicacion ON reserva (ubicacion_id, fecha_inicio, fecha_fin);
+
+-- Hilo de un ticket o solicitud de servicio. entidad_id apunta a ticket o a
+-- solicitud_servicio segun entidad_tipo, por eso no lleva clave foranea.
+CREATE TABLE IF NOT EXISTS comentario (
+    id VARCHAR(100) PRIMARY KEY NOT NULL,
+    entidad_tipo VARCHAR(50) NOT NULL,
+    entidad_id VARCHAR(100) NOT NULL,
+    autor_id VARCHAR(100) NOT NULL,
+    cuerpo VARCHAR(1000) NOT NULL,
+    fecha_creacion DATETIME NOT NULL,
+    CONSTRAINT fk_comentario_autor_id FOREIGN KEY (autor_id) REFERENCES usuario(id),
+    CHECK (entidad_tipo IN ('ticket', 'solicitud_servicio')),
+    CHECK (cuerpo <> '' AND LENGTH(cuerpo) <= 1000)
+);
+CREATE INDEX idx_comentario_entidad ON comentario (entidad_tipo, entidad_id, fecha_creacion);
+
+-- Trabajo hecho sobre un equipo (mantenimiento, limpieza, cambio de piezas...).
+-- ticket_id es opcional: solo si la intervencion surgio de un ticket.
+CREATE TABLE IF NOT EXISTS intervencion (
+    id VARCHAR(100) PRIMARY KEY NOT NULL,
+    equipo_id VARCHAR(100) NOT NULL,
+    tecnico_id VARCHAR(100) NOT NULL,
+    ticket_id VARCHAR(100),
+    tipo VARCHAR(50) NOT NULL,
+    descripcion VARCHAR(1000) NOT NULL,
+    piezas_reemplazadas VARCHAR(300),
+    fecha_realizacion DATETIME NOT NULL,
+    fecha_registro DATETIME NOT NULL,
+    CONSTRAINT fk_intervencion_equipo_id FOREIGN KEY (equipo_id) REFERENCES equipo(id),
+    CONSTRAINT fk_intervencion_tecnico_id FOREIGN KEY (tecnico_id) REFERENCES usuario(id),
+    CONSTRAINT fk_intervencion_ticket_id FOREIGN KEY (ticket_id) REFERENCES ticket(id),
+    CHECK (tipo IN ('mantenimiento_preventivo', 'reparacion', 'cambio_componente', 'limpieza', 'actualizacion_software', 'otra')),
+    CHECK (LENGTH(descripcion) BETWEEN 10 AND 1000)
+);
+
 CREATE TABLE IF NOT EXISTS solicitud_servicio (
     id VARCHAR(100) PRIMARY KEY NOT NULL,
     solicitante_id VARCHAR(100),
@@ -223,10 +303,10 @@ CREATE TABLE IF NOT EXISTS log_auditoria (
 
 --- Inserts
 
-INSERT INTO ubicacion (id, nombre) VALUES
-('1', 'Oficina Central'),
-('2', 'Sucursal Norte'),
-('3', 'Sucursal Sur');
+INSERT INTO ubicacion (id, nombre, tipo, numero, codigo) VALUES
+('1', 'Laboratorio 1', 'laboratorio', 1, 'L1'),
+('2', 'Salon 1', 'salon', 1, 'S1'),
+('3', 'Administracion 1', 'administracion', 1, 'A1');
 
 INSERT INTO producto (id, modelo, fabricante, tipo, nro_parte) VALUES
 ('1', 'Laptop Pro 15', 'TechCorp', 'Laptop', 'TC-LP15-001'),

@@ -79,7 +79,7 @@ export function ActivityLog() {
                 {["Timestamp", "Usuario", "Operación", "Entidad", "ID", "Detalles"].map((h) => (
                   <th
                     key={h}
-                    className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                   >
                     {h}
                   </th>
@@ -95,20 +95,20 @@ export function ActivityLog() {
                   transition={{ ...SPRING_TRANSITION, delay: i * 0.01 }}
                   className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                 >
-                  <td className="px-6 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                  <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
                     {formatDateTime(l.timestamp)}
                   </td>
-                  <td className="px-6 py-3 text-sm text-foreground">{l.userName}</td>
-                  <td className="px-6 py-3">
+                  <td className="px-4 py-3 text-sm text-foreground">{l.userName}</td>
+                  <td className="px-4 py-3">
                     <Badge color={OP_COLORS[l.operation] ?? "muted"} className="text-[10px]">
                       {l.operation}
                     </Badge>
                   </td>
-                  <td className="px-6 py-3 text-sm text-muted-foreground">{l.entity}</td>
-                  <td className="px-6 py-3 text-xs text-muted-foreground font-mono">
+                  <td className="px-4 py-3 text-sm text-muted-foreground">{l.entity}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground font-mono">
                     {l.entityId}
                   </td>
-                  <td className="px-6 py-3 text-xs text-muted-foreground max-w-[160px] truncate">
+                  <td className="px-4 py-3 text-xs text-muted-foreground min-w-48 max-w-xs whitespace-normal">
                     {l.details ?? "—"}
                   </td>
                 </motion.tr>

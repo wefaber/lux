@@ -6,6 +6,7 @@ import type { Product, User } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchSelect } from "@/components/ui/search-select";
 
 const CREATE_LOAN_MUTATION = `
  mutation CreateLoan($input: LoanInput!) {
@@ -106,20 +107,22 @@ export function LoanForm({ onSuccess }: LoanFormProps) {
       {isStaff && (
         <div className="space-y-1.5">
           <Label htmlFor="loan-user">Usuario</Label>
-          <select
+          {/* Se busca por nombre o cedula, como el equipo al crear un ticket */}
+          <SearchSelect
             id="loan-user"
+            items={users}
             value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            className={SELECT_CLASS}
-            required
-          >
-            <option value="">Seleccioná un usuario</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name} · {u.dni}
-              </option>
-            ))}
-          </select>
+            onChange={setUserId}
+            getKey={(u) => u.id}
+            getLabel={(u) => `${u.name} · ${u.dni}`}
+            placeholder="Buscar por nombre o cédula..."
+            renderOption={(u) => (
+              <>
+                <span className="text-foreground">{u.name}</span>
+                <span className="ml-auto font-mono text-xs text-muted-foreground">{u.dni}</span>
+              </>
+            )}
+          />
         </div>
       )}
       <div className="grid grid-cols-2 gap-3">

@@ -11,6 +11,8 @@ import { ProductDetail } from "@/features/inventory/ProductDetail";
 import { ComponentDetail } from "@/features/inventory/ComponentDetail";
 import { EquipmentForm } from "@/features/inventory/EquipmentForm";
 import { EquipmentStatus } from "@/features/inventory/EquipmentStatus";
+import { LocationsPage } from "@/features/locations/LocationsPage";
+import { ReservationsPage } from "@/features/reservations/ReservationsPage";
 import { TicketList } from "@/features/tickets/TicketList";
 import { TicketDetail } from "@/features/tickets/TicketDetail";
 import { OolList } from "@/features/tickets/OolList";
@@ -102,6 +104,14 @@ export const router = createBrowserRouter([
         ),
       },
       { path: "equipment-status", element: <EquipmentStatus /> },
+      {
+        path: "locations",
+        element: (
+          <ProtectedRoute roles={STAFF_ROLES}>
+            <LocationsPage />
+          </ProtectedRoute>
+        ),
+      },
       { path: "tickets", element: <TicketList /> },
       { path: "tickets/:id", element: <TicketDetail /> },
       {
@@ -121,6 +131,7 @@ export const router = createBrowserRouter([
         ),
       },
       { path: "service-requests", element: <ServiceList /> },
+      { path: "reservations", element: <ReservationsPage /> },
       { path: "service-requests/:id", element: <ServiceDetail /> },
       { path: "profile", element: <ProfilePage /> },
     ],

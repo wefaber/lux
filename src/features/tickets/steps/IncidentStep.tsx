@@ -24,7 +24,7 @@ export function IncidentStep({ ticket }: IncidentStepProps) {
     <div className="space-y-6">
       <div>
         <h2 className="text-base font-semibold text-foreground mb-4">Información del incidente</h2>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Row label="ID" value={<span className="font-mono text-xs">{ticket.id}</span>} />
           <Row label="Estado" value={<Badge color={statusConf.color}>{statusConf.label}</Badge>} />
           <Row label="Categoría" value={TICKET_CATEGORY_LABELS[ticket.category]} />

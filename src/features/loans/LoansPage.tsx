@@ -193,7 +193,7 @@ export function LoansPage() {
                 ].map((h) => (
                   <th
                     key={h}
-                    className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                   >
                     {h}
                   </th>
@@ -209,7 +209,7 @@ export function LoansPage() {
                     key={l.id}
                     className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                   >
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <p className="text-sm font-semibold text-foreground">
                         {l.equipment.brand} {l.equipment.model}
                       </p>
@@ -218,11 +218,11 @@ export function LoansPage() {
                       </p>
                     </td>
                     {isStaff && (
-                      <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
+                      <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                         {l.user.name}
                       </td>
                     )}
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       <Badge color={statusConf.color} withDot>
                         {statusConf.label}
                       </Badge>
@@ -237,17 +237,17 @@ export function LoansPage() {
                         </p>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground font-medium">
+                    <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                       {l.approvedBy?.name ?? "—"}
                     </td>
-                    <td className="px-6 py-4 text-xs text-muted-foreground">
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
                       {formatDate(l.returnDate)}
                     </td>
-                    <td className="px-6 py-4 text-xs text-muted-foreground">
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
                       {formatDate(l.issueDate)}
                     </td>
                     {isStaff && (
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-3">
                         <div className="flex gap-1.5">
                           {l.status === "pending" && (
                             <>

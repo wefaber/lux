@@ -354,3 +354,96 @@ html.dark[data-contrast="high"] {
     letter-spacing: var(--tracking-normal);
   }
 }
+
+/* Tablas como tarjetas. Cuando una tabla no entra a lo ancho (lo decide
+   useResponsiveTables midiendo), cada fila pasa a ser una tarjeta y cada dato
+   lleva el titulo de su columna al lado: se ve completa sin desplazarla de
+   costado, con cualquier tamaño de letra y en cualquier pantalla.
+   Va fuera de @layer a proposito: tiene que ganarle a las utilidades de
+   padding, ancho y truncado que trae cada celda. */
+table[data-cards="true"],
+table[data-cards="true"] > tbody,
+table[data-cards="true"] > tbody > tr,
+table[data-cards="true"] > tbody > tr > td {
+  display: block;
+  width: 100%;
+}
+table[data-cards="true"] > thead {
+  display: none;
+}
+table[data-cards="true"] > tbody > tr {
+  width: auto;
+  margin: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background-color: color-mix(in srgb, var(--card) 70%, transparent);
+}
+table[data-cards="true"] > tbody > tr > td {
+  /* El min-w de las columnas de texto largo sirve en modo tabla; en la tarjeta
+     la empujaria fuera de la pantalla con letra grande */
+  min-width: 0;
+  max-width: none;
+  padding: 0.35rem 0;
+  border: 0;
+  overflow: visible;
+  text-align: right;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* Titulo del dato a la izquierda, valor a la derecha */
+table[data-cards="true"] > tbody > tr > td[data-label]::before {
+  content: attr(data-label);
+  float: left;
+  margin-right: 1rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  line-height: 1.6;
+}
+table[data-cards="true"] > tbody > tr > td::after {
+  content: "";
+  display: table;
+  clear: both;
+}
+/* La columna sin titulo es la de acciones: abajo, separada de los datos */
+table[data-cards="true"] > tbody > tr > td:not([data-label]) {
+  margin-top: 0.4rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+}
+table[data-cards="true"] > tbody > tr > td:not([data-label]):empty {
+  display: none;
+}
+/* Tarjeta ancha (escritorio con letra grande, tablet): en vez de una lista con
+   el valor pegado a la derecha, los datos se acomodan en columnas, con el
+   titulo arriba y el valor abajo. */
+table[data-cards="true"] {
+  container-type: inline-size;
+}
+@container (min-width: 36rem) {
+  table[data-cards="true"] > tbody > tr {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    column-gap: 1.5rem;
+    row-gap: 0.25rem;
+  }
+  table[data-cards="true"] > tbody > tr > td {
+    text-align: left;
+  }
+  table[data-cards="true"] > tbody > tr > td[data-label]::before {
+    float: none;
+    display: block;
+    margin: 0 0 0.1rem;
+  }
+  table[data-cards="true"] > tbody > tr > td:not([data-label]) {
+    grid-column: 1 / -1;
+    text-align: right;
+  }
+}
+table[data-cards="true"] > tbody > tr > td [class*="min-w-"] {
+  min-width: 0;
+}

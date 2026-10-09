@@ -1,13 +1,29 @@
 import { graphql, HttpResponse } from "msw";
 import { mockUsers, mockPasswords } from "./data/users";
 import { mockProducts, mockComponents } from "./data/equipment";
+import { mockLocations } from "./data/locations";
+import { mockInterventions } from "./data/interventions";
+import { mockComments } from "./data/comments";
+import { mockReservations } from "./data/reservations";
 import { mockTickets } from "./data/tickets";
 import { mockLoans } from "./data/loans";
 import { mockServices } from "./data/services";
 import { mockActivityLogs } from "./generators";
-import { validateComponent, validateProduct, type FieldErrors } from "@/lib/validation";
+import {
+  validateComment,
+  validateComponent,
+  validateIntervention,
+  locationCode,
+  validateLocation,
+  validateProduct,
+  validateReservation,
+  type FieldErrors,
+  type InterventionFields,
+  type LocationFields,
+} from "@/lib/validation";
 import {
   LOAN_STATUS_CONFIG,
+  RESERVATION_STATUS_CONFIG,
   TICKET_STATUS_CONFIG,
   TICKET_TRANSITIONS,
   type DashboardPeriod,
@@ -15,6 +31,15 @@ import {
 import type {
   User,
   UserRole,
+  Location,
+  LocationKind,
+  Intervention,
+  InterventionType,
+  Comment,
+  CommentEntity,
+  Reservation,
+  ReservationResource,
+  ReservationStatus,
   Product,
   Component,
   Ticket,
@@ -134,6 +159,118 @@ function duplicateProductError(
   return null;
 }
 
+// Reservas que ocupan su recurso: contra estas se controla el solapamiento
+const BLOCKING_RESERVATION_STATUSES = new Set<ReservationStatus>(["approved", "active"]);
+// Reservas que todavia cuentan para el recurso (impiden darlo de baja)
+const OPEN_RESERVATION_STATUSES = new Set<ReservationStatus>(["pending", "approved", "active"]);
+
+// El ciclo avanza solo con el tiempo, igual que los prestamos vencidos:
+// aprobada -> en curso al empezar -> finalizada al terminar
+function syncReservations(now: number = Date.now()): void {
+  for (const r of mockReservations) {
+    if (r.status !== "approved" && r.status !== "active") continue;
+    const next: ReservationStatus =
+      Date.parse(r.endsAt) <= now
+        ? "completed"
+        : Date.parse(r.startsAt) <= now
+          ? "active"
+          : r.status;
+    if (next !== r.status) {
+      r.status = next;
+      r.updatedAt = new Date(now).toISOString();
+    }
+  }
+}
+
+function reservationResourceId(r: Reservation): string | undefined {
+  return r.resourceType === "equipment" ? r.equipment?.id : r.location?.id;
+}
+
+// Un mismo equipo o espacio no puede tener dos reservas aprobadas en el mismo horario
+function reservationOverlapError(
+  resourceType: ReservationResource,
+  resourceId: string,
+  startsAt: string,
+  endsAt: string,
+  exceptId?: string,
+): string | null {
+  const start = Date.parse(startsAt);
+  const end = Date.parse(endsAt);
+  const clash = mockReservations.find(
+    (r) =>
+      r.id !== exceptId &&
+      BLOCKING_RESERVATION_STATUSES.has(r.status) &&
+      r.resourceType === resourceType &&
+      reservationResourceId(r) === resourceId &&
+      Date.parse(r.startsAt) < end &&
+      start < Date.parse(r.endsAt),
+  );
+  return clash ? `Se superpone con la reserva ${clash.id}, ya aprobada para ese horario` : null;
+}
+
+function invalidReservationTransition(r: Reservation, action: string): string {
+  return `No se puede ${action} una reserva "${RESERVATION_STATUS_CONFIG[r.status].label}"`;
+}
+
+// Quien puede leer y escribir el hilo de un ticket o solicitud: el staff, o el
+// solicitante que lo abrio (la misma regla que para ver el detalle)
+function commentAccessError(
+  caller: User,
+  entityType: CommentEntity,
+  entityId: string,
+): { message: string } | null {
+  const owner =
+    entityType === "ticket"
+      ? mockTickets.find((t) => t.id === entityId)?.submittedBy
+      : entityType === "service_request"
+        ? mockServices.find((s) => s.id === entityId)?.requestedBy
+        : undefined;
+  if (!owner) return { message: "No encontrado" };
+  if (!isStaff(caller) && owner.id !== caller.id) return FORBIDDEN.errors[0];
+  return null;
+}
+
+// Si la intervencion dice venir de un ticket, tiene que ser un ticket de ese equipo
+function interventionTicketError(ticketId: string | null, equipmentId: string): string | null {
+  if (!ticketId) return null;
+  const ticket = mockTickets.find((t) => t.id === ticketId);
+  if (!ticket) return "El ticket no existe";
+  if (ticket.equipmentId !== equipmentId) return "Ese ticket no corresponde a este equipo";
+  return null;
+}
+
+// Ubicacion vigente por id: a una dada de baja no se le asignan equipos
+function activeLocation(id: string | undefined): Location | undefined {
+  return mockLocations.find((l) => l.id === id && l.deletedAt === null);
+}
+
+function productsIn(locationId: string): Product[] {
+  return mockProducts.filter((p) => p.deletedAt === null && p.locationId === locationId);
+}
+
+function withProductCount(location: Location): Location {
+  return { ...location, productCount: productsIn(location.id).length };
+}
+
+// "Administración" y "administracion" son la misma ubicacion
+function normalizeName(name: string): string {
+  return name.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+}
+
+// Nombre y codigo (tipo + numero) no se repiten entre las ubicaciones vigentes
+function duplicateLocationError(
+  fields: LocationFields & { code: string },
+  exceptId?: string,
+): string | null {
+  const others = mockLocations.filter((l) => l.deletedAt === null && l.id !== exceptId);
+  const sameCode = others.find((l) => l.code === fields.code);
+  if (sameCode) return `Ya existe ${sameCode.name} (${fields.code})`;
+  if (others.some((l) => normalizeName(l.name) === normalizeName(fields.name))) {
+    return `Ya existe una ubicación llamada ${fields.name}`;
+  }
+  return null;
+}
+
 const CLOSED_SERVICE_STATUSES = new Set<ServiceStatus>(["completed", "rejected"]);
 
 // Horas entre el alta y la resolucion, redondeadas a un decimal
@@ -193,9 +330,9 @@ export const handlers = [
 
   graphql.query("GetProducts", ({ request, variables }) => {
     if (!getCaller(request)) return HttpResponse.json(UNAUTHENTICATED);
-    const { status, location, availableForLoan } = variables as {
+    const { status, locationId, availableForLoan } = variables as {
       status?: string;
-      location?: string;
+      locationId?: string;
       availableForLoan?: boolean;
     };
     let products = mockProducts.filter((p) => p.deletedAt === null);
@@ -204,7 +341,7 @@ export const handlers = [
     if (availableForLoan) {
       products = products.filter((p) => p.status === "available" && !hasOpenLoan(p.id));
     }
-    if (location) products = products.filter((p) => p.location === location);
+    if (locationId) products = products.filter((p) => p.locationId === locationId);
     return HttpResponse.json({ data: { products } });
   }),
 
@@ -915,26 +1052,31 @@ export const handlers = [
         partNumber: string;
         status: string;
         issues?: string;
-        location: string;
+        locationId: string;
       };
     };
+    const location = activeLocation(input.locationId);
     const fields = {
-      ...input,
       machineId: input.machineId.trim().toUpperCase(),
+      kind: input.kind,
+      location,
       brand: input.brand.trim(),
       model: input.model.trim(),
       serialNumber: input.serialNumber.trim().toUpperCase(),
       partNumber: input.partNumber.trim().toUpperCase(),
     };
     const error = firstError(validateProduct(fields)) ?? duplicateProductError(fields);
-    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    if (error || !location) {
+      return HttpResponse.json({ errors: [{ message: error ?? "Ubicación inválida" }] });
+    }
     const newProduct: Product = {
       id: nextId("prod-", mockProducts),
       type: "product",
       ...fields,
-      status: fields.status as Product["status"],
-      location: fields.location as Product["location"],
-      issues: fields.issues?.trim() || null,
+      status: input.status as Product["status"],
+      locationId: location.id,
+      location: location.name,
+      issues: input.issues?.trim() || null,
       components: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -953,7 +1095,7 @@ export const handlers = [
       input: Partial<
         Pick<
           Product,
-          "machineId" | "kind" | "brand" | "model" | "serialNumber" | "partNumber" | "location"
+          "machineId" | "kind" | "brand" | "model" | "serialNumber" | "partNumber" | "locationId"
         > & { issues: string | null }
       >;
     };
@@ -961,18 +1103,25 @@ export const handlers = [
     if (!product) return HttpResponse.json({ errors: [{ message: "Producto no encontrado" }] });
     // Solo campos descriptivos: lo que no se manda queda como estaba. El estado
     // lo mueven los prestamos y la baja, no la edicion.
+    const location = activeLocation(input.locationId ?? product.locationId);
     const next = {
       machineId: (input.machineId ?? product.machineId).trim().toUpperCase(),
       kind: input.kind ?? product.kind,
-      location: input.location ?? product.location,
+      location,
       brand: (input.brand ?? product.brand).trim(),
       model: (input.model ?? product.model).trim(),
       serialNumber: (input.serialNumber ?? product.serialNumber).trim().toUpperCase(),
       partNumber: (input.partNumber ?? product.partNumber).trim().toUpperCase(),
     };
     const error = firstError(validateProduct(next)) ?? duplicateProductError(next, product.id);
-    if (error) return HttpResponse.json({ errors: [{ message: error }] });
-    Object.assign(product, next, { updatedAt: new Date().toISOString() });
+    if (error || !location) {
+      return HttpResponse.json({ errors: [{ message: error ?? "Ubicación inválida" }] });
+    }
+    Object.assign(product, next, {
+      locationId: location.id,
+      location: location.name,
+      updatedAt: new Date().toISOString(),
+    });
     if (input.issues !== undefined) product.issues = input.issues?.trim() || null;
     return HttpResponse.json({ data: { updateProduct: product } });
   }),
@@ -993,6 +1142,16 @@ export const handlers = [
     if (mockTickets.some((t) => t.equipmentId === id && t.status !== "resolved")) {
       return HttpResponse.json({
         errors: [{ message: "No se puede dar de baja: el equipo tiene tickets abiertos" }],
+      });
+    }
+    syncReservations();
+    if (
+      mockReservations.some(
+        (r) => r.equipment?.id === id && OPEN_RESERVATION_STATUSES.has(r.status),
+      )
+    ) {
+      return HttpResponse.json({
+        errors: [{ message: "No se puede dar de baja: el equipo tiene reservas vigentes" }],
       });
     }
     const now = new Date().toISOString();
@@ -1137,5 +1296,444 @@ export const handlers = [
     if (ticket.status === "pending") ticket.status = "in_progress";
     ticket.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { assignTicket: ticket } });
+  }),
+
+  // ── Reservas ───────────────────────────────────────────────────────────────
+  // El solicitante pide y sigue las suyas; el staff ve todas y las gestiona
+
+  graphql.query("GetReservations", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    syncReservations();
+    const { status } = variables as { status?: ReservationStatus };
+    // El solicitante solo ve las suyas, mande el filtro que mande
+    let reservations = isStaff(caller)
+      ? [...mockReservations]
+      : mockReservations.filter((r) => r.user.id === caller.id);
+    if (status) reservations = reservations.filter((r) => r.status === status);
+    reservations.sort((a, b) => b.startsAt.localeCompare(a.startsAt));
+    return HttpResponse.json({ data: { reservations } });
+  }),
+
+  graphql.query("GetReservation", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    syncReservations();
+    const { id } = variables as { id: string };
+    const reservation = mockReservations.find((r) => r.id === id) ?? null;
+    if (reservation && !isStaff(caller) && reservation.user.id !== caller.id) {
+      return HttpResponse.json(FORBIDDEN);
+    }
+    return HttpResponse.json({ data: { reservation } });
+  }),
+
+  graphql.mutation("CreateReservation", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    syncReservations();
+    const { input } = variables as {
+      input: {
+        resourceType: ReservationResource;
+        equipmentId?: string;
+        locationId?: string;
+        startsAt: string;
+        endsAt: string;
+        purpose: string;
+      };
+    };
+    let equipment: Product | null = null;
+    let location: Location | null = null;
+    if (input.resourceType === "equipment") {
+      equipment = mockProducts.find((p) => p.id === input.equipmentId && !p.deletedAt) ?? null;
+      if (!equipment) return HttpResponse.json({ errors: [{ message: "Equipo no encontrado" }] });
+      if (equipment.status === "in_repair") {
+        return HttpResponse.json({
+          errors: [{ message: "El equipo está en reparación: no se puede reservar" }],
+        });
+      }
+      // Hay equipos con estado "retired" sin deletedAt: tampoco se reservan
+      if (equipment.status === "retired") {
+        return HttpResponse.json({
+          errors: [{ message: "El equipo está dado de baja: no se puede reservar" }],
+        });
+      }
+    } else if (input.resourceType === "location") {
+      location = activeLocation(input.locationId) ?? null;
+      if (!location) return HttpResponse.json({ errors: [{ message: "Ubicación no encontrada" }] });
+    } else {
+      return HttpResponse.json({ errors: [{ message: "Elegí un equipo o un espacio" }] });
+    }
+    const fields = { startsAt: input.startsAt, endsAt: input.endsAt, purpose: input.purpose };
+    const resourceId = (equipment ?? location)!.id;
+    const error =
+      firstError(validateReservation(fields)) ??
+      reservationOverlapError(input.resourceType, resourceId, fields.startsAt, fields.endsAt);
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    const now = new Date().toISOString();
+    const reservation: Reservation = {
+      id: nextId("rsv-", mockReservations, 3),
+      resourceType: input.resourceType,
+      equipment,
+      location,
+      user: caller,
+      purpose: fields.purpose.trim(),
+      startsAt: new Date(fields.startsAt).toISOString(),
+      endsAt: new Date(fields.endsAt).toISOString(),
+      status: "pending",
+      reviewedBy: null,
+      rejectionReason: null,
+      cancelledBy: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    mockReservations.push(reservation);
+    return HttpResponse.json({ data: { createReservation: reservation } });
+  }),
+
+  graphql.mutation("ApproveReservation", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    syncReservations();
+    const { id } = variables as { id: string };
+    const reservation = mockReservations.find((r) => r.id === id);
+    if (!reservation) return HttpResponse.json({ errors: [{ message: "Reserva no encontrada" }] });
+    if (reservation.status !== "pending") {
+      return HttpResponse.json({
+        errors: [{ message: invalidReservationTransition(reservation, "aprobar") }],
+      });
+    }
+    if (Date.parse(reservation.endsAt) <= Date.now()) {
+      return HttpResponse.json({
+        errors: [{ message: "La reserva ya terminó: no se puede aprobar" }],
+      });
+    }
+    // Entre dos pedidos para el mismo horario, el que se aprueba primero gana
+    const overlap = reservationOverlapError(
+      reservation.resourceType,
+      reservationResourceId(reservation)!,
+      reservation.startsAt,
+      reservation.endsAt,
+      reservation.id,
+    );
+    if (overlap) return HttpResponse.json({ errors: [{ message: overlap }] });
+    reservation.status = "approved";
+    reservation.reviewedBy = caller;
+    reservation.updatedAt = new Date().toISOString();
+    syncReservations();
+    return HttpResponse.json({ data: { approveReservation: reservation } });
+  }),
+
+  graphql.mutation("RejectReservation", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    syncReservations();
+    const { id, reason } = variables as { id: string; reason: string };
+    const reservation = mockReservations.find((r) => r.id === id);
+    if (!reservation) return HttpResponse.json({ errors: [{ message: "Reserva no encontrada" }] });
+    if (reservation.status !== "pending") {
+      return HttpResponse.json({
+        errors: [{ message: invalidReservationTransition(reservation, "rechazar") }],
+      });
+    }
+    // El solicitante ve el motivo: tiene que decir algo
+    if ((reason ?? "").trim().length < 5) {
+      return HttpResponse.json({
+        errors: [{ message: "Indicá el motivo del rechazo (mínimo 5 caracteres)" }],
+      });
+    }
+    reservation.status = "rejected";
+    reservation.reviewedBy = caller;
+    reservation.rejectionReason = reason.trim();
+    reservation.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ data: { rejectReservation: reservation } });
+  }),
+
+  graphql.mutation("UpdateReservation", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    syncReservations();
+    const { id, input } = variables as {
+      id: string;
+      input: Partial<{ startsAt: string; endsAt: string; purpose: string }>;
+    };
+    const reservation = mockReservations.find((r) => r.id === id);
+    if (!reservation) return HttpResponse.json({ errors: [{ message: "Reserva no encontrada" }] });
+    // Lo que ya empezo o se cerro no se reprograma
+    if (reservation.status !== "pending" && reservation.status !== "approved") {
+      return HttpResponse.json({
+        errors: [{ message: invalidReservationTransition(reservation, "modificar") }],
+      });
+    }
+    const fields = {
+      startsAt: input.startsAt ?? reservation.startsAt,
+      endsAt: input.endsAt ?? reservation.endsAt,
+      purpose: input.purpose ?? reservation.purpose,
+    };
+    const error =
+      firstError(validateReservation(fields)) ??
+      reservationOverlapError(
+        reservation.resourceType,
+        reservationResourceId(reservation)!,
+        fields.startsAt,
+        fields.endsAt,
+        reservation.id,
+      );
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    Object.assign(reservation, {
+      startsAt: new Date(fields.startsAt).toISOString(),
+      endsAt: new Date(fields.endsAt).toISOString(),
+      purpose: fields.purpose.trim(),
+      updatedAt: new Date().toISOString(),
+    });
+    syncReservations();
+    return HttpResponse.json({ data: { updateReservation: reservation } });
+  }),
+
+  graphql.mutation("CancelReservation", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    syncReservations();
+    const { id } = variables as { id: string };
+    const reservation = mockReservations.find((r) => r.id === id);
+    if (!reservation) return HttpResponse.json({ errors: [{ message: "Reserva no encontrada" }] });
+    const staff = isStaff(caller);
+    if (!staff && reservation.user.id !== caller.id) return HttpResponse.json(FORBIDDEN);
+    // El solicitante cancela lo que todavia no empezo; el staff, tambien lo que esta en curso
+    const cancellable: ReservationStatus[] = staff
+      ? ["pending", "approved", "active"]
+      : ["pending", "approved"];
+    if (!cancellable.includes(reservation.status)) {
+      return HttpResponse.json({
+        errors: [{ message: invalidReservationTransition(reservation, "cancelar") }],
+      });
+    }
+    reservation.status = "cancelled";
+    reservation.cancelledBy = caller;
+    reservation.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ data: { cancelReservation: reservation } });
+  }),
+
+  // ── Comentarios ────────────────────────────────────────────────────────────
+  // Hilo de un ticket o solicitud entre quien lo abrio y el staff
+
+  graphql.query("GetComments", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    const { entityType, entityId } = variables as { entityType: CommentEntity; entityId: string };
+    const denied = commentAccessError(caller, entityType, entityId);
+    if (denied) return HttpResponse.json({ errors: [denied] });
+    const comments = mockComments
+      .filter((c) => c.entityType === entityType && c.entityId === entityId)
+      .toSorted((a, b) => a.createdAt.localeCompare(b.createdAt));
+    return HttpResponse.json({ data: { comments } });
+  }),
+
+  graphql.mutation("CreateComment", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    const { input } = variables as {
+      input: { entityType: CommentEntity; entityId: string; body: string };
+    };
+    const denied = commentAccessError(caller, input.entityType, input.entityId);
+    if (denied) return HttpResponse.json({ errors: [denied] });
+    const error = validateComment(input.body);
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    const comment: Comment = {
+      id: nextId("cmt-", mockComments, 3),
+      entityType: input.entityType,
+      entityId: input.entityId,
+      author: caller,
+      body: input.body.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    mockComments.push(comment);
+    return HttpResponse.json({ data: { createComment: comment } });
+  }),
+
+  // ── Intervenciones ─────────────────────────────────────────────────────────
+  // Trabajo hecho sobre un equipo, con o sin ticket. Como el inventario, es del staff
+
+  graphql.query("GetInterventions", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { equipmentId } = variables as { equipmentId: string };
+    const interventions = mockInterventions
+      .filter((i) => i.equipmentId === equipmentId)
+      .toSorted((a, b) => b.performedAt.localeCompare(a.performedAt));
+    return HttpResponse.json({ data: { interventions } });
+  }),
+
+  graphql.mutation("CreateIntervention", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { input } = variables as {
+      input: Partial<InterventionFields> & { equipmentId: string; ticketId?: string | null };
+    };
+    const product = mockProducts.find((p) => p.id === input.equipmentId);
+    if (!product) return HttpResponse.json({ errors: [{ message: "Equipo no encontrado" }] });
+    if (product.deletedAt) {
+      return HttpResponse.json({
+        errors: [{ message: "No se registran intervenciones en un equipo dado de baja" }],
+      });
+    }
+    const now = new Date().toISOString();
+    const fields: InterventionFields = {
+      type: input.type ?? "",
+      description: (input.description ?? "").trim(),
+      partsReplaced: input.partsReplaced?.trim() || null,
+      performedAt: input.performedAt ?? now,
+    };
+    const ticketId = input.ticketId || null;
+    const error =
+      firstError(validateIntervention(fields)) ?? interventionTicketError(ticketId, product.id);
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    const intervention: Intervention = {
+      id: nextId("int-", mockInterventions, 3),
+      equipmentId: product.id,
+      technician: caller,
+      ...fields,
+      type: fields.type as InterventionType,
+      performedAt: new Date(fields.performedAt).toISOString(),
+      ticketId,
+      createdAt: now,
+      updatedAt: now,
+    };
+    mockInterventions.push(intervention);
+    return HttpResponse.json({ data: { createIntervention: intervention } });
+  }),
+
+  graphql.mutation("UpdateIntervention", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { id, input } = variables as {
+      id: string;
+      input: Partial<InterventionFields> & { ticketId?: string | null };
+    };
+    const intervention = mockInterventions.find((i) => i.id === id);
+    if (!intervention) {
+      return HttpResponse.json({ errors: [{ message: "Intervención no encontrada" }] });
+    }
+    // El equipo y el tecnico que la registro no cambian; lo demas, si se manda
+    const fields: InterventionFields = {
+      type: input.type ?? intervention.type,
+      description: (input.description ?? intervention.description).trim(),
+      partsReplaced:
+        input.partsReplaced !== undefined
+          ? input.partsReplaced?.trim() || null
+          : intervention.partsReplaced,
+      performedAt: input.performedAt ?? intervention.performedAt,
+    };
+    const ticketId = input.ticketId !== undefined ? input.ticketId || null : intervention.ticketId;
+    const error =
+      firstError(validateIntervention(fields)) ??
+      interventionTicketError(ticketId, intervention.equipmentId);
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    Object.assign(intervention, fields, {
+      type: fields.type as InterventionType,
+      performedAt: new Date(fields.performedAt).toISOString(),
+      ticketId,
+      updatedAt: new Date().toISOString(),
+    });
+    return HttpResponse.json({ data: { updateIntervention: intervention } });
+  }),
+
+  // ── Ubicaciones ────────────────────────────────────────────────────────────
+  // Cualquiera con sesion las consulta (filtros y formularios); el ABM es del staff
+
+  graphql.query("GetLocations", ({ request }) => {
+    if (!getCaller(request)) return HttpResponse.json(UNAUTHENTICATED);
+    const locations = mockLocations.filter((l) => l.deletedAt === null).map(withProductCount);
+    return HttpResponse.json({ data: { locations } });
+  }),
+
+  graphql.mutation("CreateLocation", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { input } = variables as { input: LocationFields };
+    const fields = { kind: input.kind, number: Number(input.number), name: input.name.trim() };
+    const code = locationCode(fields.kind, fields.number);
+    const error =
+      firstError(validateLocation(fields)) ??
+      (code ? duplicateLocationError({ ...fields, code }) : "Ubicación inválida");
+    if (error || !code) {
+      return HttpResponse.json({ errors: [{ message: error ?? "Ubicación inválida" }] });
+    }
+    const now = new Date().toISOString();
+    const location: Location = {
+      id: nextId("loc-", mockLocations),
+      ...fields,
+      kind: fields.kind as LocationKind,
+      code,
+      productCount: 0,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    };
+    mockLocations.push(location);
+    return HttpResponse.json({ data: { createLocation: location } });
+  }),
+
+  graphql.mutation("UpdateLocation", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { id, input } = variables as { id: string; input: Partial<LocationFields> };
+    const location = activeLocation(id);
+    if (!location) return HttpResponse.json({ errors: [{ message: "Ubicación no encontrada" }] });
+    const fields = {
+      kind: input.kind ?? location.kind,
+      number: input.number !== undefined ? Number(input.number) : location.number,
+      name: (input.name ?? location.name).trim(),
+    };
+    const code = locationCode(fields.kind, fields.number);
+    const error =
+      firstError(validateLocation(fields)) ??
+      (code ? duplicateLocationError({ ...fields, code }, id) : "Ubicación inválida");
+    if (error || !code) {
+      return HttpResponse.json({ errors: [{ message: error ?? "Ubicación inválida" }] });
+    }
+    // Tipo y numero forman el codigo, que arranca el ID de maquina de cada equipo:
+    // cambiarlos con equipos adentro los dejaria mal nombrados
+    const products = productsIn(id);
+    if (code !== location.code && products.length > 0) {
+      return HttpResponse.json({
+        errors: [
+          {
+            message: `No se puede cambiar el tipo ni el número: ${products.length} equipo(s) usan ${location.code} en su ID de máquina`,
+          },
+        ],
+      });
+    }
+    Object.assign(location, fields, {
+      kind: fields.kind as LocationKind,
+      code,
+      updatedAt: new Date().toISOString(),
+    });
+    // Los equipos guardan el nombre para mostrarlo: se actualiza con el renombre
+    for (const p of products) p.location = location.name;
+    return HttpResponse.json({ data: { updateLocation: withProductCount(location) } });
+  }),
+
+  graphql.mutation("SoftDeleteLocation", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { id } = variables as { id: string };
+    const location = activeLocation(id);
+    if (!location) return HttpResponse.json({ errors: [{ message: "Ubicación no encontrada" }] });
+    syncReservations();
+    if (
+      mockReservations.some(
+        (r) => r.location?.id === id && OPEN_RESERVATION_STATUSES.has(r.status),
+      )
+    ) {
+      return HttpResponse.json({
+        errors: [{ message: "No se puede eliminar: la ubicación tiene reservas vigentes" }],
+      });
+    }
+    const count = productsIn(id).length;
+    if (count > 0) {
+      return HttpResponse.json({
+        errors: [
+          {
+            message: `No se puede eliminar: tiene ${count} equipo(s). Movelos a otra ubicación primero`,
+          },
+        ],
+      });
+    }
+    location.deletedAt = new Date().toISOString();
+    return HttpResponse.json({ data: { softDeleteLocation: true } });
   }),
 ];

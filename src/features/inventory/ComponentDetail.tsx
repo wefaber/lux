@@ -46,13 +46,13 @@ export function ComponentDetail() {
 
   return (
     <div className="space-y-6 max-w-full">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Button variant="ghost" size="icon" asChild>
           <Link to={ROUTES.INVENTORY}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <h1 className="text-xl font-semibold tracking-tight text-foreground flex-1">
+        <h1 className="text-xl font-semibold tracking-tight text-foreground flex-1 min-w-[12rem]">
           {isLoading
             ? "..."
             : component

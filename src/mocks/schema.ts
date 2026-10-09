@@ -4,7 +4,7 @@ export const schema = `
     me: User
     users(role: String, isActive: Boolean): [User!]!
     user(id: ID!): User
-    products(status: String, location: String, deletedAt: String, availableForLoan: Boolean): [Product!]!
+    products(status: String, locationId: ID, deletedAt: String, availableForLoan: Boolean): [Product!]!
     product(id: ID!): Product
     productByMachineId(machineId: String!): Product
     components(productId: ID, isWorking: Boolean): [Component!]!
@@ -19,6 +19,11 @@ export const schema = `
     dashboardStats(period: String): DashboardStats!
     reports: Reports!
     activityLogs(userId: ID, operation: String, startDate: String, endDate: String): [ActivityLog!]!
+    locations: [Location!]!
+    interventions(equipmentId: ID!): [Intervention!]!
+    comments(entityType: String!, entityId: ID!): [Comment!]!
+    reservations(status: String): [Reservation!]!
+    reservation(id: ID!): Reservation
   }
 
   type Mutation {
@@ -47,6 +52,70 @@ export const schema = `
     claimServiceRequest(id: ID!): ServiceRequest!
     assignServiceRequest(id: ID!, technicianId: ID!): ServiceRequest!
     changePassword(currentPassword: String!, newPassword: String!): Boolean!
+    createLocation(input: LocationInput!): Location!
+    updateLocation(id: ID!, input: LocationUpdateInput!): Location!
+    softDeleteLocation(id: ID!): Boolean!
+    createIntervention(input: InterventionInput!): Intervention!
+    updateIntervention(id: ID!, input: InterventionUpdateInput!): Intervention!
+    createComment(input: CommentInput!): Comment!
+    createReservation(input: ReservationInput!): Reservation!
+    approveReservation(id: ID!): Reservation!
+    rejectReservation(id: ID!, reason: String!): Reservation!
+    updateReservation(id: ID!, input: ReservationUpdateInput!): Reservation!
+    cancelReservation(id: ID!): Reservation!
+  }
+
+  type Reservation {
+    id: ID!
+    resourceType: String!
+    equipment: Product
+    location: Location
+    user: User!
+    purpose: String!
+    startsAt: String!
+    endsAt: String!
+    status: String!
+    reviewedBy: User
+    rejectionReason: String
+    cancelledBy: User
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type Comment {
+    id: ID!
+    entityType: String!
+    entityId: ID!
+    author: User!
+    body: String!
+    createdAt: String!
+  }
+
+  type Intervention {
+    id: ID!
+    equipmentId: ID!
+    technician: User!
+    type: String!
+    description: String!
+    partsReplaced: String
+    ticketId: ID
+    performedAt: String!
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type Location {
+    id: ID!
+    # laboratory | classroom | administration | other
+    kind: String!
+    number: Int!
+    name: String!
+    # Letra del tipo + numero: L1 = Laboratorio 1
+    code: String!
+    productCount: Int!
+    createdAt: String!
+    updatedAt: String!
+    deletedAt: String
   }
 
   type AuthUser {
@@ -83,6 +152,7 @@ export const schema = `
     partNumber: String!
     status: String!
     issues: String
+    locationId: ID!
     location: String!
     components: [Component!]!
     createdAt: String!
@@ -198,6 +268,16 @@ export const schema = `
     pendingServices: Int!
     ticketsByStatus: [TicketStatusCount!]!
     servicesByPeriod: [PeriodCount!]!
+    # Solo para el staff; null para el solicitante
+    workQueue: WorkQueue
+  }
+
+  type WorkQueue {
+    unassignedTickets: Int!
+    ticketsInProgress: Int!
+    pendingServices: Int!
+    overdueLoans: Int!
+    equipmentInRepair: Int!
   }
 
   type TicketStatusCount {
@@ -239,7 +319,7 @@ export const schema = `
     partNumber: String!
     status: String!
     issues: String
-    location: String!
+    locationId: ID!
   }
 
   input ProductUpdateInput {
@@ -250,7 +330,57 @@ export const schema = `
     serialNumber: String
     partNumber: String
     issues: String
-    location: String
+    locationId: ID
+  }
+
+  input ReservationInput {
+    resourceType: String!
+    equipmentId: ID
+    locationId: ID
+    startsAt: String!
+    endsAt: String!
+    purpose: String!
+  }
+
+  input ReservationUpdateInput {
+    startsAt: String
+    endsAt: String
+    purpose: String
+  }
+
+  input CommentInput {
+    entityType: String!
+    entityId: ID!
+    body: String!
+  }
+
+  input InterventionInput {
+    equipmentId: ID!
+    type: String!
+    description: String!
+    partsReplaced: String
+    ticketId: ID
+    performedAt: String
+  }
+
+  input InterventionUpdateInput {
+    type: String
+    description: String
+    partsReplaced: String
+    ticketId: ID
+    performedAt: String
+  }
+
+  input LocationInput {
+    kind: String!
+    number: Int!
+    name: String!
+  }
+
+  input LocationUpdateInput {
+    kind: String
+    number: Int
+    name: String
   }
 
   input ComponentUpdateInput {
