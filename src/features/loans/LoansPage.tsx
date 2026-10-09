@@ -15,7 +15,7 @@ import { RejectLoanDialog, ReturnLoanDialog } from "./LoanActionDialogs";
 import { OptionSelect } from "@/components/ui/option-select";
 import { Input } from "@/components/ui/input";
 import { Pagination, clampPage } from "@/components/ui/pagination";
-import { ClosureNoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
+import { PinMark, pinRowClass } from "@/components/ui/pin";
 import { idQuery, loanPin, pinnedFirst } from "@/lib/pins";
 
 const LOANS_QUERY = `
@@ -25,7 +25,6 @@ const LOANS_QUERY = `
  equipment { id brand model serialNumber location }
  user { id name }
  approvedBy { id name }
- closureNotice { by { id name } at }
  deliveredBy { id name }
  components { id name }
  createdAt updatedAt
@@ -102,7 +101,7 @@ export function LoansPage() {
   const hideFinished = isStaff && !statusFilter;
   const listed = pinnedFirst(
     hideFinished
-      ? matching.filter((l) => !FINISHED_STATUSES.has(l.status) || matchesId(l) || pin(l))
+      ? matching.filter((l) => !FINISHED_STATUSES.has(l.status) || matchesId(l))
       : matching,
     pin,
   );
@@ -237,7 +236,7 @@ export function LoansPage() {
 
       <div className="space-y-3">
         {showSkeleton ? (
-          <TableSkeleton rows={8} cols={isStaff ? 8 : 6} />
+          <TableSkeleton rows={8} cols={isStaff ? 7 : 5} />
         ) : listed.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground text-sm font-medium">
             {hiddenFinished > 0 ? "No hay préstamos en curso" : "No hay préstamos"}
@@ -253,7 +252,6 @@ export function LoansPage() {
               <thead>
                 <tr className="border-b border-border">
                   {[
-                    "ID",
                     "Equipo",
                     ...(isStaff ? ["Usuario"] : []),
                     "Estado",
@@ -284,24 +282,23 @@ export function LoansPage() {
                         pinRowClass(pinState),
                       )}
                     >
-                      <td className="px-4 py-3 text-xs text-muted-foreground font-mono">
-                        <PinMark state={pinState} />
-                        {l.id}
-                      </td>
+                      {/* El ID va debajo del equipo y no en una columna propia: asi la
+                          tabla sigue entrando a lo ancho con letra grande */}
                       <td className="px-4 py-3">
                         <p className="text-sm font-semibold text-foreground">
                           {l.equipment.brand} {l.equipment.model}
                         </p>
                         <p className="text-xs text-muted-foreground font-medium">
-                          {l.equipment.location}
+                          <PinMark state={pinState} />
+                          <span className="font-mono">{l.id}</span> · {l.equipment.location}
                         </p>
                       </td>
                       {isStaff && (
-                        <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
+                        <td className="px-4 py-3 text-sm text-muted-foreground font-medium whitespace-normal">
                           {l.user.name}
                         </td>
                       )}
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 min-w-36 whitespace-normal">
                         <Badge color={statusConf.color} withDot>
                           {statusConf.label}
                         </Badge>
@@ -311,21 +308,12 @@ export function LoansPage() {
                           </p>
                         )}
                         {l.deliveredBy && l.deliveredAt && l.status !== "returned" && (
-                          <p className="text-xs text-muted-foreground mt-1">
+                          <p className="text-xs text-muted-foreground mt-1 max-w-44">
                             Entregado por {l.deliveredBy.name} el {formatDate(l.deliveredAt)}
                           </p>
                         )}
-                        {pinState === "notice" && l.closureNotice && (
-                          <ClosureNoticeLine
-                            notice={l.closureNotice}
-                            action="Registró la devolución"
-                            entity="loan"
-                            id={l.id}
-                            onSeen={refetch}
-                          />
-                        )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
+                      <td className="px-4 py-3 text-sm text-muted-foreground font-medium whitespace-normal">
                         {l.approvedBy?.name ?? "—"}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">
