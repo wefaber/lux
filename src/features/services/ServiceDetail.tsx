@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { gql, formatDate } from "@/lib/utils";
-import { SERVICE_STATUS_CONFIG, SERVICE_TYPE_LABELS, ROUTES } from "@/lib/constants";
+import { SERVICE_STATUS_CONFIG, SERVICE_TYPE_LABELS, ROUTES, ROLE_LABELS } from "@/lib/constants";
 import type { ServiceRequest, ServiceStatus, User } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CommentThread } from "@/components/comments/CommentThread";
-import { OptionSelect } from "@/components/ui/option-select";
+import { SearchSelect } from "@/components/ui/search-select";
 
 const SERVICE_QUERY = `
  query GetServiceRequest($id: ID!) {
@@ -48,7 +48,7 @@ const ASSIGN_SERVICE_MUTATION = `
  }
 `;
 const STAFF_USERS_QUERY = `
- query GetUsers($isActive: Boolean) { users(isActive: $isActive) { id name role } }
+ query GetUsers($isActive: Boolean) { users(isActive: $isActive) { id name dni role } }
 `;
 
 export function ServiceDetail() {
@@ -66,6 +66,8 @@ export function ServiceDetail() {
   const service = data?.serviceRequest; // Verificacion e informacion (Si existe) de servicio
   const canManage = hasRole("root_admin", "admin", "tecnico"); // Verificacion si puede gestionar
   const [assignError, setAssignError] = useState("");
+  // "" mientras se busca otro responsable; null muestra el asignado actual
+  const [assigneeSearch, setAssigneeSearch] = useState<string | null>(null);
 
   const { data: usersData } = useAsync<{ users: User[] } | null>(
     () => (canManage ? gql(STAFF_USERS_QUERY, { isActive: true }) : Promise.resolve(null)),
@@ -146,7 +148,7 @@ export function ServiceDetail() {
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
           // En pantallas anchas los comentarios van al costado, en el espacio que
           // dejaba libre el detalle; en angostas quedan debajo
-          className="grid gap-4 items-start xl:grid-cols-[minmax(0,42rem)_minmax(0,1fr)]"
+          className="grid gap-4 xl:grid-cols-[minmax(0,42rem)_minmax(0,1fr)]"
         >
           <div className="space-y-4 min-w-0">
             <Card>
@@ -173,22 +175,46 @@ export function ServiceDetail() {
                     <p className="text-foreground">{formatDate(service.createdAt)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
+                    <label
+                      htmlFor="service-assignee"
+                      className="block text-xs text-muted-foreground uppercase tracking-widest mb-0.5"
+                    >
                       Asignado a
-                    </p>
+                    </label>
                     {canManage && !isClosed ? (
-                      <OptionSelect
-                        aria-label="Asignar responsable"
-                        size="sm"
-                        value={service.assignedTo?.id ?? ""}
-                        onValueChange={(technicianId) =>
-                          technicianId && assign(ASSIGN_SERVICE_MUTATION, { id, technicianId })
-                        }
-                        options={[
-                          { value: "", label: "Sin asignar", disabled: true },
-                          ...technicians.map((t) => ({ value: t.id, label: t.name })),
-                        ]}
-                      />
+                      // Al salir del campo sin elegir a nadie vuelve a mostrar el asignado
+                      <div onBlur={() => setAssigneeSearch(null)}>
+                        <SearchSelect
+                          id="service-assignee"
+                          items={technicians}
+                          value={assigneeSearch ?? service.assignedTo?.id ?? ""}
+                          onChange={(technicianId) => {
+                            if (!technicianId) {
+                              setAssigneeSearch("");
+                              return;
+                            }
+                            setAssigneeSearch(null);
+                            if (technicianId !== service.assignedTo?.id) {
+                              void assign(ASSIGN_SERVICE_MUTATION, { id, technicianId });
+                            }
+                          }}
+                          getKey={(t) => t.id}
+                          getLabel={(t) => t.name}
+                          getSearchText={(t) => `${t.name} ${t.dni}`}
+                          placeholder="Buscar por nombre o cédula..."
+                          renderOption={(t) => (
+                            <>
+                              <span className="text-foreground">{t.name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {ROLE_LABELS[t.role]}
+                              </span>
+                              <span className="ml-auto font-mono text-xs text-muted-foreground">
+                                {t.dni}
+                              </span>
+                            </>
+                          )}
+                        />
+                      </div>
                     ) : (
                       <p className="text-foreground">{service.assignedTo?.name ?? "Sin asignar"}</p>
                     )}
@@ -270,7 +296,13 @@ export function ServiceDetail() {
             )}
           </div>
 
-          <CommentThread entityType="service_request" entityId={service.id} />
+          {/* Al costado, los comentarios llegan justo hasta el final de la columna
+              del detalle: no le suman alto a la fila y la lista se desplaza por dentro */}
+          <div className="relative xl:min-h-[26rem]">
+            <div className="xl:absolute xl:inset-0">
+              <CommentThread entityType="service_request" entityId={service.id} fill />
+            </div>
+          </div>
         </motion.div>
       )}
     </div>
