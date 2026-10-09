@@ -107,9 +107,11 @@ export const mockReservations: Reservation[] = [
     startsAt: at(3 * 24),
     endsAt: at(3 * 24 + 2),
     status: "cancelled",
-    reviewedBy: null,
+    reviewedBy: tec1,
     rejectionReason: null,
     cancelledBy: sol3,
+    // Nicolas la aprobo y la solicitante la cancelo despues: le queda el aviso
+    closureNotice: { by: sol3, at: at(-10) },
     createdAt: at(-50),
     updatedAt: at(-10),
   },

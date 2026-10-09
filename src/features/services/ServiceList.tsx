@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/dialog";
 import { ServiceForm } from "./ServiceForm";
 import { OptionSelect } from "@/components/ui/option-select";
+import { ClosureNoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
+import { pinnedFirst, servicePin } from "@/lib/pins";
 
 const SERVICES_QUERY = `
   query GetServiceRequests($requestedById: ID) {
@@ -25,6 +27,7 @@ const SERVICES_QUERY = `
       id type status description labNumber softwareName equipmentId resolutionText
       requestedBy { id name }
       assignedTo { id name }
+      closureNotice { by { id name } at }
       createdAt updatedAt
     }
   }
@@ -64,11 +67,16 @@ export function ServiceList() {
     ).values(),
   ].toSorted((a, b) => a.name.localeCompare(b.name));
 
-  const services = allServices.filter(
-    (s) =>
-      (!statusFilter || s.status === statusFilter) &&
-      (!assigneeFilter ||
-        (assigneeFilter === "none" ? !s.assignedTo : s.assignedTo?.id === assigneeFilter)),
+  const pin = (s: ServiceRequest) => servicePin(s, user?.id);
+  // Lo asignado a uno queda fijado arriba
+  const services = pinnedFirst(
+    allServices.filter(
+      (s) =>
+        (!statusFilter || s.status === statusFilter) &&
+        (!assigneeFilter ||
+          (assigneeFilter === "none" ? !s.assignedTo : s.assignedTo?.id === assigneeFilter)),
+    ),
+    pin,
   );
 
   const showSkeleton = isLoading && !data; //Skeleton cuando se esta cargando y no hay informacion
@@ -149,12 +157,19 @@ export function ServiceList() {
             <tbody>
               {services.map((s) => {
                 const statusConf = SERVICE_STATUS_CONFIG[s.status];
+                const pinState = pin(s);
                 return (
                   <tr
                     key={s.id}
-                    className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                    className={cn(
+                      "border-b border-border last:border-0 transition-colors",
+                      pinRowClass(pinState),
+                    )}
                   >
-                    <td className="px-4 py-3 text-xs text-muted-foreground font-mono">{s.id}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground font-mono">
+                      <PinMark state={pinState} />
+                      {s.id}
+                    </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                       {SERVICE_TYPE_LABELS[s.type]}
                     </td>
@@ -168,6 +183,15 @@ export function ServiceList() {
                       <Badge color={statusConf.color} withDot>
                         {statusConf.label}
                       </Badge>
+                      {pinState === "notice" && s.closureNotice && (
+                        <ClosureNoticeLine
+                          notice={s.closureNotice}
+                          action={s.status === "rejected" ? "La rechazó" : "La completó"}
+                          entity="service_request"
+                          id={s.id}
+                          onSeen={refetch}
+                        />
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                       {s.requestedBy.name}
