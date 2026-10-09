@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Search } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useLocations } from "@/hooks/useLocations";
 import { gql } from "@/lib/utils";
@@ -17,6 +17,9 @@ const PRODUCTS_QUERY = `
   }
 `;
 
+// Equipos por pagina en el inicio
+const PAGE_SIZE = 8;
+
 const SELECT_CLASS =
   "h-10 rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer";
 
@@ -27,6 +30,7 @@ export function EquipmentOverview() {
   const { locations } = useLocations();
   const [status, setStatus] = useState<EquipmentStatus | "">("");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
   const { data, isLoading } = useAsync<{ products: Product[] }>(() => gql(PRODUCTS_QUERY), []);
 
   const term = search.trim().toLowerCase();
@@ -37,6 +41,10 @@ export function EquipmentOverview() {
       (!term || `${p.machineId} ${p.kind} ${p.brand} ${p.model}`.toLowerCase().includes(term)),
   );
   const withProblems = products.filter((p) => p.status === "in_repair" || p.issues).length;
+  // De a 8 equipos por pagina; si un filtro deja menos paginas, se queda en la ultima
+  const pages = Math.max(1, Math.ceil(products.length / PAGE_SIZE));
+  const current = Math.min(page, pages - 1);
+  const visible = products.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
 
   return (
     <section
@@ -62,7 +70,10 @@ export function EquipmentOverview() {
         <select
           aria-label="Filtrar por ubicación"
           value={locationId}
-          onChange={(e) => setLocationId(e.target.value)}
+          onChange={(e) => {
+            setLocationId(e.target.value);
+            setPage(0);
+          }}
           className={SELECT_CLASS}
         >
           <option value="">Todas las ubicaciones</option>
@@ -77,14 +88,20 @@ export function EquipmentOverview() {
           <Input
             placeholder="Buscar por código, tipo o modelo..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(0);
+            }}
             className="pl-9"
           />
         </div>
         <select
           aria-label="Filtrar por estado"
           value={status}
-          onChange={(e) => setStatus(e.target.value as EquipmentStatus | "")}
+          onChange={(e) => {
+            setStatus(e.target.value as EquipmentStatus | "");
+            setPage(0);
+          }}
           className={SELECT_CLASS}
         >
           <option value="">Todos los estados</option>
@@ -120,7 +137,7 @@ export function EquipmentOverview() {
               </tr>
             </thead>
             <tbody>
-              {products.map((p) => {
+              {visible.map((p) => {
                 const statusConf = EQUIPMENT_STATUS_CONFIG[p.status];
                 return (
                   <tr
@@ -153,6 +170,38 @@ export function EquipmentOverview() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {products.length > PAGE_SIZE && (
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+          <span>
+            Mostrando {current * PAGE_SIZE + 1}–{current * PAGE_SIZE + visible.length} de{" "}
+            {products.length}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={current === 0}
+              onClick={() => setPage(current - 1)}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Anterior
+            </Button>
+            <span className="tabular-nums">
+              {current + 1} / {pages}
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={current >= pages - 1}
+              onClick={() => setPage(current + 1)}
+            >
+              Siguiente
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       )}
     </section>
