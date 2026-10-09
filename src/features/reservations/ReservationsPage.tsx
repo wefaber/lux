@@ -1,6 +1,15 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plus, CheckCircle, XCircle, CalendarClock, Ban, Package, MapPin } from "lucide-react";
+import {
+  Plus,
+  CheckCircle,
+  XCircle,
+  CalendarClock,
+  Ban,
+  Package,
+  MapPin,
+  Search,
+} from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { gql, formatDateTime, cn } from "@/lib/utils";
@@ -24,6 +33,10 @@ import {
 } from "@/components/ui/dialog";
 import { ReservationForm, resourceName } from "./ReservationForm";
 import { OptionSelect } from "@/components/ui/option-select";
+import { Input } from "@/components/ui/input";
+import { Pagination, clampPage } from "@/components/ui/pagination";
+import { ClosureNoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
+import { idQuery, pinnedFirst, reservationPin } from "@/lib/pins";
 
 const RESERVATIONS_QUERY = `
   query GetReservations($status: String) {
@@ -34,6 +47,7 @@ const RESERVATIONS_QUERY = `
       user { id name }
       reviewedBy { id name }
       cancelledBy { id name }
+      closureNotice { by { id name } at }
     }
   }
 `;
@@ -43,11 +57,18 @@ const CANCEL_MUTATION = `mutation CancelReservation($id: ID!) { cancelReservatio
 
 const STATUSES = Object.keys(RESERVATION_STATUS_CONFIG) as ReservationStatus[];
 
+// Reservas por pagina
+const PAGE_SIZE = 10;
+// Ya cerradas: el staff no las ve en el dia a dia
+const FINISHED_STATUSES = new Set<ReservationStatus>(["completed", "rejected", "cancelled"]);
+
 export function ReservationsPage() {
   const { user } = useAuth();
   const staff = isStaff(user?.role);
   const [searchParams] = useSearchParams();
   const [statusFilter, setStatusFilter] = useState<ReservationStatus | "">("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
   // null = cerrado, "new" = pedir, Reservation = modificar (staff). ?nuevo=1 abre el alta
   const [editing, setEditing] = useState<Reservation | "new" | null>(() =>
     searchParams.get("nuevo") === "1" ? "new" : null,
@@ -62,6 +83,35 @@ export function ReservationsPage() {
     [statusFilter],
   );
   const reservations = data?.reservations ?? [];
+
+  const term = search.trim().toLowerCase();
+  const idTerm = idQuery(term, "rsv");
+  const matchesId = (r: Reservation) => idTerm !== null && r.id.toLowerCase().includes(idTerm);
+  const pin = (r: Reservation) => reservationPin(r, user?.id);
+
+  const matching = reservations.filter(
+    (r) =>
+      !term ||
+      matchesId(r) ||
+      resourceName(r).toLowerCase().includes(term) ||
+      r.purpose.toLowerCase().includes(term) ||
+      r.user.name.toLowerCase().includes(term),
+  );
+
+  // Como en tickets: al staff las terminadas, rechazadas y canceladas no le
+  // aparecen salvo que filtre por estado o las busque por su ID. El solicitante
+  // ve todas las suyas. Lo que uno aprobo queda fijado arriba hasta que termina
+  const hideFinished = staff && !statusFilter;
+  const listed = pinnedFirst(
+    hideFinished
+      ? matching.filter((r) => !FINISHED_STATUSES.has(r.status) || matchesId(r) || pin(r))
+      : matching,
+    pin,
+  );
+  const hiddenFinished = matching.length - listed.length;
+
+  const current = clampPage(page, listed.length, PAGE_SIZE);
+  const visible = listed.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
 
   const approve = async (id: string) => {
     setBusyId(id);
@@ -110,15 +160,44 @@ export function ReservationsPage() {
         </Button>
       </div>
 
-      <OptionSelect
-        aria-label="Filtrar por estado"
-        value={statusFilter}
-        onValueChange={(v) => setStatusFilter(v as ReservationStatus | "")}
-        options={[
-          { value: "", label: "Todos los estados" },
-          ...STATUSES.map((s) => ({ value: s, label: RESERVATION_STATUS_CONFIG[s].label })),
-        ]}
-      />
+      <div className="space-y-2">
+        <div className="flex gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute z-10 left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por recurso, motivo o ID (rsv-003)..."
+              aria-label="Buscar reservas por recurso, motivo o ID"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(0);
+              }}
+              className="pl-9"
+            />
+          </div>
+          <OptionSelect
+            aria-label="Filtrar por estado"
+            value={statusFilter}
+            onValueChange={(v) => {
+              setStatusFilter(v as ReservationStatus | "");
+              setPage(0);
+            }}
+            options={[
+              { value: "", label: "Todos los estados" },
+              ...STATUSES.map((s) => ({ value: s, label: RESERVATION_STATUS_CONFIG[s].label })),
+            ]}
+          />
+        </div>
+
+        {hiddenFinished > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {hiddenFinished === 1
+              ? "1 reserva terminada, rechazada o cancelada no se muestra."
+              : `${hiddenFinished} reservas terminadas, rechazadas o canceladas no se muestran.`}{" "}
+            Para verlas, filtrá por estado o buscalas por su ID.
+          </p>
+        )}
+      </div>
 
       {(error || actionError) && (
         <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
@@ -128,9 +207,15 @@ export function ReservationsPage() {
 
       {isLoading && !data ? (
         <TableSkeleton rows={6} cols={columns.length} />
-      ) : reservations.length === 0 ? (
+      ) : listed.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground text-sm">
-          {statusFilter ? "No hay reservas con ese estado" : "Todavía no hay reservas"}
+          {term
+            ? "Ninguna reserva coincide con la búsqueda"
+            : statusFilter
+              ? "No hay reservas con ese estado"
+              : hiddenFinished > 0
+                ? "No hay reservas en curso"
+                : "Todavía no hay reservas"}
         </div>
       ) : (
         <div
@@ -154,14 +239,18 @@ export function ReservationsPage() {
               </tr>
             </thead>
             <tbody>
-              {reservations.map((r) => {
+              {visible.map((r) => {
                 const statusConf = RESERVATION_STATUS_CONFIG[r.status];
                 const busy = busyId === r.id;
                 const ResourceIcon = r.resourceType === "equipment" ? Package : MapPin;
+                const pinState = pin(r);
                 return (
                   <tr
                     key={r.id}
-                    className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                    className={cn(
+                      "border-b border-border last:border-0 transition-colors",
+                      pinRowClass(pinState),
+                    )}
                   >
                     <td className="px-4 py-3 min-w-36 max-w-60 whitespace-normal">
                       <span className="flex items-start gap-2 text-sm font-semibold text-foreground">
@@ -169,6 +258,7 @@ export function ReservationsPage() {
                         {resourceName(r)}
                       </span>
                       <span className="block pl-5.5 font-mono text-xs text-muted-foreground">
+                        <PinMark state={pinState} />
                         {r.id}
                       </span>
                     </td>
@@ -192,10 +282,19 @@ export function ReservationsPage() {
                           {r.rejectionReason}
                         </p>
                       )}
-                      {r.status === "cancelled" && r.cancelledBy && (
+                      {r.status === "cancelled" && r.cancelledBy && pinState !== "notice" && (
                         <p className="text-xs text-muted-foreground mt-1 max-w-48 whitespace-normal">
                           Cancelada por {r.cancelledBy.name}
                         </p>
+                      )}
+                      {pinState === "notice" && r.closureNotice && (
+                        <ClosureNoticeLine
+                          notice={r.closureNotice}
+                          action="La canceló"
+                          entity="reservation"
+                          id={r.id}
+                          onSeen={refetch}
+                        />
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -247,6 +346,8 @@ export function ReservationsPage() {
           </TooltipProvider>
         </div>
       )}
+
+      <Pagination page={current} pageSize={PAGE_SIZE} total={listed.length} onPageChange={setPage} />
 
       {/* AnimatePresence propio: el alta se puede abrir al entrar (?nuevo=1) */}
       <AnimatePresence>
