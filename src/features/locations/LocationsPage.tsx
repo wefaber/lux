@@ -22,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { OptionSelect } from "@/components/ui/option-select";
 
 const CREATE_LOCATION_MUTATION = `
   mutation CreateLocation($input: LocationInput!) { createLocation(input: $input) { id } }
@@ -235,11 +236,11 @@ function LocationForm({ location, existing, onDone, onCancel }: LocationFormProp
         <div className="grid grid-cols-[1fr_6rem] gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="loc-kind">Tipo</Label>
-            <select
+            <OptionSelect
               id="loc-kind"
+              className="w-full"
               value={form.kind}
-              onChange={(e) => {
-                const kind = e.target.value;
+              onValueChange={(kind) => {
                 // Al cambiar de tipo, el numero pasa al proximo libre de ese tipo
                 setForm((f) => {
                   const number = location ? f.number : nextNumber(kind);
@@ -252,14 +253,11 @@ function LocationForm({ location, existing, onDone, onCancel }: LocationFormProp
                 setFieldErrors({});
               }}
               disabled={codeLocked}
-              className="flex h-10 w-full rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring disabled:opacity-50"
-            >
-              {Object.entries(LOCATION_KIND_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
+              options={Object.entries(LOCATION_KIND_LABELS).map(([value, label]) => ({
+                value,
+                label,
+              }))}
+            />
             {fieldError("kind")}
           </div>
           <div className="space-y-1.5">

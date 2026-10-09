@@ -173,6 +173,8 @@ export interface Reservation {
   reviewedBy: User | null;
   rejectionReason: string | null;
   cancelledBy: User | null;
+  /** La cancelo el solicitante y quien la aprobo todavia no lo vio: se le muestra fijada */
+  unseenCancellation?: boolean;
   createdAt: string;
   updatedAt: string;
 } // Reserva de un equipo o espacio por un rango de fechas

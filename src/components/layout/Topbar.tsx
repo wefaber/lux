@@ -33,7 +33,7 @@ export function Topbar() {
   };
 
   return (
-    <header className="sticky h-14 m-5 flex items-center top-4 justify-between px-6 glass-topbar rounded-full">
+    <header className="sticky h-14 mx-5 my-3 flex items-center top-4 justify-between px-6 glass-topbar rounded-full">
       <div />
       <div className="flex items-center gap-3">
         <FontSizeControl />
