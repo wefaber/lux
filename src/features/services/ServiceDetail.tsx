@@ -105,8 +105,8 @@ export function ServiceDetail() {
   }; // Actualizacion de servicio (datos)
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <div className="flex flex-wrap items-center gap-3">
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-3 max-w-2xl">
         <Button variant="ghost" size="icon" asChild>
           <Link to={ROUTES.SERVICES}>
             <ArrowLeft className="h-4 w-4" />
@@ -144,127 +144,131 @@ export function ServiceDetail() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className="space-y-4"
+          // En pantallas anchas los comentarios van al costado, en el espacio que
+          // dejaba libre el detalle; en angostas quedan debajo
+          className="grid gap-4 items-start xl:grid-cols-[minmax(0,42rem)_minmax(0,1fr)]"
         >
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>{SERVICE_TYPE_LABELS[service.type]}</CardTitle>
-                <Badge color={SERVICE_STATUS_CONFIG[service.status].color}>
-                  {SERVICE_STATUS_CONFIG[service.status].label}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
-                    Solicitante
-                  </p>
-                  <p className="text-foreground">{service.requestedBy.name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
-                    Fecha
-                  </p>
-                  <p className="text-foreground">{formatDate(service.createdAt)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
-                    Asignado a
-                  </p>
-                  {canManage && !isClosed ? (
-                    <OptionSelect
-                      aria-label="Asignar responsable"
-                      size="sm"
-                      value={service.assignedTo?.id ?? ""}
-                      onValueChange={(technicianId) =>
-                        technicianId && assign(ASSIGN_SERVICE_MUTATION, { id, technicianId })
-                      }
-                      options={[
-                        { value: "", label: "Sin asignar", disabled: true },
-                        ...technicians.map((t) => ({ value: t.id, label: t.name })),
-                      ]}
-                    />
-                  ) : (
-                    <p className="text-foreground">{service.assignedTo?.name ?? "Sin asignar"}</p>
-                  )}
-                </div>
-                {service.labNumber && (
-                  <div>
-                    <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
-                      Laboratorio
-                    </p>
-                    <p className="text-foreground">N° {service.labNumber}</p>
-                  </div>
-                )}
-                {service.softwareName && (
-                  <div>
-                    <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
-                      Software
-                    </p>
-                    <p className="text-foreground">{service.softwareName}</p>
-                  </div>
-                )}
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1.5">
-                  Descripción
-                </p>
-                <p className="text-sm text-foreground leading-relaxed">{service.description}</p>
-              </div>
-              {service.resolutionText && (
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1.5">
-                    Resolución
-                  </p>
-                  <p className="text-sm text-foreground leading-relaxed">
-                    {service.resolutionText}
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {canManage && !["completed", "rejected"].includes(service.status) && (
+          <div className="space-y-4 min-w-0">
             <Card>
               <CardHeader>
-                <CardTitle>Actualizar estado</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle>{SERVICE_TYPE_LABELS[service.type]}</CardTitle>
+                  <Badge color={SERVICE_STATUS_CONFIG[service.status].color}>
+                    {SERVICE_STATUS_CONFIG[service.status].label}
+                  </Badge>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label>Nuevo estado</Label>
-                  <Select value={newStatus} onValueChange={(v) => setNewStatus(v as ServiceStatus)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar estado..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="approved">Aprobado</SelectItem>
-                      <SelectItem value="in_progress">En progreso</SelectItem>
-                      <SelectItem value="completed">Completado</SelectItem>
-                      <SelectItem value="rejected">Rechazado</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
+                      Solicitante
+                    </p>
+                    <p className="text-foreground">{service.requestedBy.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
+                      Fecha
+                    </p>
+                    <p className="text-foreground">{formatDate(service.createdAt)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
+                      Asignado a
+                    </p>
+                    {canManage && !isClosed ? (
+                      <OptionSelect
+                        aria-label="Asignar responsable"
+                        size="sm"
+                        value={service.assignedTo?.id ?? ""}
+                        onValueChange={(technicianId) =>
+                          technicianId && assign(ASSIGN_SERVICE_MUTATION, { id, technicianId })
+                        }
+                        options={[
+                          { value: "", label: "Sin asignar", disabled: true },
+                          ...technicians.map((t) => ({ value: t.id, label: t.name })),
+                        ]}
+                      />
+                    ) : (
+                      <p className="text-foreground">{service.assignedTo?.name ?? "Sin asignar"}</p>
+                    )}
+                  </div>
+                  {service.labNumber && (
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
+                        Laboratorio
+                      </p>
+                      <p className="text-foreground">N° {service.labNumber}</p>
+                    </div>
+                  )}
+                  {service.softwareName && (
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
+                        Software
+                      </p>
+                      <p className="text-foreground">{service.softwareName}</p>
+                    </div>
+                  )}
                 </div>
-                {(newStatus === "completed" || newStatus === "rejected") && (
-                  <div className="space-y-1.5">
-                    <Label>Texto de resolución</Label>
-                    <Textarea
-                      value={resolution}
-                      onChange={(e) => setResolution(e.target.value)}
-                      placeholder="Describí la resolución o motivo de rechazo..."
-                      className="h-24"
-                    />
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1.5">
+                    Descripción
+                  </p>
+                  <p className="text-sm text-foreground leading-relaxed">{service.description}</p>
+                </div>
+                {service.resolutionText && (
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1.5">
+                      Resolución
+                    </p>
+                    <p className="text-sm text-foreground leading-relaxed">
+                      {service.resolutionText}
+                    </p>
                   </div>
                 )}
-                <div className="flex justify-end">
-                  <Button size="sm" onClick={handleUpdate} disabled={saving || !newStatus}>
-                    {saving ? "Guardando..." : "Actualizar"}
-                  </Button>
-                </div>
               </CardContent>
             </Card>
-          )}
+
+            {canManage && !["completed", "rejected"].includes(service.status) && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Actualizar estado</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label>Nuevo estado</Label>
+                    <Select value={newStatus} onValueChange={(v) => setNewStatus(v as ServiceStatus)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar estado..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="approved">Aprobado</SelectItem>
+                        <SelectItem value="in_progress">En progreso</SelectItem>
+                        <SelectItem value="completed">Completado</SelectItem>
+                        <SelectItem value="rejected">Rechazado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {(newStatus === "completed" || newStatus === "rejected") && (
+                    <div className="space-y-1.5">
+                      <Label>Texto de resolución</Label>
+                      <Textarea
+                        value={resolution}
+                        onChange={(e) => setResolution(e.target.value)}
+                        placeholder="Describí la resolución o motivo de rechazo..."
+                        className="h-24"
+                      />
+                    </div>
+                  )}
+                  <div className="flex justify-end">
+                    <Button size="sm" onClick={handleUpdate} disabled={saving || !newStatus}>
+                      {saving ? "Guardando..." : "Actualizar"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
 
           <CommentThread entityType="service_request" entityId={service.id} />
         </motion.div>
