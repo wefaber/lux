@@ -68,13 +68,6 @@ export interface Component {
 
 export type Equipment = Product | Component; // Tipo de equipamiento (Producto, componente)
 
-// Aviso para quien tenia algo asignado y lo cerro otro (el solicitante u otra
-// persona del staff): queda fijado en su lista hasta que lo marque como visto
-export interface ClosureNotice {
-  by: User;
-  at: string;
-}
-
 export type TicketStatus = "pending" | "in_progress" | "in_resolution" | "resolved"; // Estado del ticket
 export type TicketCategory = "hardware" | "software" | "network" | "other"; // Categoria del ticket
 
@@ -94,8 +87,6 @@ export interface Ticket {
   createdAt: string;
   updatedAt: string;
   resolvedAt: string | null;
-  /** Cierre hecho por otra persona que el responsable todavia no vio: lo mantiene fijado */
-  closureNotice?: ClosureNotice | null;
 } // Interfaz de ticket
 
 export type LoanStatus = "pending" | "approved" | "rejected" | "active" | "overdue" | "returned"; // Estado del prestamo
@@ -115,8 +106,6 @@ export interface Loan {
   components: Component[];
   createdAt: string;
   updatedAt: string;
-  /** Cierre hecho por otra persona que el responsable todavia no vio: lo mantiene fijado */
-  closureNotice?: ClosureNotice | null;
 } // Interfaz de prestamo
 
 export type ServiceType = "lab_preparation" | "software_installation" | "equipment_setup" | "other"; // Tipo de servicio
@@ -135,8 +124,6 @@ export interface ServiceRequest {
   resolutionText: string | null;
   createdAt: string;
   updatedAt: string;
-  /** Cierre hecho por otra persona que el responsable todavia no vio: lo mantiene fijado */
-  closureNotice?: ClosureNotice | null;
 } // Interfaz de servicio
 
 export type InterventionType =
@@ -186,10 +173,10 @@ export interface Reservation {
   reviewedBy: User | null;
   rejectionReason: string | null;
   cancelledBy: User | null;
+  /** La cancelo el solicitante y quien la aprobo todavia no lo vio: se le muestra fijada */
+  unseenCancellation?: boolean;
   createdAt: string;
   updatedAt: string;
-  /** Cierre hecho por otra persona que el responsable todavia no vio: lo mantiene fijado */
-  closureNotice?: ClosureNotice | null;
 } // Reserva de un equipo o espacio por un rango de fechas
 
 export type CommentEntity = "ticket" | "service_request"; // Que se puede comentar

@@ -78,8 +78,6 @@ export const mockTickets: Ticket[] = [
     createdAt: "2026-04-28T14:00:00Z",
     updatedAt: "2026-05-02T16:30:00Z",
     resolvedAt: "2026-05-02T16:30:00Z",
-    // Lo cerro la administracion: Nicolas todavia no lo vio
-    closureNotice: { by: admin1, at: "2026-05-02T16:30:00Z" },
   },
   {
     id: "tkt-005",

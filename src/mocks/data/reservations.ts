@@ -111,7 +111,7 @@ export const mockReservations: Reservation[] = [
     rejectionReason: null,
     cancelledBy: sol3,
     // Nicolas la aprobo y la solicitante la cancelo despues: le queda el aviso
-    closureNotice: { by: sol3, at: at(-10) },
+    unseenCancellation: true,
     createdAt: at(-50),
     updatedAt: at(-10),
   },

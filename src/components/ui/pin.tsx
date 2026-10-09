@@ -2,15 +2,12 @@ import { useState } from "react";
 import { BellRing, Check, Pin } from "lucide-react";
 import { gql } from "@/lib/utils";
 import type { PinState } from "@/lib/pins";
-import type { ClosureNotice } from "@/lib/types";
 
 const ACKNOWLEDGE_MUTATION = `
-  mutation AcknowledgeClosure($entity: String!, $id: ID!) {
-    acknowledgeClosure(entity: $entity, id: $id) { id }
+  mutation AcknowledgeReservationCancellation($id: ID!) {
+    acknowledgeReservationCancellation(id: $id) { id }
   }
 `;
-
-export type ClosureEntity = "ticket" | "service_request" | "loan" | "reservation";
 
 // Fondo de la fila fijada: suave para lo asignado, ambar para un aviso sin ver
 export function pinRowClass(state: PinState): string {
@@ -35,27 +32,25 @@ export function PinMark({ state }: { state: PinState }) {
     return (
       <BellRing
         className="inline h-3.5 w-3.5 mr-1.5 -mt-0.5 text-amber-500"
-        aria-label="Fijado: lo cerró otra persona"
+        aria-label="Fijado: la canceló el solicitante"
       >
-        <title>Fijado: lo cerró otra persona</title>
+        <title>Fijado: la canceló el solicitante</title>
       </BellRing>
     );
   }
   return null;
 }
 
-interface ClosureNoticeLineProps {
-  notice: ClosureNotice;
-  /** Que hizo la otra persona: "Lo resolvió", "La canceló"... */
-  action: string;
-  entity: ClosureEntity;
+interface CancellationNoticeProps {
   id: string;
+  /** Nombre de quien la cancelo */
+  cancelledBy: string;
   onSeen: () => void;
 }
 
-// Aviso de que otra persona cerro algo que tenias asignado. Sigue fijado hasta
-// que lo marcas como visto.
-export function ClosureNoticeLine({ notice, action, entity, id, onSeen }: ClosureNoticeLineProps) {
+// Aviso de que el solicitante cancelo una reserva que aprobaste. Sigue fijada
+// hasta que la marcas como vista.
+export function CancellationNotice({ id, cancelledBy, onSeen }: CancellationNoticeProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -63,10 +58,10 @@ export function ClosureNoticeLine({ notice, action, entity, id, onSeen }: Closur
     setSaving(true);
     setError("");
     try {
-      await gql(ACKNOWLEDGE_MUTATION, { entity, id });
+      await gql(ACKNOWLEDGE_MUTATION, { id });
       onSeen();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo marcar como visto");
+      setError(err instanceof Error ? err.message : "No se pudo marcar como vista");
       setSaving(false);
     }
   };
@@ -74,7 +69,7 @@ export function ClosureNoticeLine({ notice, action, entity, id, onSeen }: Closur
   return (
     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs whitespace-normal">
       <span className="text-amber-600 dark:text-amber-400 font-medium">
-        {action} {notice.by.name}
+        La canceló {cancelledBy}
       </span>
       <button
         type="button"
@@ -83,7 +78,7 @@ export function ClosureNoticeLine({ notice, action, entity, id, onSeen }: Closur
         className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 px-1.5 py-0.5 font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-500/15 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
       >
         <Check className="h-3 w-3" />
-        {saving ? "Marcando..." : "Marcar como visto"}
+        {saving ? "Marcando..." : "Marcar como vista"}
       </button>
       {error && <span className="text-destructive">{error}</span>}
     </div>

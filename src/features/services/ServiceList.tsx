@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { ServiceForm } from "./ServiceForm";
 import { OptionSelect } from "@/components/ui/option-select";
-import { ClosureNoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
+import { PinMark, pinRowClass } from "@/components/ui/pin";
 import { pinnedFirst, servicePin } from "@/lib/pins";
 
 const SERVICES_QUERY = `
@@ -27,7 +27,6 @@ const SERVICES_QUERY = `
       id type status description labNumber softwareName equipmentId resolutionText
       requestedBy { id name }
       assignedTo { id name }
-      closureNotice { by { id name } at }
       createdAt updatedAt
     }
   }
@@ -183,15 +182,6 @@ export function ServiceList() {
                       <Badge color={statusConf.color} withDot>
                         {statusConf.label}
                       </Badge>
-                      {pinState === "notice" && s.closureNotice && (
-                        <ClosureNoticeLine
-                          notice={s.closureNotice}
-                          action={s.status === "rejected" ? "La rechazó" : "La completó"}
-                          entity="service_request"
-                          id={s.id}
-                          onSeen={refetch}
-                        />
-                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                       {s.requestedBy.name}

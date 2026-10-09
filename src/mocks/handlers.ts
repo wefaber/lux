@@ -51,7 +51,6 @@ import type {
   TicketStatus,
   LoanStatus,
   ServiceStatus,
-  ClosureNotice,
 } from "@/lib/types";
 
 function filterByStatus<T extends { status: string }>(items: T[], status?: string): T[] {
@@ -273,49 +272,6 @@ function duplicateLocationError(
 }
 
 const CLOSED_SERVICE_STATUSES = new Set<ServiceStatus>(["completed", "rejected"]);
-
-// Si lo cierra otra persona que el responsable (el solicitante u otro del
-// staff), al responsable le queda un aviso: se le sigue mostrando fijado hasta
-// que lo marca como visto. Si lo cierra el mismo, no hay nada que avisar.
-function noteClosure(
-  item: { closureNotice?: ClosureNotice | null },
-  responsible: User | null,
-  caller: User,
-): void {
-  item.closureNotice =
-    responsible && responsible.id !== caller.id
-      ? { by: caller, at: new Date().toISOString() }
-      : null;
-}
-
-type ClosureEntity = "ticket" | "service_request" | "loan" | "reservation";
-
-// Lo que se puede marcar como visto y quien es su responsable
-function closureTarget(
-  entity: ClosureEntity,
-  id: string,
-): { item: { closureNotice?: ClosureNotice | null }; responsible: User | null } | null {
-  switch (entity) {
-    case "ticket": {
-      const t = mockTickets.find((x) => x.id === id);
-      return t ? { item: t, responsible: t.assignedTo } : null;
-    }
-    case "service_request": {
-      const sr = mockServices.find((x) => x.id === id);
-      return sr ? { item: sr, responsible: sr.assignedTo } : null;
-    }
-    case "loan": {
-      const l = mockLoans.find((x) => x.id === id);
-      return l ? { item: l, responsible: l.approvedBy } : null;
-    }
-    case "reservation": {
-      const r = mockReservations.find((x) => x.id === id);
-      return r ? { item: r, responsible: r.reviewedBy } : null;
-    }
-    default:
-      return null;
-  }
-}
 
 // Horas entre el alta y la resolucion, redondeadas a un decimal
 function averageResolutionHours(tickets: Ticket[]): number | null {
@@ -748,18 +704,14 @@ export const handlers = [
       return HttpResponse.json({ errors: [{ message: invalidTicketTransition(ticket, status) }] });
     }
     if (status === "pending") ticket.assignedTo = null;
-    if (ticket.status === "resolved") {
-      ticket.resolvedAt = null;
-      ticket.closureNotice = null;
-    }
+    if (ticket.status === "resolved") ticket.resolvedAt = null;
     ticket.status = status;
     ticket.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { changeTicketStatus: ticket } });
   }),
 
   graphql.mutation("CompleteTicket", ({ request, variables }) => {
-    const caller = getCaller(request);
-    if (!hasRole(caller, STAFF_ROLES)) {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) {
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
     const { id, input } = variables as {
@@ -784,7 +736,6 @@ export const handlers = [
     ticket.actionsTaken = input.actionsTaken;
     ticket.resolvedAt = new Date().toISOString();
     ticket.updatedAt = new Date().toISOString();
-    noteClosure(ticket, ticket.assignedTo, caller);
     return HttpResponse.json({ data: { completeTicket: ticket } });
   }),
 
@@ -909,8 +860,7 @@ export const handlers = [
   }),
 
   graphql.mutation("ReturnLoan", ({ request, variables }) => {
-    const caller = getCaller(request);
-    if (!hasRole(caller, STAFF_ROLES)) {
+    if (!hasRole(getCaller(request), STAFF_ROLES)) {
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
     const { id, damaged, issues } = variables as {
@@ -931,7 +881,6 @@ export const handlers = [
     loan.equipment.status = damaged ? "in_repair" : "available";
     if (damaged && issues?.trim()) loan.equipment.issues = issues.trim();
     loan.equipment.updatedAt = now;
-    noteClosure(loan, loan.approvedBy, caller);
     return HttpResponse.json({ data: { returnLoan: loan } });
   }),
 
@@ -980,13 +929,6 @@ export const handlers = [
     // Quien la pone en marcha o la cierra sin responsable queda como responsable
     if (!service.assignedTo && (input.status === "in_progress" || input.status === "completed")) {
       service.assignedTo = caller;
-    }
-    if (input.status) {
-      if (CLOSED_SERVICE_STATUSES.has(service.status)) {
-        noteClosure(service, service.assignedTo, caller);
-      } else {
-        service.closureNotice = null;
-      }
     }
     if (input.resolutionText !== undefined) service.resolutionText = input.resolutionText;
     service.updatedAt = new Date().toISOString();
@@ -1564,20 +1506,21 @@ export const handlers = [
     reservation.status = "cancelled";
     reservation.cancelledBy = caller;
     reservation.updatedAt = new Date().toISOString();
-    noteClosure(reservation, reservation.reviewedBy, caller);
+    // Quien la aprobo no se entera de otra forma: le queda fijada con aviso
+    reservation.unseenCancellation = reservation.reviewedBy !== null;
     return HttpResponse.json({ data: { cancelReservation: reservation } });
   }),
 
-  // Quien tenia algo asignado y lo cerro otro lo marca como visto: se desfija
-  graphql.mutation("AcknowledgeClosure", ({ request, variables }) => {
+  // Quien aprobo la reserva marca como vista la cancelacion: se desfija
+  graphql.mutation("AcknowledgeReservationCancellation", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
-    const { entity, id } = variables as { entity: ClosureEntity; id: string };
-    const target = closureTarget(entity, id);
-    if (!target) return HttpResponse.json({ errors: [{ message: "No encontrado" }] });
-    if (target.responsible?.id !== caller.id) return HttpResponse.json(FORBIDDEN);
-    target.item.closureNotice = null;
-    return HttpResponse.json({ data: { acknowledgeClosure: { id } } });
+    const { id } = variables as { id: string };
+    const reservation = mockReservations.find((r) => r.id === id);
+    if (!reservation) return HttpResponse.json({ errors: [{ message: "Reserva no encontrada" }] });
+    if (reservation.reviewedBy?.id !== caller.id) return HttpResponse.json(FORBIDDEN);
+    reservation.unseenCancellation = false;
+    return HttpResponse.json({ data: { acknowledgeReservationCancellation: { id } } });
   }),
 
   // ── Comentarios ────────────────────────────────────────────────────────────

@@ -1,62 +1,35 @@
-import type { ClosureNotice, Loan, Reservation, ServiceRequest, Ticket, User } from "./types";
+import type { Loan, Reservation, ServiceRequest, Ticket, User } from "./types";
 
-// Lo que tenes asignado queda fijado arriba de la lista mientras siga abierto.
-// Si lo cierra otra persona (el solicitante u otro del staff) sigue fijado con
-// un aviso hasta que lo marcas como visto; si lo cerras vos, se desfija solo.
+// Lo que tenes asignado queda fijado arriba de la lista mientras siga abierto, y
+// se desfija al cerrarse. La unica excepcion son las reservas: si la cancela el
+// solicitante, quien la aprobo no se entera de otra forma, asi que le queda
+// fijada con un aviso hasta que la marca como vista.
 export type PinState = "active" | "notice" | null;
 
-interface Pinnable {
-  responsible: Pick<User, "id"> | null;
-  open: boolean;
-  closureNotice?: ClosureNotice | null;
-}
-
-function pinState({ responsible, open, closureNotice }: Pinnable, userId?: string): PinState {
-  if (!userId || responsible?.id !== userId) return null;
-  if (open) return "active";
-  return closureNotice ? "notice" : null;
+function isMine(responsible: Pick<User, "id"> | null, userId?: string): boolean {
+  return !!userId && responsible?.id === userId;
 }
 
 export function ticketPin(t: Ticket, userId?: string): PinState {
-  return pinState(
-    { responsible: t.assignedTo, open: t.status !== "resolved", closureNotice: t.closureNotice },
-    userId,
-  );
+  return isMine(t.assignedTo, userId) && t.status !== "resolved" ? "active" : null;
 }
 
 export function servicePin(s: ServiceRequest, userId?: string): PinState {
-  return pinState(
-    {
-      responsible: s.assignedTo,
-      open: s.status !== "completed" && s.status !== "rejected",
-      closureNotice: s.closureNotice,
-    },
-    userId,
-  );
+  const open = s.status !== "completed" && s.status !== "rejected";
+  return isMine(s.assignedTo, userId) && open ? "active" : null;
 }
 
 // En un prestamo el responsable es quien lo aprobo: lo sigue hasta la devolucion
 export function loanPin(l: Loan, userId?: string): PinState {
-  return pinState(
-    {
-      responsible: l.approvedBy,
-      open: l.status === "approved" || l.status === "active" || l.status === "overdue",
-      closureNotice: l.closureNotice,
-    },
-    userId,
-  );
+  const open = l.status === "approved" || l.status === "active" || l.status === "overdue";
+  return isMine(l.approvedBy, userId) && open ? "active" : null;
 }
 
 // En una reserva, quien la aprobo: la sigue hasta que termina o se cancela
 export function reservationPin(r: Reservation, userId?: string): PinState {
-  return pinState(
-    {
-      responsible: r.reviewedBy,
-      open: r.status === "approved" || r.status === "active",
-      closureNotice: r.closureNotice,
-    },
-    userId,
-  );
+  if (!isMine(r.reviewedBy, userId)) return null;
+  if (r.status === "approved" || r.status === "active") return "active";
+  return r.status === "cancelled" && r.unseenCancellation ? "notice" : null;
 }
 
 const PIN_ORDER: Record<Exclude<PinState, null>, number> = { notice: 0, active: 1 };

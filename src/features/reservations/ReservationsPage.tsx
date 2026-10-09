@@ -35,7 +35,7 @@ import { ReservationForm, resourceName } from "./ReservationForm";
 import { OptionSelect } from "@/components/ui/option-select";
 import { Input } from "@/components/ui/input";
 import { Pagination, clampPage } from "@/components/ui/pagination";
-import { ClosureNoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
+import { CancellationNotice, PinMark, pinRowClass } from "@/components/ui/pin";
 import { idQuery, pinnedFirst, reservationPin } from "@/lib/pins";
 
 const RESERVATIONS_QUERY = `
@@ -47,7 +47,7 @@ const RESERVATIONS_QUERY = `
       user { id name }
       reviewedBy { id name }
       cancelledBy { id name }
-      closureNotice { by { id name } at }
+      unseenCancellation
     }
   }
 `;
@@ -287,12 +287,10 @@ export function ReservationsPage() {
                           Cancelada por {r.cancelledBy.name}
                         </p>
                       )}
-                      {pinState === "notice" && r.closureNotice && (
-                        <ClosureNoticeLine
-                          notice={r.closureNotice}
-                          action="La canceló"
-                          entity="reservation"
+                      {pinState === "notice" && r.cancelledBy && (
+                        <CancellationNotice
                           id={r.id}
+                          cancelledBy={r.cancelledBy.name}
                           onSeen={refetch}
                         />
                       )}

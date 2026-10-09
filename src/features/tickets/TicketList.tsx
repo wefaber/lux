@@ -31,7 +31,7 @@ import { QrScanner } from "@/components/ui/QrScanner";
 import { SearchSelect } from "@/components/ui/search-select";
 import { OptionSelect } from "@/components/ui/option-select";
 import { Pagination, clampPage } from "@/components/ui/pagination";
-import { ClosureNoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
+import { PinMark, pinRowClass } from "@/components/ui/pin";
 import { idQuery, pinnedFirst, ticketPin } from "@/lib/pins";
 
 const TICKETS_QUERY = `
@@ -40,7 +40,6 @@ const TICKETS_QUERY = `
       id title description category status
       submittedBy { id name }
       assignedTo { id name }
-      closureNotice { by { id name } at }
       equipmentId createdAt updatedAt
     }
   }
@@ -106,13 +105,10 @@ export function TicketList() {
   }); // Comprueba que los tickets mostrados matcheen con los filtros
 
   // Al staff los resueltos no le aparecen en la lista del dia a dia: se ven
-  // filtrando por estado o buscandolos por su ID. El solicitante ve todos los suyos.
-  // Un resuelto con aviso sin ver sigue fijado arriba hasta marcarlo como visto
+  // filtrando por estado o buscandolos por su ID. El solicitante ve todos los suyos
   const hideResolved = !isSolicitante && !statusFilter;
   const tickets = pinnedFirst(
-    hideResolved
-      ? matching.filter((t) => t.status !== "resolved" || matchesId(t) || pin(t))
-      : matching,
+    hideResolved ? matching.filter((t) => t.status !== "resolved" || matchesId(t)) : matching,
     pin,
   );
   const hiddenResolved = matching.length - tickets.length;
@@ -275,15 +271,6 @@ export function TicketList() {
                       <Badge color={statusConf.color} withDot>
                         {statusConf.label}
                       </Badge>
-                      {pinState === "notice" && t.closureNotice && (
-                        <ClosureNoticeLine
-                          notice={t.closureNotice}
-                          action="Lo resolvió"
-                          entity="ticket"
-                          id={t.id}
-                          onSeen={refetch}
-                        />
-                      )}
                     </td>
                     <td className="px-4 py-2 text-sm text-muted-foreground font-medium">
                       {TICKET_CATEGORY_LABELS[t.category]}
