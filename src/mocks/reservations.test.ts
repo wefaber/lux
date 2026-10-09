@@ -162,11 +162,14 @@ describe("#9 el staff gestiona las reservas", () => {
     expect((await request(SOLICITANTE, { ...range, equipmentId: "prod-10" })).errors).toBeUndefined();
   });
 
-  test("cancela: el solicitante las suyas antes de empezar; el staff también las en curso", async () => {
+  test("solo quien la pidió la cancela, y antes de que empiece", async () => {
     const own = (await request()).data!.createReservation.id;
     expect((await gqlAs(OTRO_SOLICITANTE, CANCEL, { id: own })).errors?.[0].message).toBe(
       FORBIDDEN,
     );
+    // El staff aprueba, rechaza o modifica, pero no cancela reservas ajenas
+    expect((await gqlAs(TECNICO, CANCEL, { id: own })).errors?.[0].message).toBe(FORBIDDEN);
+    expect((await gqlAs(ADMIN, CANCEL, { id: own })).errors?.[0].message).toBe(FORBIDDEN);
     expect((await gqlAs(SOLICITANTE, CANCEL, { id: own })).errors).toBeUndefined();
     expect(reservation(own)).toMatchObject({ status: "cancelled" });
     expect(reservation(own).cancelledBy?.id).toBe(SOLICITANTE);
@@ -179,7 +182,8 @@ describe("#9 el staff gestiona las reservas", () => {
     expect((await gqlAs(owner, CANCEL, { id: active })).errors?.[0].message).toContain(
       "No se puede cancelar",
     );
-    expect((await gqlAs(TECNICO, CANCEL, { id: active })).errors).toBeUndefined();
+    expect((await gqlAs(TECNICO, CANCEL, { id: active })).errors?.[0].message).toBe(FORBIDDEN);
+    expect(reservation(active).status).toBe("active");
   });
 });
 
