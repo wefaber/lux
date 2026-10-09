@@ -16,7 +16,7 @@ import { mockActivityLogs } from "./generators";
 // Subir VERSION cuando cambien los datos de ejemplo o su forma: lo guardado con
 // otra version se descarta y se arranca de cero.
 const STORAGE_KEY = "lux_mock_data";
-const VERSION = 1;
+const VERSION = 2;
 
 const ARRAYS = {
   users: mockUsers,
