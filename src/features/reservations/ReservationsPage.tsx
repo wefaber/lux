@@ -210,7 +210,7 @@ export function ReservationsPage() {
                             <IconAction
                               label="Aprobar"
                               icon={CheckCircle}
-                              variant="secondary"
+                              variant="success"
                               disabled={busy}
                               onClick={() => approve(r.id)}
                             />
@@ -235,6 +235,7 @@ export function ReservationsPage() {
                           <IconAction
                             label="Cancelar"
                             icon={Ban}
+                            variant="destructive"
                             disabled={busy}
                             onClick={() => setCancelling(r)}
                           />
@@ -283,7 +284,7 @@ export function ReservationsPage() {
 interface IconActionProps {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  variant?: "secondary" | "destructive" | "ghost";
+  variant?: "success" | "destructive" | "ghost";
   disabled?: boolean;
   onClick: () => void;
 }

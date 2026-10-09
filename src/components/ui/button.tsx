@@ -17,6 +17,8 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive/10 text-destructive border border-destructive/20 shadow-2xs hover:bg-destructive/15 active:scale-[0.96]",
         info: "bg-info-bg text-info border border-info-border shadow-2xs hover:bg-info-bg/85 active:scale-[0.96]",
+        success:
+          "bg-success-bg text-success border border-success-border shadow-2xs hover:bg-success/20 active:scale-[0.96]",
       },
       size: {
         sm: "h-8 px-3 text-xs rounded-lg",
