@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
+import { OptionSelect } from "@/components/ui/option-select";
 
 const CREATE_LOAN_MUTATION = `
  mutation CreateLoan($input: LoanInput!) {
@@ -26,8 +27,6 @@ const ACTIVE_USERS_QUERY = `
  }
 `;
 
-const SELECT_CLASS =
-  "h-10 w-full rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer";
 
 interface LoanFormProps {
   onSuccess: () => void;
@@ -82,26 +81,24 @@ export function LoanForm({ onSuccess }: LoanFormProps) {
     <form onSubmit={handleSubmit} className="space-y-4 pt-2">
       <div className="space-y-1.5">
         <Label htmlFor="loan-equipment">Equipo</Label>
-        <select
+        <OptionSelect
           id="loan-equipment"
+          className="w-full"
           value={equipmentId}
-          onChange={(e) => setEquipmentId(e.target.value)}
-          className={SELECT_CLASS}
-          required
-        >
-          <option value="">
-            {loadingProducts
+          onValueChange={setEquipmentId}
+          disabled={loadingProducts || products.length === 0}
+          placeholder={
+            loadingProducts
               ? "Cargando equipos..."
               : products.length === 0
                 ? "No hay equipos disponibles"
-                : "Seleccioná un equipo"}
-          </option>
-          {products.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.machineId} · {p.brand} {p.model} ({p.location})
-            </option>
-          ))}
-        </select>
+                : "Seleccioná un equipo"
+          }
+          options={products.map((p) => ({
+            value: p.id,
+            label: `${p.machineId} · ${p.brand} ${p.model} (${p.location})`,
+          }))}
+        />
         <p className="text-xs text-muted-foreground">Solo se listan los equipos disponibles</p>
       </div>
       {isStaff && (

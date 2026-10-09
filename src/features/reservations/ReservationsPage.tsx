@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ReservationForm, resourceName } from "./ReservationForm";
+import { OptionSelect } from "@/components/ui/option-select";
 
 const RESERVATIONS_QUERY = `
   query GetReservations($status: String) {
@@ -109,19 +110,15 @@ export function ReservationsPage() {
         </Button>
       </div>
 
-      <select
+      <OptionSelect
         aria-label="Filtrar por estado"
         value={statusFilter}
-        onChange={(e) => setStatusFilter(e.target.value as ReservationStatus | "")}
-        className="h-10 rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer"
-      >
-        <option value="">Todos los estados</option>
-        {STATUSES.map((s) => (
-          <option key={s} value={s}>
-            {RESERVATION_STATUS_CONFIG[s].label}
-          </option>
-        ))}
-      </select>
+        onValueChange={(v) => setStatusFilter(v as ReservationStatus | "")}
+        options={[
+          { value: "", label: "Todos los estados" },
+          ...STATUSES.map((s) => ({ value: s, label: RESERVATION_STATUS_CONFIG[s].label })),
+        ]}
+      />
 
       {(error || actionError) && (
         <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
