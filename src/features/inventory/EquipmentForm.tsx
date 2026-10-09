@@ -19,6 +19,7 @@ import { SearchSelect } from "@/components/ui/search-select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
+import { OptionSelect } from "@/components/ui/option-select";
 
 const CREATE_PRODUCT_MUTATION = `
   mutation CreateProduct($input: ProductInput!) {
@@ -58,8 +59,6 @@ const COMPONENT_QUERY = `
 
 const MACHINE_IDS_QUERY = `query GetProducts { products { id machineId } }`;
 
-const SELECT_CLASS =
-  "flex h-10 w-full rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring";
 
 type FormState = {
   machineId: string;
@@ -272,18 +271,13 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <Label htmlFor="kind">Tipo</Label>
-                    <select
+                    <OptionSelect
                       id="kind"
+                      className="w-full"
                       value={form.kind}
-                      onChange={(e) => update("kind", e.target.value)}
-                      className={SELECT_CLASS}
-                    >
-                      {EQUIPMENT_KINDS.map((k) => (
-                        <option key={k} value={k}>
-                          {k}
-                        </option>
-                      ))}
-                    </select>
+                      onValueChange={(v) => update("kind", v)}
+                      options={EQUIPMENT_KINDS.map((k) => ({ value: k, label: k }))}
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="location">Ubicación</Label>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useLocations } from "@/hooks/useLocations";
 import { gql } from "@/lib/utils";
@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
+import { OptionSelect } from "@/components/ui/option-select";
+import { Pagination, clampPage } from "@/components/ui/pagination";
 
 const PRODUCTS_QUERY = `
   query GetProducts {
@@ -20,8 +22,6 @@ const PRODUCTS_QUERY = `
 // Equipos por pagina en el inicio
 const PAGE_SIZE = 8;
 
-const SELECT_CLASS =
-  "h-10 rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer";
 
 // Lo que un solicitante mira antes de entrar a un laboratorio: como estan sus
 // maquinas, y desde ahi mismo reportar la que falla.
@@ -42,8 +42,7 @@ export function EquipmentOverview() {
   );
   const withProblems = products.filter((p) => p.status === "in_repair" || p.issues).length;
   // De a 8 equipos por pagina; si un filtro deja menos paginas, se queda en la ultima
-  const pages = Math.max(1, Math.ceil(products.length / PAGE_SIZE));
-  const current = Math.min(page, pages - 1);
+  const current = clampPage(page, products.length, PAGE_SIZE);
   const visible = products.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
 
   return (
@@ -67,22 +66,18 @@ export function EquipmentOverview() {
       </div>
 
       <div className="flex gap-3 flex-wrap">
-        <select
+        <OptionSelect
           aria-label="Filtrar por ubicación"
           value={locationId}
-          onChange={(e) => {
-            setLocationId(e.target.value);
+          onValueChange={(v) => {
+            setLocationId(v);
             setPage(0);
           }}
-          className={SELECT_CLASS}
-        >
-          <option value="">Todas las ubicaciones</option>
-          {locations.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
-            </option>
-          ))}
-        </select>
+          options={[
+            { value: "", label: "Todas las ubicaciones" },
+            ...locations.map((l) => ({ value: l.id, label: l.name })),
+          ]}
+        />
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute z-10 left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -95,22 +90,21 @@ export function EquipmentOverview() {
             className="pl-9"
           />
         </div>
-        <select
+        <OptionSelect
           aria-label="Filtrar por estado"
           value={status}
-          onChange={(e) => {
-            setStatus(e.target.value as EquipmentStatus | "");
+          onValueChange={(v) => {
+            setStatus(v as EquipmentStatus | "");
             setPage(0);
           }}
-          className={SELECT_CLASS}
-        >
-          <option value="">Todos los estados</option>
-          {Object.entries(EQUIPMENT_STATUS_CONFIG).map(([value, conf]) => (
-            <option key={value} value={value}>
-              {conf.label}
-            </option>
-          ))}
-        </select>
+          options={[
+            { value: "", label: "Todos los estados" },
+            ...Object.entries(EQUIPMENT_STATUS_CONFIG).map(([value, conf]) => ({
+              value,
+              label: conf.label,
+            })),
+          ]}
+        />
       </div>
 
       {isLoading && !data ? (
@@ -173,37 +167,12 @@ export function EquipmentOverview() {
         </div>
       )}
 
-      {products.length > PAGE_SIZE && (
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-          <span>
-            Mostrando {current * PAGE_SIZE + 1}–{current * PAGE_SIZE + visible.length} de{" "}
-            {products.length}
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={current === 0}
-              onClick={() => setPage(current - 1)}
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              Anterior
-            </Button>
-            <span className="tabular-nums">
-              {current + 1} / {pages}
-            </span>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={current >= pages - 1}
-              onClick={() => setPage(current + 1)}
-            >
-              Siguiente
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      )}
+      <Pagination
+        page={current}
+        pageSize={PAGE_SIZE}
+        total={products.length}
+        onPageChange={setPage}
+      />
     </section>
   );
 }

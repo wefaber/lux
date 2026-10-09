@@ -23,6 +23,8 @@ interface SearchSelectProps<T> {
   /** La lista se abre hacia arriba cuando el campo esta al final de un formulario */
   direction?: "up" | "down";
   maxResults?: number;
+  /** Clases extra de la lista: por ejemplo, que sea mas ancha que un campo angosto */
+  listClassName?: string;
   disabled?: boolean;
   "aria-invalid"?: boolean;
 }
@@ -42,6 +44,7 @@ export function SearchSelect<T>({
   placeholder = "Buscar...",
   direction = "down",
   maxResults = 8,
+  listClassName,
   disabled,
   "aria-invalid": ariaInvalid,
 }: SearchSelectProps<T>) {
@@ -103,6 +106,7 @@ export function SearchSelect<T>({
           className={cn(
             "absolute z-50 left-0 right-0 bg-popover border border-border rounded-xl shadow-lg max-h-48 overflow-y-auto",
             direction === "up" ? "bottom-full mb-1" : "top-full mt-1",
+            listClassName,
           )}
         >
           {matches.length === 0 ? (

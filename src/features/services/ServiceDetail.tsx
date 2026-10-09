@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { gql, formatDate } from "@/lib/utils";
-import { SERVICE_STATUS_CONFIG, SERVICE_TYPE_LABELS, ROUTES } from "@/lib/constants";
+import { SERVICE_STATUS_CONFIG, SERVICE_TYPE_LABELS, ROUTES, ROLE_LABELS } from "@/lib/constants";
 import type { ServiceRequest, ServiceStatus, User } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CommentThread } from "@/components/comments/CommentThread";
+import { SearchSelect } from "@/components/ui/search-select";
 
 const SERVICE_QUERY = `
  query GetServiceRequest($id: ID!) {
@@ -47,7 +48,7 @@ const ASSIGN_SERVICE_MUTATION = `
  }
 `;
 const STAFF_USERS_QUERY = `
- query GetUsers($isActive: Boolean) { users(isActive: $isActive) { id name role } }
+ query GetUsers($isActive: Boolean) { users(isActive: $isActive) { id name dni role } }
 `;
 
 export function ServiceDetail() {
@@ -65,6 +66,8 @@ export function ServiceDetail() {
   const service = data?.serviceRequest; // Verificacion e informacion (Si existe) de servicio
   const canManage = hasRole("root_admin", "admin", "tecnico"); // Verificacion si puede gestionar
   const [assignError, setAssignError] = useState("");
+  // "" mientras se busca otro responsable; null muestra el asignado actual
+  const [assigneeSearch, setAssigneeSearch] = useState<string | null>(null);
 
   const { data: usersData } = useAsync<{ users: User[] } | null>(
     () => (canManage ? gql(STAFF_USERS_QUERY, { isActive: true }) : Promise.resolve(null)),
@@ -104,8 +107,8 @@ export function ServiceDetail() {
   }; // Actualizacion de servicio (datos)
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <div className="flex flex-wrap items-center gap-3">
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-3 max-w-2xl">
         <Button variant="ghost" size="icon" asChild>
           <Link to={ROUTES.SERVICES}>
             <ArrowLeft className="h-4 w-4" />
@@ -143,135 +146,168 @@ export function ServiceDetail() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className="space-y-4"
+          // En pantallas anchas los comentarios van al costado, en el espacio que
+          // dejaba libre el detalle; en angostas quedan debajo
+          className="grid gap-4 xl:grid-cols-[minmax(0,42rem)_minmax(0,1fr)]"
         >
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>{SERVICE_TYPE_LABELS[service.type]}</CardTitle>
-                <Badge color={SERVICE_STATUS_CONFIG[service.status].color}>
-                  {SERVICE_STATUS_CONFIG[service.status].label}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
-                    Solicitante
-                  </p>
-                  <p className="text-foreground">{service.requestedBy.name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
-                    Fecha
-                  </p>
-                  <p className="text-foreground">{formatDate(service.createdAt)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
-                    Asignado a
-                  </p>
-                  {canManage && !isClosed ? (
-                    <select
-                      aria-label="Asignar responsable"
-                      value={service.assignedTo?.id ?? ""}
-                      onChange={(e) =>
-                        e.target.value &&
-                        assign(ASSIGN_SERVICE_MUTATION, { id, technicianId: e.target.value })
-                      }
-                      className="h-8 rounded-lg border border-input bg-card/50 px-2 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer"
-                    >
-                      <option value="" disabled>
-                        Sin asignar
-                      </option>
-                      {technicians.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <p className="text-foreground">{service.assignedTo?.name ?? "Sin asignar"}</p>
-                  )}
-                </div>
-                {service.labNumber && (
-                  <div>
-                    <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
-                      Laboratorio
-                    </p>
-                    <p className="text-foreground">N° {service.labNumber}</p>
-                  </div>
-                )}
-                {service.softwareName && (
-                  <div>
-                    <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
-                      Software
-                    </p>
-                    <p className="text-foreground">{service.softwareName}</p>
-                  </div>
-                )}
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1.5">
-                  Descripción
-                </p>
-                <p className="text-sm text-foreground leading-relaxed">{service.description}</p>
-              </div>
-              {service.resolutionText && (
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1.5">
-                    Resolución
-                  </p>
-                  <p className="text-sm text-foreground leading-relaxed">
-                    {service.resolutionText}
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {canManage && !["completed", "rejected"].includes(service.status) && (
-            <Card>
+          <div className="space-y-4 min-w-0">
+            {/* Por encima de "Actualizar estado": la lista del buscador de responsable
+                se despliega sobre esa tarjeta y no debajo de ella */}
+            <Card className="relative z-10">
               <CardHeader>
-                <CardTitle>Actualizar estado</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle>{SERVICE_TYPE_LABELS[service.type]}</CardTitle>
+                  <Badge color={SERVICE_STATUS_CONFIG[service.status].color}>
+                    {SERVICE_STATUS_CONFIG[service.status].label}
+                  </Badge>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label>Nuevo estado</Label>
-                  <Select value={newStatus} onValueChange={(v) => setNewStatus(v as ServiceStatus)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar estado..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="approved">Aprobado</SelectItem>
-                      <SelectItem value="in_progress">En progreso</SelectItem>
-                      <SelectItem value="completed">Completado</SelectItem>
-                      <SelectItem value="rejected">Rechazado</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
+                      Solicitante
+                    </p>
+                    <p className="text-foreground">{service.requestedBy.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
+                      Fecha
+                    </p>
+                    <p className="text-foreground">{formatDate(service.createdAt)}</p>
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="service-assignee"
+                      className="block text-xs text-muted-foreground uppercase tracking-widest mb-0.5"
+                    >
+                      Asignado a
+                    </label>
+                    {canManage && !isClosed ? (
+                      // Al salir del campo sin elegir a nadie vuelve a mostrar el asignado
+                      <div className="max-w-60" onBlur={() => setAssigneeSearch(null)}>
+                        <SearchSelect
+                          id="service-assignee"
+                          items={technicians}
+                          value={assigneeSearch ?? service.assignedTo?.id ?? ""}
+                          onChange={(technicianId) => {
+                            if (!technicianId) {
+                              setAssigneeSearch("");
+                              return;
+                            }
+                            setAssigneeSearch(null);
+                            if (technicianId !== service.assignedTo?.id) {
+                              void assign(ASSIGN_SERVICE_MUTATION, { id, technicianId });
+                            }
+                          }}
+                          getKey={(t) => t.id}
+                          getLabel={(t) => `${t.dni} · ${t.name}`}
+                          getSearchText={(t) => `${t.name} ${t.dni}`}
+                          placeholder="Buscar por nombre o cédula..."
+                          // Como el equipo al crear un ticket: la cedula resaltada, el
+                          // nombre y el rol a la derecha. La lista es mas ancha que el campo
+                          listClassName="w-max min-w-full max-w-[min(26rem,80vw)] right-auto"
+                          renderOption={(t) => (
+                            <>
+                              <span className="font-mono text-xs text-primary font-semibold">
+                                {t.dni}
+                              </span>
+                              <span className="text-muted-foreground">{t.name}</span>
+                              <span className="ml-auto pl-4 text-xs text-muted-foreground">
+                                {ROLE_LABELS[t.role]}
+                              </span>
+                            </>
+                          )}
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-foreground">{service.assignedTo?.name ?? "Sin asignar"}</p>
+                    )}
+                  </div>
+                  {service.labNumber && (
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
+                        Laboratorio
+                      </p>
+                      <p className="text-foreground">N° {service.labNumber}</p>
+                    </div>
+                  )}
+                  {service.softwareName && (
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
+                        Software
+                      </p>
+                      <p className="text-foreground">{service.softwareName}</p>
+                    </div>
+                  )}
                 </div>
-                {(newStatus === "completed" || newStatus === "rejected") && (
-                  <div className="space-y-1.5">
-                    <Label>Texto de resolución</Label>
-                    <Textarea
-                      value={resolution}
-                      onChange={(e) => setResolution(e.target.value)}
-                      placeholder="Describí la resolución o motivo de rechazo..."
-                      className="h-24"
-                    />
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1.5">
+                    Descripción
+                  </p>
+                  <p className="text-sm text-foreground leading-relaxed">{service.description}</p>
+                </div>
+                {service.resolutionText && (
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1.5">
+                      Resolución
+                    </p>
+                    <p className="text-sm text-foreground leading-relaxed">
+                      {service.resolutionText}
+                    </p>
                   </div>
                 )}
-                <div className="flex justify-end">
-                  <Button size="sm" onClick={handleUpdate} disabled={saving || !newStatus}>
-                    {saving ? "Guardando..." : "Actualizar"}
-                  </Button>
-                </div>
               </CardContent>
             </Card>
-          )}
 
-          <CommentThread entityType="service_request" entityId={service.id} />
+            {canManage && !["completed", "rejected"].includes(service.status) && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Actualizar estado</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label>Nuevo estado</Label>
+                    <Select value={newStatus} onValueChange={(v) => setNewStatus(v as ServiceStatus)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar estado..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="approved">Aprobado</SelectItem>
+                        <SelectItem value="in_progress">En progreso</SelectItem>
+                        <SelectItem value="completed">Completado</SelectItem>
+                        <SelectItem value="rejected">Rechazado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {(newStatus === "completed" || newStatus === "rejected") && (
+                    <div className="space-y-1.5">
+                      <Label>Texto de resolución</Label>
+                      <Textarea
+                        value={resolution}
+                        onChange={(e) => setResolution(e.target.value)}
+                        placeholder="Describí la resolución o motivo de rechazo..."
+                        className="h-24"
+                      />
+                    </div>
+                  )}
+                  <div className="flex justify-end">
+                    <Button size="sm" onClick={handleUpdate} disabled={saving || !newStatus}>
+                      {saving ? "Guardando..." : "Actualizar"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* Al costado, los comentarios llegan justo hasta el final de la columna
+              del detalle: no le suman alto a la fila y la lista se desplaza por dentro */}
+          <div className="relative xl:min-h-[26rem]">
+            <div className="xl:absolute xl:inset-0">
+              <CommentThread entityType="service_request" entityId={service.id} fill />
+            </div>
+          </div>
         </motion.div>
       )}
     </div>
