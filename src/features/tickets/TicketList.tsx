@@ -31,6 +31,8 @@ import { QrScanner } from "@/components/ui/QrScanner";
 import { SearchSelect } from "@/components/ui/search-select";
 import { OptionSelect } from "@/components/ui/option-select";
 import { Pagination, clampPage } from "@/components/ui/pagination";
+import { PinMark, pinRowClass } from "@/components/ui/pin";
+import { idQuery, pinnedFirst, ticketPin } from "@/lib/pins";
 
 const TICKETS_QUERY = `
   query GetTickets($submittedById: ID) {
@@ -92,10 +94,9 @@ export function TicketList() {
 
 
   const term = search.trim().toLowerCase();
-  // Solo cuenta como busqueda por ID algo con forma de ID ("tkt-007", "tkt-00",
-  // "7"): si no, una "t" suelta traeria todos los resueltos
-  const idQuery = /^(tkt-?)?\d*$/.test(term) && /\d|tkt/.test(term) ? term : null;
-  const matchesId = (t: Ticket) => idQuery !== null && t.id.toLowerCase().includes(idQuery);
+  const idTerm = idQuery(term, "tkt");
+  const matchesId = (t: Ticket) => idTerm !== null && t.id.toLowerCase().includes(idTerm);
+  const pin = (t: Ticket) => ticketPin(t, user?.id);
 
   const matching = (data?.tickets ?? []).filter((t) => {
     const matchSearch = !term || t.title.toLowerCase().includes(term) || matchesId(t);
@@ -106,9 +107,10 @@ export function TicketList() {
   // Al staff los resueltos no le aparecen en la lista del dia a dia: se ven
   // filtrando por estado o buscandolos por su ID. El solicitante ve todos los suyos
   const hideResolved = !isSolicitante && !statusFilter;
-  const tickets = hideResolved
-    ? matching.filter((t) => t.status !== "resolved" || matchesId(t))
-    : matching;
+  const tickets = pinnedFirst(
+    hideResolved ? matching.filter((t) => t.status !== "resolved" || matchesId(t)) : matching,
+    pin,
+  );
   const hiddenResolved = matching.length - tickets.length;
 
   const current = clampPage(page, tickets.length, PAGE_SIZE);
@@ -244,12 +246,19 @@ export function TicketList() {
             <tbody>
               {visible.map((t) => {
                 const statusConf = TICKET_STATUS_CONFIG[t.status];
+                const pinState = pin(t);
                 return (
                   <tr
                     key={t.id}
-                    className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                    className={cn(
+                      "border-b border-border last:border-0 transition-colors",
+                      pinRowClass(pinState),
+                    )}
                   >
-                    <td className="px-4 py-2 text-xs text-muted-foreground font-mono">{t.id}</td>
+                    <td className="px-4 py-2 text-xs text-muted-foreground font-mono">
+                      <PinMark state={pinState} />
+                      {t.id}
+                    </td>
                     <td className="px-4 py-2 min-w-48 max-w-72 whitespace-normal">
                       <Link
                         to={`${ROUTES.TICKETS}/${t.id}`}
