@@ -24,6 +24,16 @@ const ROLE_BADGE: Record<UserRole, BadgeColor> = {
   solicitante: "success",
 }; // Color de badge por rol
 
+// Los cambios hechos con los mocks se guardan en el navegador (mocks/persist):
+// esto los borra y vuelve a los datos de ejemplo. Import dinamico para no
+// sumar los mocks al bundle de produccion.
+async function resetMockData() {
+  if (!window.confirm("Se borran los cambios hechos y se vuelve a los datos de ejemplo.")) return;
+  const { clearMockData } = await import("@/mocks/persist");
+  clearMockData();
+  window.location.reload();
+}
+
 // Se resuelve dentro del componente: en el modulo se evaluaria siempre y los
 // mocks quedarian dentro del bundle de produccion.
 function groupByRole(showAll: boolean) {
@@ -155,6 +165,13 @@ export function DevCredentials({ onFill, onLogin }: DevCredentialsProps) {
               className="mt-3 w-full cursor-pointer rounded-xl border border-border/70 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-muted/70"
             >
               {showAll ? "Ver uno por rol" : `Ver todos (${mockUsers.length})`}
+            </button>
+            <button
+              type="button"
+              onClick={resetMockData}
+              className="mt-2 w-full cursor-pointer rounded-xl py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+            >
+              Restablecer datos de prueba
             </button>
           </motion.div>
         )}
