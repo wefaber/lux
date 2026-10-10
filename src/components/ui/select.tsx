@@ -42,6 +42,8 @@ function SelectContent({
       <SelectPrimitive.Content
         className={cn(
           "relative z-50 min-w-[8rem] overflow-hidden rounded-xl border border-border bg-popover/90 shadow-md backdrop-blur-xl",
+          // Listas largas (responsables, tickets): se desplazan adentro en vez de salirse de la pantalla
+          "max-h-[min(20rem,var(--radix-select-content-available-height))]",
           "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
           position === "popper" &&
             "data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1",

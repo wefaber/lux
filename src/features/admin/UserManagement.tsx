@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { UserForm } from "./UserForm";
+import { OptionSelect } from "@/components/ui/option-select";
 
 const USERS_QUERY = `
   query GetUsers {
@@ -71,17 +72,18 @@ export function UserManagement() {
             className="pl-9"
           />
         </div>
-        <select
+        <OptionSelect
+          aria-label="Filtrar por rol"
           value={roleFilter}
-          onChange={(e) => setRoleFilter(e.target.value as UserRole | "")}
-          className="h-10 rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer"
-        >
-          <option value="">Todos los roles</option>
-          <option value="root_admin">Super Admin</option>
-          <option value="admin">Administrador</option>
-          <option value="tecnico">Técnico</option>
-          <option value="solicitante">Solicitante</option>
-        </select>
+          onValueChange={(v) => setRoleFilter(v as UserRole | "")}
+          options={[
+            { value: "", label: "Todos los roles" },
+            { value: "root_admin", label: "Super Admin" },
+            { value: "admin", label: "Administrador" },
+            { value: "tecnico", label: "Técnico" },
+            { value: "solicitante", label: "Solicitante" },
+          ]}
+        />
       </div>
 
       {showSkeleton ? (

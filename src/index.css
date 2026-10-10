@@ -335,6 +335,12 @@ html.dark[data-contrast="high"] {
   border-radius: 6px;
 }
 
+/* En las listas de opciones el foco ya se marca con el fondo resaltado del
+   item: el contorno general quedaba como un recuadro grueso sobre la opcion */
+[role="option"]:focus-visible {
+  outline: none;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

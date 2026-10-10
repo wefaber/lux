@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CommentThread } from "@/components/comments/CommentThread";
+import { OptionSelect } from "@/components/ui/option-select";
 
 const SERVICE_QUERY = `
  query GetServiceRequest($id: ID!) {
@@ -173,24 +174,18 @@ export function ServiceDetail() {
                     Asignado a
                   </p>
                   {canManage && !isClosed ? (
-                    <select
+                    <OptionSelect
                       aria-label="Asignar responsable"
+                      size="sm"
                       value={service.assignedTo?.id ?? ""}
-                      onChange={(e) =>
-                        e.target.value &&
-                        assign(ASSIGN_SERVICE_MUTATION, { id, technicianId: e.target.value })
+                      onValueChange={(technicianId) =>
+                        technicianId && assign(ASSIGN_SERVICE_MUTATION, { id, technicianId })
                       }
-                      className="h-8 rounded-lg border border-input bg-card/50 px-2 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer"
-                    >
-                      <option value="" disabled>
-                        Sin asignar
-                      </option>
-                      {technicians.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}
-                        </option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: "", label: "Sin asignar", disabled: true },
+                        ...technicians.map((t) => ({ value: t.id, label: t.name })),
+                      ]}
+                    />
                   ) : (
                     <p className="text-foreground">{service.assignedTo?.name ?? "Sin asignar"}</p>
                   )}

@@ -17,6 +17,7 @@ import {
   AnimatePresence,
 } from "@/components/ui/dialog";
 import { ServiceForm } from "./ServiceForm";
+import { OptionSelect } from "@/components/ui/option-select";
 
 const SERVICES_QUERY = `
   query GetServiceRequests($requestedById: ID) {
@@ -90,36 +91,32 @@ export function ServiceList() {
       </div>
 
       <div className="flex gap-3">
-        <select
+        <OptionSelect
+          aria-label="Filtrar por estado"
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as ServiceStatus | "")}
-          className="h-10 rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer"
-        >
-          <option value="">Todos los estados</option>
-          <option value="pending">Pendiente</option>
-          <option value="approved">Aprobado</option>
-          <option value="in_progress">En progreso</option>
-          <option value="completed">Completado</option>
-          <option value="rejected">Rechazado</option>
-        </select>
+          onValueChange={(v) => setStatusFilter(v as ServiceStatus | "")}
+          options={[
+            { value: "", label: "Todos los estados" },
+            ...Object.entries(SERVICE_STATUS_CONFIG).map(([value, conf]) => ({
+              value,
+              label: conf.label,
+            })),
+          ]}
+        />
         {!isSolicitante && (
-          <select
+          <OptionSelect
             aria-label="Responsable"
             value={assigneeFilter}
-            onChange={(e) => setAssigneeFilter(e.target.value)}
-            className="h-10 rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer"
-          >
-            <option value="">Todos los responsables</option>
-            <option value="none">Sin asignar</option>
-            {user && <option value={user.id}>Asignadas a mí</option>}
-            {assignees
-              .filter((a) => a.id !== user?.id)
-              .map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-          </select>
+            onValueChange={setAssigneeFilter}
+            options={[
+              { value: "", label: "Todos los responsables" },
+              { value: "none", label: "Sin asignar" },
+              ...(user ? [{ value: user.id, label: "Asignadas a mí" }] : []),
+              ...assignees
+                .filter((a) => a.id !== user?.id)
+                .map((a) => ({ value: a.id, label: a.name })),
+            ]}
+          />
         )}
       </div>
 

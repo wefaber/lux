@@ -12,6 +12,7 @@ import { MetricCardSkeleton } from "@/components/skeletons/CardSkeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LoanForm } from "./LoanForm";
 import { RejectLoanDialog, ReturnLoanDialog } from "./LoanActionDialogs";
+import { OptionSelect } from "@/components/ui/option-select";
 
 const LOANS_QUERY = `
  query GetLoans($status: String, $userId: ID) {
@@ -146,18 +147,15 @@ export function LoansPage() {
       )}
 
       <div className="flex gap-3">
-        <select
+        <OptionSelect
+          aria-label="Filtrar por estado"
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as LoanStatus | "")}
-          className="h-10 rounded-xl border border-input bg-card/50 px-3 text-sm text-foreground focus:outline-none focus:border-ring cursor-pointer"
-        >
-          <option value="">Todos los estados</option>
-          {LOAN_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {LOAN_STATUS_CONFIG[s].label}
-            </option>
-          ))}
-        </select>
+          onValueChange={(v) => setStatusFilter(v as LoanStatus | "")}
+          options={[
+            { value: "", label: "Todos los estados" },
+            ...LOAN_STATUSES.map((s) => ({ value: s, label: LOAN_STATUS_CONFIG[s].label })),
+          ]}
+        />
       </div>
 
       {actionError && (
