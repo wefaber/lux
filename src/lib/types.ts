@@ -173,8 +173,6 @@ export interface Reservation {
   reviewedBy: User | null;
   rejectionReason: string | null;
   cancelledBy: User | null;
-  /** La cancelo el solicitante y quien la aprobo todavia no lo vio: se le muestra fijada */
-  unseenCancellation?: boolean;
   createdAt: string;
   updatedAt: string;
 } // Reserva de un equipo o espacio por un rango de fechas
@@ -189,6 +187,33 @@ export interface Comment {
   body: string;
   createdAt: string;
 } // Comentario en el hilo de un ticket o solicitud
+
+export type NoticeEntity = "ticket" | "service_request" | "loan" | "reservation"; // Sobre que puede haber un aviso
+export type NoticeKind =
+  | "assigned"
+  | "approved"
+  | "rejected"
+  | "resolved"
+  | "completed"
+  | "cancelled"
+  | "comment"
+  | "overdue"; // Que paso
+
+// Algo que hizo otra persona (o el tiempo, como un prestamo vencido) sobre un
+// ticket, solicitud, prestamo o reserva tuyo. Queda fijado arriba de la lista
+// hasta que lo marcas como visto. Hay uno solo por persona y elemento: el
+// ultimo evento reemplaza al anterior
+export interface Notice {
+  id: string;
+  /** A quien le llega */
+  userId: string;
+  entityType: NoticeEntity;
+  entityId: string;
+  kind: NoticeKind;
+  /** Quien lo provoco; null si fue el sistema (un prestamo que vence) */
+  by: User | null;
+  createdAt: string;
+}
 
 export interface ActivityLog {
   id: string;

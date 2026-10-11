@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
+import { useNotices } from "@/hooks/useNotices";
 import { gql, formatDateTime, cn } from "@/lib/utils";
 import { RESERVATION_STATUS_CONFIG } from "@/lib/constants";
 import { isStaff } from "@/lib/roles";
@@ -35,7 +36,7 @@ import { ReservationForm, resourceName } from "./ReservationForm";
 import { OptionSelect } from "@/components/ui/option-select";
 import { Input } from "@/components/ui/input";
 import { Pagination, clampPage } from "@/components/ui/pagination";
-import { CancellationNotice, PinMark, pinRowClass } from "@/components/ui/pin";
+import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
 import { idQuery, pinnedFirst, reservationPin } from "@/lib/pins";
 
 const RESERVATIONS_QUERY = `
@@ -47,7 +48,6 @@ const RESERVATIONS_QUERY = `
       user { id name }
       reviewedBy { id name }
       cancelledBy { id name }
-      unseenCancellation
     }
   }
 `;
@@ -64,6 +64,7 @@ const FINISHED_STATUSES = new Set<ReservationStatus>(["completed", "rejected", "
 
 export function ReservationsPage() {
   const { user } = useAuth();
+  const { noticeFor } = useNotices();
   const staff = isStaff(user?.role);
   const [searchParams] = useSearchParams();
   const [statusFilter, setStatusFilter] = useState<ReservationStatus | "">("");
@@ -87,7 +88,7 @@ export function ReservationsPage() {
   const term = search.trim().toLowerCase();
   const idTerm = idQuery(term, "rsv");
   const matchesId = (r: Reservation) => idTerm !== null && r.id.toLowerCase().includes(idTerm);
-  const pin = (r: Reservation) => reservationPin(r, user?.id);
+  const pin = (r: Reservation) => reservationPin(r, user?.id, !!noticeFor("reservation", r.id));
 
   const matching = reservations.filter(
     (r) =>
@@ -244,6 +245,7 @@ export function ReservationsPage() {
                 const busy = busyId === r.id;
                 const ResourceIcon = r.resourceType === "equipment" ? Package : MapPin;
                 const pinState = pin(r);
+                const notice = noticeFor("reservation", r.id);
                 return (
                   <tr
                     key={r.id}
@@ -282,18 +284,15 @@ export function ReservationsPage() {
                           {r.rejectionReason}
                         </p>
                       )}
-                      {r.status === "cancelled" && r.cancelledBy && pinState !== "notice" && (
-                        <p className="text-xs text-muted-foreground mt-1 max-w-48 whitespace-normal">
-                          Cancelada por {r.cancelledBy.name}
-                        </p>
-                      )}
-                      {pinState === "notice" && r.cancelledBy && (
-                        <CancellationNotice
-                          id={r.id}
-                          cancelledBy={r.cancelledBy.name}
-                          onSeen={refetch}
-                        />
-                      )}
+                      {/* El aviso de cancelacion ya dice quien la cancelo */}
+                      {r.status === "cancelled" &&
+                        r.cancelledBy &&
+                        notice?.kind !== "cancelled" && (
+                          <p className="text-xs text-muted-foreground mt-1 max-w-48 whitespace-normal">
+                            Cancelada por {r.cancelledBy.name}
+                          </p>
+                        )}
+                      {notice && <NoticeLine notice={notice} />}
                     </td>
                     <td className="px-4 py-3">
                       {/* Acciones con icono y su nombre en el tooltip: entran en una fila

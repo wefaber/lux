@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useHaptics } from "@/hooks/useHaptics";
 import { navItemsFor } from "./navItems";
+import { NavIcon } from "./NavIcon";
 
 export function TabBar() {
   const { user } = useAuth();
@@ -16,11 +17,11 @@ export function TabBar() {
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
       <div className="flex h-14">
-        {visibleItems.map(({ icon: Icon, label, to, end }) => (
+        {visibleItems.map((item) => (
           <NavLink
-            key={to}
-            to={to}
-            end={end}
+            key={item.to}
+            to={item.to}
+            end={item.end}
             className={({ isActive }) =>
               cn(
                 "flex flex-1 flex-col items-center justify-center gap-[3px] text-[10px] transition-colors select-none",
@@ -29,8 +30,8 @@ export function TabBar() {
             }
             onClick={() => trigger(30)}
           >
-            <Icon className="h-[22px] w-[22px]" />
-            <span className="leading-none">{label}</span>
+            <NavIcon item={item} className="h-[22px] w-[22px]" />
+            <span className="leading-none">{item.label}</span>
           </NavLink>
         ))}
       </div>

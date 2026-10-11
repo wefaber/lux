@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mockTickets } from "./data/tickets";
 import { mockReservations } from "./data/reservations";
+import { mockNotices } from "./data/notices";
 import { FORBIDDEN, gqlAs, useMockServer, USERS } from "@/test/graphql";
 import { idQuery, pinnedFirst, reservationPin, ticketPin } from "@/lib/pins";
 import type { Reservation } from "@/lib/types";
@@ -17,7 +18,13 @@ const DONE = { diagnosis: "Fuente quemada", corrected: true, actionsTaken: "Se c
 const CREATE_RESERVATION = `mutation CreateReservation($input: ReservationInput!) { createReservation(input: $input) { id } }`;
 const APPROVE_RESERVATION = `mutation ApproveReservation($id: ID!) { approveReservation(id: $id) { id } }`;
 const CANCEL_RESERVATION = `mutation CancelReservation($id: ID!) { cancelReservation(id: $id) { id } }`;
-const ACK = `mutation AcknowledgeReservationCancellation($id: ID!) { acknowledgeReservationCancellation(id: $id) { id } }`;
+const ACK = `mutation AcknowledgeNotice($id: ID!) { acknowledgeNotice(id: $id) }`;
+
+// El aviso sin ver de un usuario sobre una reserva, si hay
+const reservationNotice = (userId: string, id: string) =>
+  mockNotices.find(
+    (n) => n.userId === userId && n.entityType === "reservation" && n.entityId === id,
+  );
 
 const DAY = 86_400_000;
 // Cada reserva en su propio dia, lejos de las de ejemplo, para no pisarse
@@ -63,21 +70,26 @@ describe("reserva cancelada por el solicitante: aviso para quien la aprobó", ()
     expect(reservationPin(reservation(id), TECNICO)).toBe("active");
 
     expect((await gqlAs(SOLICITANTE, CANCEL_RESERVATION, { id })).errors).toBeUndefined();
-    expect(reservation(id).unseenCancellation).toBe(true);
-    expect(reservationPin(reservation(id), TECNICO)).toBe("notice");
+    const notice = reservationNotice(TECNICO, id)!;
+    expect(notice.kind).toBe("cancelled");
+    expect(notice.by?.id).toBe(SOLICITANTE);
+    expect(reservationPin(reservation(id), TECNICO, true)).toBe("notice");
 
-    // Solo quien la aprobó la marca como vista
-    expect((await gqlAs(ADMIN, ACK, { id })).errors?.[0].message).toBe(FORBIDDEN);
-    expect((await gqlAs(SOLICITANTE, ACK, { id })).errors?.[0].message).toBe(FORBIDDEN);
-    expect((await gqlAs(TECNICO, ACK, { id })).errors).toBeUndefined();
-    expect(reservation(id).unseenCancellation).toBe(false);
-    expect(reservationPin(reservation(id), TECNICO)).toBeNull();
+    // Solo quien recibió el aviso lo marca como visto
+    const ackId = { id: notice.id };
+    expect((await gqlAs(ADMIN, ACK, ackId)).errors?.[0].message).toBe(FORBIDDEN);
+    expect((await gqlAs(SOLICITANTE, ACK, ackId)).errors?.[0].message).toBe(FORBIDDEN);
+    expect((await gqlAs(TECNICO, ACK, ackId)).errors).toBeUndefined();
+    expect(reservationNotice(TECNICO, id)).toBeUndefined();
+    expect(reservationPin(reservation(id), TECNICO, false)).toBeNull();
   });
 
   test("si se cancela antes de que alguien la apruebe, no hay a quién avisar", async () => {
     const id = await newReservation();
     await gqlAs(SOLICITANTE, CANCEL_RESERVATION, { id });
-    expect(reservation(id).unseenCancellation).toBe(false);
+    expect(mockNotices.some((n) => n.entityType === "reservation" && n.entityId === id)).toBe(
+      false,
+    );
   });
 });
 
@@ -87,9 +99,9 @@ describe("orden y búsqueda de las listas", () => {
     const items = [
       { id: "a", status: "approved", reviewedBy: null },
       { id: "b", status: "approved", reviewedBy: mine },
-      { id: "c", status: "cancelled", reviewedBy: mine, unseenCancellation: true },
+      { id: "c", status: "cancelled", reviewedBy: mine },
     ] as unknown as Reservation[];
-    const sorted = pinnedFirst(items, (r) => reservationPin(r, TECNICO));
+    const sorted = pinnedFirst(items, (r) => reservationPin(r, TECNICO, r.id === "c"));
     expect(sorted.map((r) => r.id)).toEqual(["c", "b", "a"]);
   });
 

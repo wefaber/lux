@@ -8,6 +8,7 @@ import { mockReservations } from "./data/reservations";
 import { mockTickets } from "./data/tickets";
 import { mockLoans } from "./data/loans";
 import { mockServices } from "./data/services";
+import { mockNotices } from "./data/notices";
 import { mockActivityLogs } from "./generators";
 import {
   validateComment,
@@ -37,6 +38,8 @@ import type {
   InterventionType,
   Comment,
   CommentEntity,
+  NoticeEntity,
+  NoticeKind,
   Reservation,
   ReservationResource,
   ReservationStatus,
@@ -128,8 +131,36 @@ function syncOverdueLoans(): void {
   for (const loan of mockLoans) {
     if (loan.status === "active" && new Date(loan.returnDate) < now) {
       loan.status = "overdue";
+      notify(loan.approvedBy, "loan", loan.id, "overdue", null);
     }
   }
+}
+
+// Deja un aviso a `to` sobre algo que hizo `by` (null: el sistema). Lo que uno
+// hace sobre lo suyo no se avisa. Un aviso nuevo reemplaza al que hubiera
+// sobre el mismo elemento: se muestra solo lo ultimo que paso
+function notify(
+  to: User | null | undefined,
+  entityType: NoticeEntity,
+  entityId: string,
+  kind: NoticeKind,
+  by: User | null,
+): void {
+  if (!to || to.id === by?.id) return;
+  const id = nextId("ntc-", mockNotices, 3);
+  const previous = mockNotices.findIndex(
+    (n) => n.userId === to.id && n.entityType === entityType && n.entityId === entityId,
+  );
+  if (previous !== -1) mockNotices.splice(previous, 1);
+  mockNotices.push({
+    id,
+    userId: to.id,
+    entityType,
+    entityId,
+    kind,
+    by,
+    createdAt: new Date().toISOString(),
+  });
 }
 
 function canTransitionTicket(ticket: Ticket, to: TicketStatus): boolean {
@@ -230,6 +261,17 @@ function commentAccessError(
   return null;
 }
 
+// Quienes siguen el hilo de un ticket o solicitud: quien lo abrio y quien lo atiende
+function threadParticipants(entityType: CommentEntity, entityId: string): User[] {
+  const item =
+    entityType === "ticket"
+      ? mockTickets.find((t) => t.id === entityId)
+      : mockServices.find((s) => s.id === entityId);
+  if (!item) return [];
+  const owner = "submittedBy" in item ? item.submittedBy : item.requestedBy;
+  return item.assignedTo && item.assignedTo.id !== owner.id ? [owner, item.assignedTo] : [owner];
+}
+
 // Si la intervencion dice venir de un ticket, tiene que ser un ticket de ese equipo
 function interventionTicketError(ticketId: string | null, equipmentId: string): string | null {
   if (!ticketId) return null;
@@ -272,6 +314,13 @@ function duplicateLocationError(
 }
 
 const CLOSED_SERVICE_STATUSES = new Set<ServiceStatus>(["completed", "rejected"]);
+
+// Estados de una solicitud que son una respuesta para quien la pidio
+const SERVICE_RESPONSE_NOTICES = {
+  approved: "approved",
+  rejected: "rejected",
+  completed: "completed",
+} as const satisfies Partial<Record<ServiceStatus, NoticeKind>>;
 
 // Horas entre el alta y la resolucion, redondeadas a un decimal
 function averageResolutionHours(tickets: Ticket[]): number | null {
@@ -711,7 +760,8 @@ export const handlers = [
   }),
 
   graphql.mutation("CompleteTicket", ({ request, variables }) => {
-    if (!hasRole(getCaller(request), STAFF_ROLES)) {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) {
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
     const { id, input } = variables as {
@@ -736,6 +786,7 @@ export const handlers = [
     ticket.actionsTaken = input.actionsTaken;
     ticket.resolvedAt = new Date().toISOString();
     ticket.updatedAt = new Date().toISOString();
+    notify(ticket.submittedBy, "ticket", ticket.id, "resolved", caller);
     return HttpResponse.json({ data: { completeTicket: ticket } });
   }),
 
@@ -925,6 +976,7 @@ export const handlers = [
     };
     const service = mockServices.find((s) => s.id === id);
     if (!service) return HttpResponse.json({ errors: [{ message: "Solicitud no encontrada" }] });
+    const previousStatus = service.status;
     if (input.status) service.status = input.status as ServiceRequest["status"];
     // Quien la pone en marcha o la cierra sin responsable queda como responsable
     if (!service.assignedTo && (input.status === "in_progress" || input.status === "completed")) {
@@ -932,6 +984,11 @@ export const handlers = [
     }
     if (input.resolutionText !== undefined) service.resolutionText = input.resolutionText;
     service.updatedAt = new Date().toISOString();
+    // Al solicitante se le avisa la respuesta: aprobada, rechazada o completada
+    if (service.status !== previousStatus && service.status in SERVICE_RESPONSE_NOTICES) {
+      const kind = SERVICE_RESPONSE_NOTICES[service.status as keyof typeof SERVICE_RESPONSE_NOTICES];
+      notify(service.requestedBy, "service_request", service.id, kind, caller);
+    }
     return HttpResponse.json({ data: { updateServiceRequest: service } });
   }),
 
@@ -957,7 +1014,8 @@ export const handlers = [
   }),
 
   graphql.mutation("AssignServiceRequest", ({ request, variables }) => {
-    if (!hasRole(getCaller(request), STAFF_ROLES)) {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) {
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
     const { id, technicianId } = variables as { id: string; technicianId: string };
@@ -972,8 +1030,10 @@ export const handlers = [
     if (CLOSED_SERVICE_STATUSES.has(service.status)) {
       return HttpResponse.json({ errors: [{ message: "La solicitud ya está cerrada" }] });
     }
+    const reassigned = service.assignedTo?.id !== tech.id;
     service.assignedTo = tech;
     service.updatedAt = new Date().toISOString();
+    if (reassigned) notify(tech, "service_request", service.id, "assigned", caller);
     return HttpResponse.json({ data: { assignServiceRequest: service } });
   }),
 
@@ -1274,7 +1334,8 @@ export const handlers = [
   }),
 
   graphql.mutation("AssignTicket", ({ request, variables }) => {
-    if (!hasRole(getCaller(request), STAFF_ROLES)) {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) {
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
     const { id, technicianId } = variables as { id: string; technicianId: string };
@@ -1292,9 +1353,11 @@ export const handlers = [
         errors: [{ message: "No se puede reasignar un ticket resuelto" }],
       });
     }
+    const reassigned = ticket.assignedTo?.id !== tech.id;
     ticket.assignedTo = tech;
     if (ticket.status === "pending") ticket.status = "in_progress";
     ticket.updatedAt = new Date().toISOString();
+    if (reassigned) notify(tech, "ticket", ticket.id, "assigned", caller);
     return HttpResponse.json({ data: { assignTicket: ticket } });
   }),
 
@@ -1420,6 +1483,7 @@ export const handlers = [
     reservation.reviewedBy = caller;
     reservation.updatedAt = new Date().toISOString();
     syncReservations();
+    notify(reservation.user, "reservation", reservation.id, "approved", caller);
     return HttpResponse.json({ data: { approveReservation: reservation } });
   }),
 
@@ -1445,6 +1509,7 @@ export const handlers = [
     reservation.reviewedBy = caller;
     reservation.rejectionReason = reason.trim();
     reservation.updatedAt = new Date().toISOString();
+    notify(reservation.user, "reservation", reservation.id, "rejected", caller);
     return HttpResponse.json({ data: { rejectReservation: reservation } });
   }),
 
@@ -1506,21 +1571,34 @@ export const handlers = [
     reservation.status = "cancelled";
     reservation.cancelledBy = caller;
     reservation.updatedAt = new Date().toISOString();
-    // Quien la aprobo no se entera de otra forma: le queda fijada con aviso
-    reservation.unseenCancellation = reservation.reviewedBy !== null;
+    // Quien la aprobo no se entera de otra forma (si seguia pendiente no hay a quien)
+    notify(reservation.reviewedBy, "reservation", reservation.id, "cancelled", caller);
     return HttpResponse.json({ data: { cancelReservation: reservation } });
   }),
 
-  // Quien aprobo la reserva marca como vista la cancelacion: se desfija
-  graphql.mutation("AcknowledgeReservationCancellation", ({ request, variables }) => {
+  // ── Avisos ─────────────────────────────────────────────────────────────────
+  // Cada uno ve solo los suyos y los marca como vistos de a uno
+
+  graphql.query("GetNotices", ({ request }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    // Un prestamo puede haber vencido sin que nadie abriera la lista
+    syncOverdueLoans();
+    const notices = mockNotices
+      .filter((n) => n.userId === caller.id)
+      .toSorted((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return HttpResponse.json({ data: { notices } });
+  }),
+
+  graphql.mutation("AcknowledgeNotice", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
     const { id } = variables as { id: string };
-    const reservation = mockReservations.find((r) => r.id === id);
-    if (!reservation) return HttpResponse.json({ errors: [{ message: "Reserva no encontrada" }] });
-    if (reservation.reviewedBy?.id !== caller.id) return HttpResponse.json(FORBIDDEN);
-    reservation.unseenCancellation = false;
-    return HttpResponse.json({ data: { acknowledgeReservationCancellation: { id } } });
+    const index = mockNotices.findIndex((n) => n.id === id);
+    if (index === -1) return HttpResponse.json({ errors: [{ message: "Aviso no encontrado" }] });
+    if (mockNotices[index].userId !== caller.id) return HttpResponse.json(FORBIDDEN);
+    mockNotices.splice(index, 1);
+    return HttpResponse.json({ data: { acknowledgeNotice: true } });
   }),
 
   // ── Comentarios ────────────────────────────────────────────────────────────
@@ -1557,6 +1635,10 @@ export const handlers = [
       createdAt: new Date().toISOString(),
     };
     mockComments.push(comment);
+    // Se avisa a la otra parte del hilo: quien lo abrio y quien lo atiende
+    for (const participant of threadParticipants(input.entityType, input.entityId)) {
+      notify(participant, input.entityType, input.entityId, "comment", caller);
+    }
     return HttpResponse.json({ data: { createComment: comment } });
   }),
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus, RotateCcw, CheckCircle, XCircle, PackageCheck, Search } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
+import { useNotices } from "@/hooks/useNotices";
 import { gql, formatDate, cn } from "@/lib/utils";
 import { LOAN_STATUS_CONFIG } from "@/lib/constants";
 import type { Loan, LoanStatus } from "@/lib/types";
@@ -15,7 +16,7 @@ import { RejectLoanDialog, ReturnLoanDialog } from "./LoanActionDialogs";
 import { OptionSelect } from "@/components/ui/option-select";
 import { Input } from "@/components/ui/input";
 import { Pagination, clampPage } from "@/components/ui/pagination";
-import { PinMark, pinRowClass } from "@/components/ui/pin";
+import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
 import { idQuery, loanPin, pinnedFirst } from "@/lib/pins";
 
 const LOANS_QUERY = `
@@ -56,6 +57,7 @@ export function LoansPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const { user, hasRole } = useAuth();
+  const { noticeFor } = useNotices();
 
   // El solicitante solo pide y consulta; aprobar, rechazar, entregar y devolver es del staff
   const isStaff = hasRole("root_admin", "admin", "tecnico");
@@ -85,7 +87,7 @@ export function LoansPage() {
   const term = search.trim().toLowerCase();
   const idTerm = idQuery(term, "loan");
   const matchesId = (l: Loan) => idTerm !== null && l.id.toLowerCase().includes(idTerm);
-  const pin = (l: Loan) => loanPin(l, user?.id);
+  const pin = (l: Loan) => loanPin(l, user?.id, !!noticeFor("loan", l.id));
 
   const matching = loans.filter(
     (l) =>
@@ -96,12 +98,13 @@ export function LoansPage() {
   );
 
   // Como en tickets: al staff los devueltos y rechazados no le aparecen salvo que
-  // filtre por estado o los busque por su ID. El solicitante ve todos los suyos.
-  // Lo que uno aprobo queda fijado arriba hasta que se devuelve
+  // filtre por estado o los busque por su ID (o tengan un aviso sin ver). El
+  // solicitante ve todos los suyos. Lo que uno aprobo queda fijado arriba hasta
+  // que se devuelve
   const hideFinished = isStaff && !statusFilter;
   const listed = pinnedFirst(
     hideFinished
-      ? matching.filter((l) => !FINISHED_STATUSES.has(l.status) || matchesId(l))
+      ? matching.filter((l) => !FINISHED_STATUSES.has(l.status) || matchesId(l) || pin(l))
       : matching,
     pin,
   );
@@ -274,6 +277,7 @@ export function LoansPage() {
                   const statusConf = LOAN_STATUS_CONFIG[l.status];
                   const busy = busyId === l.id;
                   const pinState = pin(l);
+                  const notice = noticeFor("loan", l.id);
                   return (
                     <tr
                       key={l.id}
@@ -312,6 +316,7 @@ export function LoansPage() {
                             Entregado por {l.deliveredBy.name} el {formatDate(l.deliveredAt)}
                           </p>
                         )}
+                        {notice && <NoticeLine notice={notice} />}
                       </td>
                       <td className="px-4 py-3 text-sm text-muted-foreground font-medium whitespace-normal">
                         {l.approvedBy?.name ?? "—"}

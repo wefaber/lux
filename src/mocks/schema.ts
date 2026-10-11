@@ -24,6 +24,8 @@ export const schema = `
     comments(entityType: String!, entityId: ID!): [Comment!]!
     reservations(status: String): [Reservation!]!
     reservation(id: ID!): Reservation
+    # Avisos sin ver de quien consulta
+    notices: [Notice!]!
   }
 
   type Mutation {
@@ -63,6 +65,7 @@ export const schema = `
     rejectReservation(id: ID!, reason: String!): Reservation!
     updateReservation(id: ID!, input: ReservationUpdateInput!): Reservation!
     cancelReservation(id: ID!): Reservation!
+    acknowledgeNotice(id: ID!): Boolean!
   }
 
   type Reservation {
@@ -88,6 +91,19 @@ export const schema = `
     entityId: ID!
     author: User!
     body: String!
+    createdAt: String!
+  }
+
+  type Notice {
+    id: ID!
+    userId: ID!
+    # ticket | service_request | loan | reservation
+    entityType: String!
+    entityId: ID!
+    # assigned | approved | rejected | resolved | completed | cancelled | comment | overdue
+    kind: String!
+    # null si lo provoco el sistema (un prestamo que vence)
+    by: User
     createdAt: String!
   }
 

@@ -109,9 +109,9 @@ export const mockReservations: Reservation[] = [
     status: "cancelled",
     reviewedBy: tec1,
     rejectionReason: null,
+    // Nicolas la aprobo y la solicitante la cancelo despues: le queda un aviso
+    // (ver data/notices.ts)
     cancelledBy: sol3,
-    // Nicolas la aprobo y la solicitante la cancelo despues: le queda el aviso
-    unseenCancellation: true,
     createdAt: at(-50),
     updatedAt: at(-10),
   },
