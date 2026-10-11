@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { MessageSquare, Send } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
@@ -27,10 +27,13 @@ const CREATE_COMMENT_MUTATION = `
 interface CommentThreadProps {
   entityType: CommentEntity;
   entityId: string;
+  /** Ocupa todo el alto disponible: la lista se desplaza por dentro y el
+   * formulario queda abajo */
+  fill?: boolean;
 }
 
 // Hilo de un ticket o solicitud: el canal entre quien lo abrio y el staff
-export function CommentThread({ entityType, entityId }: CommentThreadProps) {
+export function CommentThread({ entityType, entityId, fill = false }: CommentThreadProps) {
   const { user } = useAuth();
   const { data, isLoading, error, refetch } = useAsync<{ comments: Comment[] }>(
     () => gql(COMMENTS_QUERY, { entityType, entityId }),
@@ -40,6 +43,13 @@ export function CommentThread({ entityType, entityId }: CommentThreadProps) {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const comments = data?.comments ?? [];
+
+  // Con la lista desplazable, el ultimo comentario (el mas nuevo) queda a la vista
+  const listRef = useRef<HTMLOListElement>(null);
+  useEffect(() => {
+    const list = listRef.current;
+    if (fill && list) list.scrollTop = list.scrollHeight;
+  }, [fill, comments.length]);
 
   const send = async () => {
     const invalid = validateComment(body);
@@ -74,14 +84,14 @@ export function CommentThread({ entityType, entityId }: CommentThreadProps) {
   };
 
   return (
-    <Card>
+    <Card className={cn(fill && "h-full flex flex-col")}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <MessageSquare className="h-4 w-4 text-muted-foreground" />
           Comentarios ({comments.length})
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className={cn("space-y-4", fill && "flex-1 min-h-0 flex flex-col")}>
         {isLoading && !data ? (
           <div className="space-y-2">
             {["a", "b"].map((k) => (
@@ -95,7 +105,11 @@ export function CommentThread({ entityType, entityId }: CommentThreadProps) {
             Todavía no hay comentarios. Usá este espacio para consultas o novedades.
           </p>
         ) : (
-          <ol className="space-y-2" aria-label="Comentarios">
+          <ol
+            ref={listRef}
+            className={cn("space-y-2", fill && "flex-1 min-h-0 overflow-y-auto pr-1")}
+            aria-label="Comentarios"
+          >
             {comments.map((c) => {
               const mine = c.author.id === user?.id;
               return (
@@ -126,7 +140,7 @@ export function CommentThread({ entityType, entityId }: CommentThreadProps) {
           </ol>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-2">
+        <form onSubmit={handleSubmit} className={cn("space-y-2", fill && "mt-auto")}>
           <Textarea
             aria-label="Escribir un comentario"
             placeholder="Escribí un comentario..."
