@@ -191,11 +191,16 @@ export interface Comment {
 export type NoticeEntity = "ticket" | "service_request" | "loan" | "reservation"; // Sobre que puede haber un aviso
 export type NoticeKind =
   | "assigned"
+  | "unassigned"
+  | "taken"
   | "approved"
   | "rejected"
+  | "in_resolution"
   | "resolved"
   | "completed"
+  | "modified"
   | "cancelled"
+  | "delivered"
   | "comment"
   | "overdue"; // Que paso
 
@@ -213,6 +218,14 @@ export interface Notice {
   /** Quien lo provoco; null si fue el sistema (un prestamo que vence) */
   by: User | null;
   createdAt: string;
+}
+
+// Hasta cuando vio alguien del staff los pedidos pendientes de una seccion: lo
+// pendiente creado despues cuenta como nuevo (el punto en OOL o en el filtro)
+export interface PendingSeen {
+  userId: string;
+  section: NoticeEntity;
+  seenAt: string;
 }
 
 export interface ActivityLog {

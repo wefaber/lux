@@ -1,4 +1,4 @@
-import type { Notice } from "@/lib/types";
+import type { Notice, PendingSeen } from "@/lib/types";
 import { mockUsers } from "./users";
 import { mockReservations } from "./reservations";
 
@@ -28,3 +28,6 @@ export const mockNotices: Notice[] = [
     createdAt: "2026-09-26T12:15:00Z",
   },
 ];
+
+// Nadie del staff vio todavia los pendientes: todos cuentan como nuevos
+export const mockPendingSeen: PendingSeen[] = [];

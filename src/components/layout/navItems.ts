@@ -34,14 +34,8 @@ const NAV_ITEMS: NavItem[] = [
   { icon: Monitor, label: "Estado de Equipos", to: ROUTES.EQUIPMENT_STATUS, staffOnly: true },
   { icon: MapPin, label: "Ubicaciones", to: ROUTES.LOCATIONS, staffOnly: true },
   { icon: Ticket, label: "Tickets", to: ROUTES.TICKETS, inTabBar: true, notices: "ticket" },
-  {
-    icon: BookOpen,
-    label: "Préstamos",
-    to: ROUTES.LOANS,
-    staffOnly: true,
-    inTabBar: true,
-    notices: "loan",
-  },
+  // El solicitante ve los suyos (pedirlos y seguir su estado); el staff los gestiona
+  { icon: BookOpen, label: "Préstamos", to: ROUTES.LOANS, inTabBar: true, notices: "loan" },
   {
     icon: Wrench,
     label: "Solicitudes",

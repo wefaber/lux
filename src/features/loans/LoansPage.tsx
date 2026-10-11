@@ -13,7 +13,7 @@ import { MetricCardSkeleton } from "@/components/skeletons/CardSkeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LoanForm } from "./LoanForm";
 import { RejectLoanDialog, ReturnLoanDialog } from "./LoanActionDialogs";
-import { OptionSelect } from "@/components/ui/option-select";
+import { StatusFilter } from "@/components/ui/status-filter";
 import { Input } from "@/components/ui/input";
 import { Pagination, clampPage } from "@/components/ui/pagination";
 import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
@@ -207,7 +207,8 @@ export function LoansPage() {
               className="pl-9"
             />
           </div>
-          <OptionSelect
+          <StatusFilter
+            section="loan"
             aria-label="Filtrar por estado"
             value={statusFilter}
             onValueChange={(v) => {

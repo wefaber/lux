@@ -33,6 +33,7 @@ import { SearchSelect } from "@/components/ui/search-select";
 import { OptionSelect } from "@/components/ui/option-select";
 import { Pagination, clampPage } from "@/components/ui/pagination";
 import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
+import { UnseenDot } from "@/components/ui/unseen-dot";
 import { idQuery, pinnedFirst, ticketPin } from "@/lib/pins";
 
 const TICKETS_QUERY = `
@@ -65,7 +66,7 @@ const PAGE_SIZE = 10;
 
 export function TicketList() {
   const { user, hasRole } = useAuth();
-  const { noticeFor } = useNotices();
+  const { noticeFor, hasNewPending } = useNotices();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TicketStatus | "">("");
   const [page, setPage] = useState(0);
@@ -164,10 +165,12 @@ export function TicketList() {
             Nuevo ticket
           </Button>
           {hasRole("root_admin", "admin", "tecnico") && (
-            <Button variant="secondary" size="sm" asChild>
+            <Button variant="secondary" size="sm" asChild className="relative">
               <Link to={`${ROUTES.TICKETS}/ool`}>
                 <AlertCircle className="h-3.5 w-3.5" />
                 OOL
+                {/* Llegaron tickets sin asignar desde la ultima vez que entraste */}
+                {hasNewPending("ticket") && <UnseenDot label="tickets nuevos sin asignar" />}
               </Link>
             </Button>
           )}

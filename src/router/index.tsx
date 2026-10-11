@@ -122,14 +122,8 @@ export const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
-      {
-        path: "loans",
-        element: (
-          <ProtectedRoute roles={STAFF_ROLES}>
-            <LoansPage />
-          </ProtectedRoute>
-        ),
-      },
+      // El solicitante ve solo los suyos (el servidor filtra) y no los gestiona
+      { path: "loans", element: <LoansPage /> },
       { path: "service-requests", element: <ServiceList /> },
       { path: "reservations", element: <ReservationsPage /> },
       { path: "service-requests/:id", element: <ServiceDetail /> },

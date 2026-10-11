@@ -33,7 +33,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ReservationForm, resourceName } from "./ReservationForm";
-import { OptionSelect } from "@/components/ui/option-select";
+import { StatusFilter } from "@/components/ui/status-filter";
 import { Input } from "@/components/ui/input";
 import { Pagination, clampPage } from "@/components/ui/pagination";
 import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
@@ -176,7 +176,8 @@ export function ReservationsPage() {
               className="pl-9"
             />
           </div>
-          <OptionSelect
+          <StatusFilter
+            section="reservation"
             aria-label="Filtrar por estado"
             value={statusFilter}
             onValueChange={(v) => {

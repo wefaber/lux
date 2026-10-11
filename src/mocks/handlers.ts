@@ -8,7 +8,7 @@ import { mockReservations } from "./data/reservations";
 import { mockTickets } from "./data/tickets";
 import { mockLoans } from "./data/loans";
 import { mockServices } from "./data/services";
-import { mockNotices } from "./data/notices";
+import { mockNotices, mockPendingSeen } from "./data/notices";
 import { mockActivityLogs } from "./generators";
 import {
   validateComment,
@@ -132,7 +132,59 @@ function syncOverdueLoans(): void {
     if (loan.status === "active" && new Date(loan.returnDate) < now) {
       loan.status = "overdue";
       notify(loan.approvedBy, "loan", loan.id, "overdue", null);
+      notify(loan.user, "loan", loan.id, "overdue", null);
     }
+  }
+}
+
+const PENDING_SECTIONS: NoticeEntity[] = ["ticket", "service_request", "reservation", "loan"];
+
+// Lo que espera que alguien del staff lo tome o lo apruebe, con quien lo pidio.
+// En tickets es lo que esta en OOL: pendiente y sin responsable
+function pendingIn(section: NoticeEntity): Array<{ createdAt: string; by: User }> {
+  switch (section) {
+    case "ticket":
+      return mockTickets
+        .filter((t) => t.status === "pending" && !t.assignedTo)
+        .map((t) => ({ createdAt: t.createdAt, by: t.submittedBy }));
+    case "service_request":
+      return mockServices
+        .filter((s) => s.status === "pending")
+        .map((s) => ({ createdAt: s.createdAt, by: s.requestedBy }));
+    case "reservation":
+      return mockReservations
+        .filter((r) => r.status === "pending")
+        .map((r) => ({ createdAt: r.createdAt, by: r.user }));
+    case "loan":
+      return mockLoans
+        .filter((l) => l.status === "pending")
+        .map((l) => ({ createdAt: l.createdAt, by: l.user }));
+  }
+}
+
+// Hay algo pendiente que llego despues de la ultima vez que miro (y no lo pidio el)
+function hasNewPending(user: User, section: NoticeEntity): boolean {
+  const seen = mockPendingSeen.find((s) => s.userId === user.id && s.section === section);
+  const seenAt = seen ? Date.parse(seen.seenAt) : 0;
+  return pendingIn(section).some((p) => p.by.id !== user.id && Date.parse(p.createdAt) > seenAt);
+}
+
+// Un ticket o solicitud cambia de responsable (`next` null: queda sin asignar).
+// Se avisa a quien lo tenia, a quien lo recibe y al solicitante, que ahora sabe
+// quien lo atiende. Volver a asignar a la misma persona no avisa nada
+function handOver(
+  entityType: "ticket" | "service_request",
+  entityId: string,
+  requester: User,
+  previous: User | null,
+  next: User | null,
+  by: User,
+): void {
+  if (previous?.id === next?.id) return;
+  if (previous) notify(previous, entityType, entityId, "unassigned", by);
+  if (next) {
+    notify(next, entityType, entityId, "assigned", by);
+    notify(requester, entityType, entityId, "taken", next);
   }
 }
 
@@ -704,6 +756,7 @@ export const handlers = [
         errors: [{ message: invalidTicketTransition(ticket, "in_progress") }],
       });
     }
+    handOver("ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, caller, caller);
     ticket.assignedTo = caller;
     ticket.status = "in_progress";
     ticket.updatedAt = new Date().toISOString();
@@ -734,7 +787,8 @@ export const handlers = [
   }),
 
   graphql.mutation("ChangeTicketStatus", ({ request, variables }) => {
-    if (!hasRole(getCaller(request), STAFF_ROLES)) {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) {
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
     const { id, status } = variables as { id: string; status: TicketStatus };
@@ -752,10 +806,16 @@ export const handlers = [
     if (ticket.status === "pending" || !canTransitionTicket(ticket, status)) {
       return HttpResponse.json({ errors: [{ message: invalidTicketTransition(ticket, status) }] });
     }
-    if (status === "pending") ticket.assignedTo = null;
+    if (status === "pending") {
+      handOver("ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, null, caller);
+      ticket.assignedTo = null;
+    }
     if (ticket.status === "resolved") ticket.resolvedAt = null;
     ticket.status = status;
     ticket.updatedAt = new Date().toISOString();
+    if (status === "in_resolution") {
+      notify(ticket.submittedBy, "ticket", ticket.id, "in_resolution", caller);
+    }
     return HttpResponse.json({ data: { changeTicketStatus: ticket } });
   }),
 
@@ -862,11 +922,13 @@ export const handlers = [
     loan.status = "approved";
     loan.approvedBy = caller;
     loan.updatedAt = new Date().toISOString();
+    notify(loan.user, "loan", loan.id, "approved", caller);
     return HttpResponse.json({ data: { approveLoan: loan } });
   }),
 
   graphql.mutation("RejectLoan", ({ request, variables }) => {
-    if (!hasRole(getCaller(request), STAFF_ROLES)) {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) {
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
     const { id, reason } = variables as { id: string; reason: string };
@@ -881,6 +943,7 @@ export const handlers = [
     loan.status = "rejected";
     loan.rejectionReason = reason.trim();
     loan.updatedAt = new Date().toISOString();
+    notify(loan.user, "loan", loan.id, "rejected", caller);
     return HttpResponse.json({ data: { rejectLoan: loan } });
   }),
 
@@ -907,6 +970,7 @@ export const handlers = [
     loan.updatedAt = now;
     loan.equipment.status = "in_use";
     loan.equipment.updatedAt = now;
+    notify(loan.user, "loan", loan.id, "delivered", caller);
     return HttpResponse.json({ data: { deliverLoan: loan } });
   }),
 
@@ -978,8 +1042,10 @@ export const handlers = [
     if (!service) return HttpResponse.json({ errors: [{ message: "Solicitud no encontrada" }] });
     const previousStatus = service.status;
     if (input.status) service.status = input.status as ServiceRequest["status"];
-    // Quien la pone en marcha o la cierra sin responsable queda como responsable
+    // Quien la pone en marcha o la cierra sin responsable queda como responsable.
+    // Va antes que la respuesta: si tambien la cierra, el aviso que queda es ese
     if (!service.assignedTo && (input.status === "in_progress" || input.status === "completed")) {
+      handOver("service_request", service.id, service.requestedBy, null, caller, caller);
       service.assignedTo = caller;
     }
     if (input.resolutionText !== undefined) service.resolutionText = input.resolutionText;
@@ -1008,6 +1074,7 @@ export const handlers = [
         errors: [{ message: `La solicitud ya la tomó ${service.assignedTo.name}` }],
       });
     }
+    handOver("service_request", service.id, service.requestedBy, null, caller, caller);
     service.assignedTo = caller;
     service.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { claimServiceRequest: service } });
@@ -1030,10 +1097,9 @@ export const handlers = [
     if (CLOSED_SERVICE_STATUSES.has(service.status)) {
       return HttpResponse.json({ errors: [{ message: "La solicitud ya está cerrada" }] });
     }
-    const reassigned = service.assignedTo?.id !== tech.id;
+    handOver("service_request", service.id, service.requestedBy, service.assignedTo, tech, caller);
     service.assignedTo = tech;
     service.updatedAt = new Date().toISOString();
-    if (reassigned) notify(tech, "service_request", service.id, "assigned", caller);
     return HttpResponse.json({ data: { assignServiceRequest: service } });
   }),
 
@@ -1353,11 +1419,10 @@ export const handlers = [
         errors: [{ message: "No se puede reasignar un ticket resuelto" }],
       });
     }
-    const reassigned = ticket.assignedTo?.id !== tech.id;
+    handOver("ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, tech, caller);
     ticket.assignedTo = tech;
     if (ticket.status === "pending") ticket.status = "in_progress";
     ticket.updatedAt = new Date().toISOString();
-    if (reassigned) notify(tech, "ticket", ticket.id, "assigned", caller);
     return HttpResponse.json({ data: { assignTicket: ticket } });
   }),
 
@@ -1514,7 +1579,8 @@ export const handlers = [
   }),
 
   graphql.mutation("UpdateReservation", ({ request, variables }) => {
-    if (!hasRole(getCaller(request), STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
     syncReservations();
     const { id, input } = variables as {
       id: string;
@@ -1550,6 +1616,7 @@ export const handlers = [
       updatedAt: new Date().toISOString(),
     });
     syncReservations();
+    notify(reservation.user, "reservation", reservation.id, "modified", caller);
     return HttpResponse.json({ data: { updateReservation: reservation } });
   }),
 
@@ -1599,6 +1666,31 @@ export const handlers = [
     if (mockNotices[index].userId !== caller.id) return HttpResponse.json(FORBIDDEN);
     mockNotices.splice(index, 1);
     return HttpResponse.json({ data: { acknowledgeNotice: true } });
+  }),
+
+  // Secciones con pedidos pendientes que el staff todavia no vio: el punto del
+  // boton OOL (tickets) o de la opcion "Pendiente" del filtro (las demas)
+  graphql.query("GetPendingNews", ({ request }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    if (!isStaff(caller)) return HttpResponse.json({ data: { pendingNews: [] } });
+    syncReservations();
+    const pendingNews = PENDING_SECTIONS.filter((section) => hasNewPending(caller, section));
+    return HttpResponse.json({ data: { pendingNews } });
+  }),
+
+  graphql.mutation("MarkPendingSeen", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { section } = variables as { section: NoticeEntity };
+    if (!PENDING_SECTIONS.includes(section)) {
+      return HttpResponse.json({ errors: [{ message: "Sección inválida" }] });
+    }
+    const seenAt = new Date().toISOString();
+    const seen = mockPendingSeen.find((s) => s.userId === caller.id && s.section === section);
+    if (seen) seen.seenAt = seenAt;
+    else mockPendingSeen.push({ userId: caller.id, section, seenAt });
+    return HttpResponse.json({ data: { markPendingSeen: true } });
   }),
 
   // ── Comentarios ────────────────────────────────────────────────────────────
