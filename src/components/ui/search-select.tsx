@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 
 // "salon" encuentra "Salón": se compara sin mayusculas ni tildes
-function normalize(text: string): string {
+export function normalize(text: string): string {
   return text.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
 

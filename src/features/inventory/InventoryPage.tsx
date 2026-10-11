@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Search, Package, Cpu, MapPin } from "lucide-react";
+import { Plus, Package, Cpu, MapPin } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
@@ -9,7 +9,7 @@ import { EQUIPMENT_STATUS_CONFIG, ROUTES } from "@/lib/constants";
 import type { Product, Component, EquipmentStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { LocationSearchBar } from "@/components/LocationSearchBar";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { OptionSelect } from "@/components/ui/option-select";
@@ -104,15 +104,15 @@ export function InventoryPage() {
       </div>
 
       <div className="flex gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por marca, modelo, serie..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        <LocationSearchBar
+          className="flex-1 min-w-[200px] max-w-md"
+          placeholder="Buscar por marca, modelo, serie o ubicación..."
+          search={search}
+          onSearchChange={setSearch}
+          locations={locations}
+          locationId={locationFilter}
+          onLocationChange={setLocationFilter}
+        />
         <OptionSelect
           aria-label="Filtrar por estado"
           value={statusFilter}
@@ -123,15 +123,6 @@ export function InventoryPage() {
               value,
               label: conf.label,
             })),
-          ]}
-        />
-        <OptionSelect
-          aria-label="Filtrar por ubicación"
-          value={locationFilter}
-          onValueChange={setLocationFilter}
-          options={[
-            { value: "", label: "Todas las ubicaciones" },
-            ...locations.map((l) => ({ value: l.id, label: l.name })),
           ]}
         />
       </div>

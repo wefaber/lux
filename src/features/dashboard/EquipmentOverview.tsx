@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Search } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useLocations } from "@/hooks/useLocations";
 import { gql } from "@/lib/utils";
@@ -8,7 +7,7 @@ import { EQUIPMENT_STATUS_CONFIG, ROUTES } from "@/lib/constants";
 import type { EquipmentStatus, Product } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { LocationSearchBar } from "@/components/LocationSearchBar";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import { OptionSelect } from "@/components/ui/option-select";
 import { Pagination, clampPage } from "@/components/ui/pagination";
@@ -66,30 +65,21 @@ export function EquipmentOverview() {
       </div>
 
       <div className="flex gap-3 flex-wrap">
-        <OptionSelect
-          aria-label="Filtrar por ubicación"
-          value={locationId}
-          onValueChange={(v) => {
+        <LocationSearchBar
+          className="flex-1 min-w-[200px] max-w-md"
+          placeholder="Buscar por código, tipo, modelo o ubicación..."
+          search={search}
+          onSearchChange={(v) => {
+            setSearch(v);
+            setPage(0);
+          }}
+          locations={locations}
+          locationId={locationId}
+          onLocationChange={(v) => {
             setLocationId(v);
             setPage(0);
           }}
-          options={[
-            { value: "", label: "Todas las ubicaciones" },
-            ...locations.map((l) => ({ value: l.id, label: l.name })),
-          ]}
         />
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute z-10 left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por código, tipo o modelo..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(0);
-            }}
-            className="pl-9"
-          />
-        </div>
         <OptionSelect
           aria-label="Filtrar por estado"
           value={status}
