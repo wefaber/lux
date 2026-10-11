@@ -188,6 +188,26 @@ function handOver(
   }
 }
 
+// Los avisos vistos se borran: con nextId, marcar como visto el ultimo haria que
+// el siguiente reuse su id, y una pestaña desactualizada podria marcar como visto
+// uno nuevo. Se lleva la cuenta aparte (desde lo guardado al cargar la pagina)
+let lastNoticeNumber = 0;
+function nextNoticeId(): string {
+  const fromData = Number(nextId("ntc-", mockNotices).slice("ntc-".length)) - 1;
+  lastNoticeNumber = Math.max(lastNoticeNumber, fromData) + 1;
+  return `ntc-${String(lastNoticeNumber).padStart(3, "0")}`;
+}
+
+// Saca los avisos de un elemento que ya no tienen sentido (de un tipo dado)
+function dropNotices(entityType: NoticeEntity, entityId: string, kind: NoticeKind): void {
+  for (let i = mockNotices.length - 1; i >= 0; i--) {
+    const n = mockNotices[i];
+    if (n.entityType === entityType && n.entityId === entityId && n.kind === kind) {
+      mockNotices.splice(i, 1);
+    }
+  }
+}
+
 // Deja un aviso a `to` sobre algo que hizo `by` (null: el sistema). Lo que uno
 // hace sobre lo suyo no se avisa. Un aviso nuevo reemplaza al que hubiera
 // sobre el mismo elemento: se muestra solo lo ultimo que paso
@@ -199,7 +219,7 @@ function notify(
   by: User | null,
 ): void {
   if (!to || to.id === by?.id) return;
-  const id = nextId("ntc-", mockNotices, 3);
+  const id = nextNoticeId();
   const previous = mockNotices.findIndex(
     (n) => n.userId === to.id && n.entityType === entityType && n.entityId === entityId,
   );
@@ -996,6 +1016,8 @@ export const handlers = [
     loan.equipment.status = damaged ? "in_repair" : "available";
     if (damaged && issues?.trim()) loan.equipment.issues = issues.trim();
     loan.equipment.updatedAt = now;
+    // Ya devuelto, el "vencio" no le sirve a nadie y lo dejaria fijado arriba
+    dropNotices("loan", loan.id, "overdue");
     return HttpResponse.json({ data: { returnLoan: loan } });
   }),
 
@@ -1051,7 +1073,8 @@ export const handlers = [
     if (input.resolutionText !== undefined) service.resolutionText = input.resolutionText;
     service.updatedAt = new Date().toISOString();
     // Al solicitante se le avisa la respuesta: aprobada, rechazada o completada
-    if (service.status !== previousStatus && service.status in SERVICE_RESPONSE_NOTICES) {
+    // hasOwn y no `in`: el estado viene del cliente y "constructor" pasaria
+    if (service.status !== previousStatus && Object.hasOwn(SERVICE_RESPONSE_NOTICES, service.status)) {
       const kind = SERVICE_RESPONSE_NOTICES[service.status as keyof typeof SERVICE_RESPONSE_NOTICES];
       notify(service.requestedBy, "service_request", service.id, kind, caller);
     }

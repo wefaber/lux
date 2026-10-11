@@ -25,7 +25,8 @@ const REJECT_RESERVATION = `mutation RejectReservation($id: ID!, $reason: String
 const CREATE_LOAN = `mutation CreateLoan($input: LoanInput!) { createLoan(input: $input) { id } }`;
 const APPROVE_LOAN = `mutation ApproveLoan($id: ID!) { approveLoan(id: $id) { id } }`;
 const DELIVER_LOAN = `mutation DeliverLoan($id: ID!) { deliverLoan(id: $id) { id } }`;
-const REJECT_LOAN = `mutation RejectLoan($id: ID!, $reason: String!) { rejectLoan(id: $id, reason: $reason) { id } }`;
+const RETURN_LOAN = `mutation ReturnLoan($id: ID!) { returnLoan(id: $id) { id } }`;
+const REJECT_LOAN =`mutation RejectLoan($id: ID!, $reason: String!) { rejectLoan(id: $id, reason: $reason) { id } }`;
 const CLAIM_TICKET = `mutation ClaimTicket($id: ID!) { claimTicket(id: $id) { id } }`;
 const CHANGE_TICKET_STATUS = `mutation ChangeTicketStatus($id: ID!, $status: String!) { changeTicketStatus(id: $id, status: $status) { id } }`;
 const CLAIM_SERVICE = `mutation ClaimServiceRequest($id: ID!) { claimServiceRequest(id: $id) { id } }`;
@@ -196,6 +197,10 @@ describe("avisos de préstamos", () => {
     // Una sola vez por persona, aunque se vuelva a consultar
     await gqlAs(TECNICO, NOTICES);
     expect(noticesAbout("loan", id)).toHaveLength(2);
+
+    // Al devolverlo el aviso de vencido ya no sirve: se saca a los dos
+    expect((await gqlAs(TECNICO, RETURN_LOAN, { id })).errors).toBeUndefined();
+    expect(noticesAbout("loan", id)).toHaveLength(0);
   });
 });
 
@@ -314,6 +319,28 @@ describe("aviso de comentario nuevo a la otra parte del hilo", () => {
     expect(noticeOf(SOLICITANTE, "ticket", id)?.kind).toBe("comment");
     expect(noticeOf(TECNICO, "ticket", id)?.kind).toBe("comment");
     expect(noticeOf(ADMIN, "ticket", id)).toBeUndefined();
+  });
+});
+
+describe("ids y estados raros", () => {
+  test("marcar como visto el último aviso no hace que el siguiente reuse su id", async () => {
+    const first = await newTicket();
+    await gqlAs(ADMIN, ASSIGN_TICKET, { id: first, technicianId: TECNICO });
+    const seen = noticeOf(SOLICITANTE, "ticket", first)!;
+    expect(mockNotices.at(-1)!.id).toBe(seen.id);
+    await gqlAs(SOLICITANTE, ACK, { id: seen.id });
+
+    const second = await newTicket();
+    await gqlAs(TECNICO, CLAIM_TICKET, { id: second });
+    expect(noticeOf(SOLICITANTE, "ticket", second)!.id).not.toBe(seen.id);
+  });
+
+  test("un estado que no es respuesta no deja aviso, aunque sea una clave de Object", async () => {
+    const id = await newService();
+    await gqlAs(ADMIN, UPDATE_SERVICE, { id, input: { status: "constructor" } });
+    expect(noticeOf(SOLICITANTE, "service_request", id)).toBeUndefined();
+    // Se devuelve a un estado valido para no ensuciar a otros tests
+    await gqlAs(ADMIN, UPDATE_SERVICE, { id, input: { status: "rejected" } });
   });
 });
 

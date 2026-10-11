@@ -15,9 +15,10 @@ export function StatusFilter({ section, options, value, ...props }: StatusFilter
   const { hasNewPending, markPendingSeen } = useNotices();
   const fresh = hasNewPending(section);
 
+  // Solo si habia algo nuevo: el solicitante nunca tiene, y no puede marcar
   useEffect(() => {
-    if (value === "pending") markPendingSeen(section);
-  }, [value, section, markPendingSeen]);
+    if (value === "pending" && fresh) markPendingSeen(section);
+  }, [value, fresh, section, markPendingSeen]);
 
   const marked = options.map((o) =>
     fresh && o.value === "pending"
