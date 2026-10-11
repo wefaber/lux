@@ -62,6 +62,9 @@ export function NoticesProvider({ children }: { children: ReactNode }) {
   // Marcar como vistos los pendientes descarta las consultas que ya estaban en
   // camino: se calcularon antes y volverian a prender el punto
   const pendingRequest = useRef(0);
+  // Lo mismo con los avisos: una consulta que salio antes de marcar uno como
+  // visto lo traeria de vuelta. Los ids no se reusan, asi que alcanza con filtrarlos
+  const acknowledged = useRef(new Set<string>());
 
   // Solo vale la respuesta de la ultima consulta
   const loadPendingNews = useCallback(() => {
@@ -84,7 +87,9 @@ export function NoticesProvider({ children }: { children: ReactNode }) {
     // Si falla no se rompe nada: se reintenta en la proxima navegacion
     gql<{ notices: Notice[] }>(NOTICES_QUERY)
       .then((data) => {
-        if (!cancelled) setNotices(data.notices);
+        if (!cancelled) {
+          setNotices(data.notices.filter((n) => !acknowledged.current.has(n.id)));
+        }
       })
       .catch(() => {});
     loadPendingNews();
@@ -95,6 +100,7 @@ export function NoticesProvider({ children }: { children: ReactNode }) {
 
   const acknowledge = useCallback(async (id: string) => {
     await gql(ACKNOWLEDGE_MUTATION, { id });
+    acknowledged.current.add(id);
     setNotices((current) => current.filter((n) => n.id !== id));
   }, []);
 

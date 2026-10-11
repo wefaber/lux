@@ -1429,7 +1429,8 @@ export const handlers = [
     }
     const { id, technicianId } = variables as { id: string; technicianId: string };
     const ticket = mockTickets.find((t) => t.id === id);
-    const tech = mockUsers.find((u) => u.id === technicianId);
+    // Como en solicitudes: a alguien dado de baja no se le asigna (ni se le avisa)
+    const tech = mockUsers.find((u) => u.id === technicianId && u.isActive);
     if (!ticket || !tech) return HttpResponse.json({ errors: [{ message: "No encontrado" }] });
     if (!isStaff(tech)) {
       return HttpResponse.json({

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mockNotices } from "./data/notices";
 import { mockProducts } from "./data/equipment";
 import { mockLoans } from "./data/loans";
+import { mockUsers } from "./data/users";
 import { gqlAs, useMockServer, USERS } from "@/test/graphql";
 import { noticeText } from "@/components/ui/pin";
 import type { Notice, NoticeEntity } from "@/lib/types";
@@ -216,6 +217,19 @@ describe("cambios de responsable", () => {
     expect(noticeText(noticeOf(TECNICO, "ticket", id)!)).toBe("Te lo sacó Marcela Rodríguez");
     expect(noticeOf(OTRO_TECNICO, "ticket", id)?.kind).toBe("assigned");
     expect(noticeOf(SOLICITANTE, "ticket", id)?.by?.id).toBe(OTRO_TECNICO);
+  });
+
+  test("a un técnico dado de baja no se le asigna un ticket ni se le avisa", async () => {
+    const id = await newTicket();
+    const tec3 = mockUsers.find((u) => u.id === "u-tec-3")!;
+    tec3.isActive = false;
+    try {
+      const res = await gqlAs(ADMIN, ASSIGN_TICKET, { id, technicianId: tec3.id });
+      expect(res.errors?.[0].message).toBe("No encontrado");
+      expect(noticeOf(tec3.id, "ticket", id)).toBeUndefined();
+    } finally {
+      tec3.isActive = true;
+    }
   });
 
   test("devolver un ticket a pendiente le avisa a quien lo tenía", async () => {

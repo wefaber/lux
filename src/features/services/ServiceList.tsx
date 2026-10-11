@@ -229,11 +229,9 @@ export function ServiceList() {
                       <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                         {SERVICE_TYPE_LABELS[s.type]}
                       </td>
-                      <td
-                        className="px-4 py-3 text-sm text-foreground min-w-48 max-w-xs whitespace-normal"
-                        title={s.description}
-                      >
-                        {truncate(s.description, 60)}
+                      <td className="px-4 py-3 text-sm text-foreground min-w-48 max-w-xs whitespace-normal">
+                        {/* El tooltip con la descripcion completa va solo sobre el texto, no sobre el aviso */}
+                        <span title={s.description}>{truncate(s.description, 60)}</span>
                         {notice && <NoticeLine notice={notice} />}
                       </td>
                       <td className="px-4 py-3">
