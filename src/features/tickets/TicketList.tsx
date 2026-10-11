@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { QrScanner } from "@/components/ui/QrScanner";
-import { SearchSelect } from "@/components/ui/search-select";
+import { EquipmentSearchSelect } from "@/components/search-pickers";
 import { OptionSelect } from "@/components/ui/option-select";
 import { Pagination, clampPage } from "@/components/ui/pagination";
 import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
@@ -350,27 +350,11 @@ export function TicketList() {
                   <Label>Equipo (opcional)</Label>
                   <div className="flex gap-2">
                     <div className="flex-1">
-                      <SearchSelect
+                      <EquipmentSearchSelect
                         items={products}
                         value={form.equipmentId}
                         onChange={(equipmentId) => setForm((f) => ({ ...f, equipmentId }))}
-                        getKey={(p) => p.id}
-                        getLabel={(p) => `${p.machineId} · ${p.brand} ${p.model}`}
-                        placeholder="Buscar por ID o nombre..."
                         direction="up"
-                        renderOption={(p) => (
-                          <>
-                            <span className="font-mono text-xs text-primary font-semibold">
-                              {p.machineId}
-                            </span>
-                            <span className="text-muted-foreground">
-                              {p.brand} {p.model}
-                            </span>
-                            <span className="ml-auto text-xs text-muted-foreground">
-                              {p.location}
-                            </span>
-                          </>
-                        )}
                       />
                     </div>
                     <Button

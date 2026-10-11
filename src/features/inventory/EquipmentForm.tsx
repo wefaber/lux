@@ -15,7 +15,7 @@ import type { Component, Product } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SearchSelect } from "@/components/ui/search-select";
+import { LocationSearchSelect } from "@/components/search-pickers";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
@@ -281,23 +281,12 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="location">Ubicación</Label>
-                    <SearchSelect
+                    <LocationSearchSelect
                       id="location"
                       items={locations}
                       value={locationId}
                       onChange={(locId) => update("locationId", locId)}
-                      getKey={(l) => l.id}
-                      getLabel={(l) => `${l.name} (${l.code})`}
-                      placeholder="Buscar: laboratorio 2, L2..."
                       aria-invalid={Boolean(fieldErrors.locationId)}
-                      renderOption={(l) => (
-                        <>
-                          <span className="font-mono text-xs text-primary font-semibold">
-                            {l.code}
-                          </span>
-                          <span className="text-foreground">{l.name}</span>
-                        </>
-                      )}
                     />
                     {fieldErrors.locationId && (
                       <p className="text-xs text-destructive">{fieldErrors.locationId}</p>
