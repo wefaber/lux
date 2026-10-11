@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import { MetricCardSkeleton } from "@/components/skeletons/CardSkeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LoanForm } from "./LoanForm";
 import { RejectLoanDialog, ReturnLoanDialog } from "./LoanActionDialogs";
 import { StatusFilter } from "@/components/ui/status-filter";
@@ -398,6 +398,11 @@ export function LoansPage() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{isStaff ? "Registrar préstamo" : "Solicitar préstamo"}</DialogTitle>
+            <DialogDescription>
+              {isStaff
+                ? "El equipo queda a nombre del usuario hasta que lo devuelva."
+                : "El staff revisa el pedido antes de entregarte el equipo."}
+            </DialogDescription>
           </DialogHeader>
           <LoanForm
             onSuccess={() => {

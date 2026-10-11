@@ -14,6 +14,7 @@ import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -310,6 +311,9 @@ export function TicketList() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Crear nuevo ticket</DialogTitle>
+                <DialogDescription>
+                  Reportá un problema; si es de un equipo, elegilo o escaneá su QR.
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-1.5">

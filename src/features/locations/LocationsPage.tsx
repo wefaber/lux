@@ -231,6 +231,9 @@ function LocationForm({ location, existing, onDone, onCancel }: LocationFormProp
     <form onSubmit={handleSubmit} noValidate>
       <DialogHeader>
         <DialogTitle>{location ? "Editar ubicación" : "Nueva ubicación"}</DialogTitle>
+        <DialogDescription>
+          Su código (L1, A2...) arranca el ID de los equipos que tiene.
+        </DialogDescription>
       </DialogHeader>
       <div className="space-y-4">
         <div className="grid grid-cols-[1fr_6rem] gap-3">

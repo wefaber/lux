@@ -13,6 +13,7 @@ import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   AnimatePresence,
@@ -276,6 +277,9 @@ export function ServiceList() {
             <DialogContent className="max-w-lg">
               <DialogHeader>
                 <DialogTitle>Nueva solicitud de servicio</DialogTitle>
+                <DialogDescription>
+                  Contá qué necesitás y el staff se encarga de revisarla.
+                </DialogDescription>
               </DialogHeader>
               <ServiceForm
                 onSuccess={() => {

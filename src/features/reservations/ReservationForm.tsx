@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EquipmentSearchSelect, LocationSearchSelect } from "@/components/search-pickers";
 import { Textarea } from "@/components/ui/textarea";
-import { DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const PRODUCTS_QUERY = `
   query GetProducts {
@@ -119,6 +119,11 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
     <form onSubmit={handleSubmit} noValidate>
       <DialogHeader>
         <DialogTitle>{isEdit ? "Modificar reserva" : "Nueva reserva"}</DialogTitle>
+        <DialogDescription>
+          {isEdit
+            ? "Cambiá las fechas o el motivo; el equipo o espacio queda igual."
+            : "Elegí el equipo o el espacio y el horario en que lo vas a usar."}
+        </DialogDescription>
       </DialogHeader>
       <div className="space-y-4">
         {isEdit ? (

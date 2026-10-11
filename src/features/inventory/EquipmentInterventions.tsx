@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -229,6 +230,7 @@ function InterventionForm({
     <form onSubmit={handleSubmit} noValidate>
       <DialogHeader>
         <DialogTitle>{intervention ? "Editar intervención" : "Registrar intervención"}</DialogTitle>
+        <DialogDescription>El trabajo hecho sobre el equipo queda en su historial.</DialogDescription>
       </DialogHeader>
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
