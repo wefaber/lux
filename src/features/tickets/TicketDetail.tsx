@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { WizardSkeleton } from "@/components/skeletons/WizardSkeleton";
 import { TicketWizard } from "./TicketWizard";
 import { CommentThread } from "@/components/comments/CommentThread";
+import { STAFF_ROLES } from "@/lib/roles";
 
 const TICKET_QUERY = `
  query GetTicket($id: ID!) {
@@ -118,7 +119,7 @@ export function TicketDetail() {
   );
 
   const ticket = data?.ticket; // Informacion del ticket, con obtencion condicional (?)
-  const isStaff = hasRole("root_admin", "admin", "tecnico");
+  const isStaff = hasRole(...STAFF_ROLES);
 
   const run = async (mutation: string, variables: Record<string, unknown>) => {
     setBusy(true);

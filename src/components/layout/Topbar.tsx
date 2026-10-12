@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ROUTES, ROLE_LABELS } from "@/lib/constants";
+import { ADMIN_ROLES } from "@/lib/roles";
 
 function initials(name: string): string {
   return name
@@ -71,7 +72,7 @@ export function Topbar() {
                   Perfil
                 </Link>
               </DropdownMenuItem>
-              {hasRole("root_admin", "admin") && (
+              {hasRole(...ADMIN_ROLES) && (
                 <DropdownMenuItem asChild>
                   <Link to={ROUTES.ADMIN} className="flex items-center gap-2">
                     <Shield className="h-4 w-4" />

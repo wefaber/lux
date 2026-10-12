@@ -13,6 +13,7 @@ import { LocationSearchBar } from "@/components/LocationSearchBar";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { OptionSelect } from "@/components/ui/option-select";
+import { STAFF_ROLES } from "@/lib/roles";
 
 const PRODUCTS_QUERY = `
   query GetProducts($status: String, $locationId: ID) {
@@ -64,7 +65,7 @@ export function InventoryPage() {
       `${c.name} ${c.model} ${c.manufacturer}`.toLowerCase().includes(search.toLowerCase()),
   );
 
-  const canEdit = hasRole("root_admin", "admin", "tecnico");
+  const canEdit = hasRole(...STAFF_ROLES);
 
   // Skeletons are shown ONLY on first mount (when we don't have list data yet)
   const showProductsSkeleton = loadingProducts && !productsData;

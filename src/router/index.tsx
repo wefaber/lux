@@ -29,9 +29,7 @@ import { NotFoundPage } from "@/features/errors/NotFoundPage";
 import { ForbiddenPage } from "@/features/errors/ForbiddenPage";
 import { ServerErrorPage } from "@/features/errors/ServerErrorPage";
 import { ROUTES } from "@/lib/constants";
-import type { UserRole } from "@/lib/types";
-
-const STAFF_ROLES: UserRole[] = ["root_admin", "admin", "tecnico"];
+import { ADMIN_ROLES, STAFF_ROLES } from "@/lib/roles";
 
 export const router = createBrowserRouter([
   {
@@ -134,7 +132,7 @@ export const router = createBrowserRouter([
   {
     path: "/admin",
     element: (
-      <ProtectedRoute roles={["root_admin", "admin"]}>
+      <ProtectedRoute roles={ADMIN_ROLES}>
         <AdminLayout />
       </ProtectedRoute>
     ),

@@ -5,7 +5,7 @@ import { ArrowLeft, Edit2, Trash2 } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { gql, formatDate } from "@/lib/utils";
-import { EQUIPMENT_STATUS_CONFIG, ROUTES } from "@/lib/constants";
+import { EQUIPMENT_STATUS_CONFIG, ROUTES, SPRING_TRANSITION } from "@/lib/constants";
 import type { Product } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { QrCode } from "@/components/ui/QrCode";
 import { RetireEquipmentDialog } from "./RetireEquipmentDialog";
 import { EquipmentHistory } from "./EquipmentHistory";
 import { EquipmentInterventions } from "./EquipmentInterventions";
+import { STAFF_ROLES } from "@/lib/roles";
 
 const PRODUCT_QUERY = `
   query GetProduct($id: ID!) {
@@ -48,7 +49,7 @@ export function ProductDetail() {
   );
 
   const product = data?.product;
-  const isStaff = hasRole("root_admin", "admin", "tecnico");
+  const isStaff = hasRole(...STAFF_ROLES);
   const canEdit = isStaff && !product?.deletedAt;
 
   return (
@@ -121,7 +122,7 @@ export function ProductDetail() {
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          transition={SPRING_TRANSITION}
           className="space-y-6"
         >
           <Card>

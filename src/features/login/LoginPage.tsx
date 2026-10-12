@@ -7,7 +7,7 @@ import { isMocksUnavailable } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ROUTES } from "@/lib/constants";
+import { ROUTES, SPRING_TRANSITION } from "@/lib/constants";
 import { DevCredentials } from "./DevCredentials";
 
 interface LocationState {
@@ -69,7 +69,7 @@ export function LoginPage() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        transition={SPRING_TRANSITION}
         className="w-full max-w-sm"
       >
         <div className="flex flex-col items-center mb-10">

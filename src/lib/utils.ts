@@ -76,7 +76,7 @@ export function isMocksUnavailable(error: unknown): boolean {
 // motivo: asi un build sin mocks pliega esta rama y no arrastra nada.
 const MOCKS_ENABLED = import.meta.env.DEV || import.meta.env.VITE_ENABLE_MOCKS === "true";
 
-const MOCKS_DOWN_STATUS = [404, 405];
+const MOCKS_DOWN_STATUS = new Set([404, 405]);
 
 async function request<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
   const token = getAuthToken();
@@ -90,7 +90,7 @@ async function request<T>(query: string, variables?: Record<string, unknown>): P
   });
 
   if (!response.ok) {
-    if (MOCKS_ENABLED && MOCKS_DOWN_STATUS.includes(response.status)) {
+    if (MOCKS_ENABLED && MOCKS_DOWN_STATUS.has(response.status)) {
       // El SW quedo mudo y la peticion se fue a nginx: re-armamos y reintentamos
       // una sola vez, asi el usuario no ve el error.
       const { reArmMocks } = await import("@/lib/mocks-runtime");

@@ -36,6 +36,7 @@ import { Pagination, clampPage } from "@/components/ui/pagination";
 import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
 import { UnseenDot } from "@/components/ui/unseen-dot";
 import { idQuery, pinnedFirst, ticketPin } from "@/lib/pins";
+import { STAFF_ROLES } from "@/lib/roles";
 
 const TICKETS_QUERY = `
   query GetTickets($submittedById: ID) {
@@ -83,7 +84,7 @@ export function TicketList() {
   })); // Settear formulario con variables: title, desc, category, equipmentId
   const [saving, setSaving] = useState(false);
 
-  const isSolicitante = !hasRole("root_admin", "admin", "tecnico");
+  const isSolicitante = !hasRole(...STAFF_ROLES);
 
   const { data, isLoading, error, refetch } = useAsync<{ tickets: Ticket[] }>(
     () => gql(TICKETS_QUERY, { submittedById: isSolicitante ? user?.id : undefined }),
@@ -165,7 +166,7 @@ export function TicketList() {
             <Plus className="h-3.5 w-3.5" />
             Nuevo ticket
           </Button>
-          {hasRole("root_admin", "admin", "tecnico") && (
+          {hasRole(...STAFF_ROLES) && (
             <Button variant="secondary" size="sm" asChild className="relative">
               <Link to={`${ROUTES.TICKETS}/ool`}>
                 <AlertCircle className="h-3.5 w-3.5" />

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UserSearchSelect } from "@/components/search-pickers";
 import { OptionSelect } from "@/components/ui/option-select";
+import { STAFF_ROLES } from "@/lib/roles";
 
 const CREATE_LOAN_MUTATION = `
  mutation CreateLoan($input: LoanInput!) {
@@ -42,7 +43,7 @@ export function LoanForm({ onSuccess }: LoanFormProps) {
   const { hasRole } = useAuth();
 
   // El staff registra a nombre de cualquier usuario; el solicitante pide para si mismo
-  const isStaff = hasRole("root_admin", "admin", "tecnico");
+  const isStaff = hasRole(...STAFF_ROLES);
 
   // Solo se ofrecen equipos libres: ni prestados, ni en reparacion, ni aprobados para otro prestamo
   const { data: productsData, isLoading: loadingProducts } = useAsync<{ products: Product[] }>(

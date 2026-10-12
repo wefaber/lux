@@ -2,13 +2,21 @@ import { useState } from "react";
 import { Plus, Search } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { gql, cn } from "@/lib/utils";
-import { ROLE_LABELS } from "@/lib/constants";
+import { ROLE_CONFIG, USER_STATUS_CONFIG } from "@/lib/constants";
+import { USER_ROLES, canEditUser, canToggleUserActive } from "@/lib/roles";
+import { useAuth } from "@/hooks/useAuth";
 import type { User, UserRole } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { UserForm } from "./UserForm";
 import { OptionSelect } from "@/components/ui/option-select";
 
@@ -18,8 +26,10 @@ const USERS_QUERY = `
   }
 `;
 
-const DELETE_USER_MUTATION = `
-  mutation DeleteUser($id: ID!) { deleteUser(id: $id) }
+const SET_USER_ACTIVE_MUTATION = `
+  mutation SetUserActive($id: ID!, $isActive: Boolean!) {
+    setUserActive(id: $id, isActive: $isActive) { id isActive }
+  }
 `;
 
 export function UserManagement() {
@@ -27,6 +37,8 @@ export function UserManagement() {
   const [roleFilter, setRoleFilter] = useState<UserRole | "">("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
+  const [actionError, setActionError] = useState("");
+  const { user: me } = useAuth();
 
   const { data, isLoading, refetch } = useAsync<{ users: User[] }>(() => gql(USERS_QUERY), []);
 
@@ -40,11 +52,17 @@ export function UserManagement() {
     return matchSearch && matchRole;
   }); // Filtrado de usuarios en base a parametros
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("¿Desactivar este usuario?")) return;
-    await gql(DELETE_USER_MUTATION, { id });
+  const handleToggleActive = async (u: User) => {
+    const isActive = !u.isActive;
+    if (!confirm(`¿${isActive ? "Activar" : "Desactivar"} a ${u.name}?`)) return;
+    setActionError("");
+    try {
+      await gql(SET_USER_ACTIVE_MUTATION, { id: u.id, isActive });
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "No se pudo cambiar el estado");
+    }
     refetch();
-  }; // Gestion de borrar usuario logicamente
+  }; // Alta / baja logica: un usuario inactivo no puede iniciar sesion
 
   // Show full skeleton ONLY on the very first empty load
   const showSkeleton = isLoading && !data;
@@ -78,13 +96,19 @@ export function UserManagement() {
           onValueChange={(v) => setRoleFilter(v as UserRole | "")}
           options={[
             { value: "", label: "Todos los roles" },
-            { value: "root_admin", label: "Super Admin" },
-            { value: "admin", label: "Administrador" },
-            { value: "tecnico", label: "Técnico" },
-            { value: "solicitante", label: "Solicitante" },
+            ...USER_ROLES.map((r) => ({ value: r, label: ROLE_CONFIG[r].label })),
           ]}
         />
       </div>
+
+      {actionError && (
+        <div
+          role="alert"
+          className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive"
+        >
+          {actionError}
+        </div>
+      )}
 
       {showSkeleton ? (
         <TableSkeleton rows={8} cols={5} />
@@ -113,48 +137,45 @@ export function UserManagement() {
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
-                <tr
-                  key={u.id}
-                  className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
-                >
-                  <td className="px-4 py-3 text-sm font-semibold text-foreground">{u.name}</td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground font-mono">{u.dni}</td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground">{u.email}</td>
-                  <td className="px-4 py-3">
-                    <Badge
-                      color={
-                        u.role === "root_admin"
-                          ? "destructive"
-                          : u.role === "admin"
-                            ? "warning"
-                            : u.role === "tecnico"
-                              ? "info"
-                              : "muted"
-                      }
-                    >
-                      {ROLE_LABELS[u.role]}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge color={u.isActive ? "success" : "destructive"} withDot={u.isActive}>
-                      {u.isActive ? "Activo" : "Inactivo"}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="ghost" onClick={() => setEditUser(u)}>
-                        Editar
-                      </Button>
-                      {u.role !== "root_admin" && u.isActive && (
-                        <Button size="sm" variant="destructive" onClick={() => handleDelete(u.id)}>
-                          Desactivar
-                        </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {users.map((u) => {
+                const status = USER_STATUS_CONFIG[u.isActive ? "active" : "inactive"];
+                return (
+                  <tr
+                    key={u.id}
+                    className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                  >
+                    <td className="px-4 py-3 text-sm font-semibold text-foreground">{u.name}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground font-mono">{u.dni}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{u.email}</td>
+                    <td className="px-4 py-3">
+                      <Badge color={ROLE_CONFIG[u.role].color}>{ROLE_CONFIG[u.role].label}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge color={status.color} withDot={u.isActive}>
+                        {status.label}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-2">
+                        {canEditUser(me, u) && (
+                          <Button size="sm" variant="ghost" onClick={() => setEditUser(u)}>
+                            Editar
+                          </Button>
+                        )}
+                        {canToggleUserActive(me, u) && (
+                          <Button
+                            size="sm"
+                            variant={u.isActive ? "destructive" : "success"}
+                            onClick={() => handleToggleActive(u)}
+                          >
+                            {u.isActive ? "Desactivar" : "Activar"}
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -164,7 +185,9 @@ export function UserManagement() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Nuevo usuario</DialogTitle>
-            <DialogDescription>Con su cédula y contraseña va a poder ingresar al sistema.</DialogDescription>
+            <DialogDescription>
+              Con su cédula y contraseña va a poder ingresar al sistema.
+            </DialogDescription>
           </DialogHeader>
           <UserForm
             onSuccess={() => {

@@ -18,7 +18,10 @@ import {
   validateLocation,
   validateProduct,
   validateReservation,
+  validatePassword,
+  validateUser,
   type FieldErrors,
+  type UserFields,
   type InterventionFields,
   type LocationFields,
 } from "@/lib/validation";
@@ -29,6 +32,14 @@ import {
   TICKET_TRANSITIONS,
   type DashboardPeriod,
 } from "@/lib/constants";
+import {
+  ADMIN_ROLES,
+  ASSIGNABLE_ROLES,
+  STAFF_ROLES,
+  canEditUser,
+  canToggleUserActive,
+  isStaff,
+} from "@/lib/roles";
 import type {
   User,
   UserRole,
@@ -80,8 +91,6 @@ const USER_ID_PREFIX: Record<UserRole, string> = {
   solicitante: "u-sol-",
 };
 
-const STAFF_ROLES: UserRole[] = ["root_admin", "admin", "tecnico"];
-const ELEVATED_ROLES: UserRole[] = ["root_admin", "admin"];
 
 // Simula la verificacion de un token en un backend real: lo resuelve desde
 // el header Authorization en vez de leer localStorage directamente.
@@ -95,10 +104,6 @@ function getCaller(request: Request): User | null {
 
 function hasRole(caller: User | null, allowedRoles: UserRole[]): caller is User {
   return caller !== null && allowedRoles.includes(caller.role);
-}
-
-function isStaff(user: User): boolean {
-  return STAFF_ROLES.includes(user.role);
 }
 
 // 90 dias en barras diarias no se lee: se agrupa por semana
@@ -329,7 +334,7 @@ function commentAccessError(
         ? mockServices.find((s) => s.id === entityId)?.requestedBy
         : undefined;
   if (!owner) return { message: "No encontrado" };
-  if (!isStaff(caller) && owner.id !== caller.id) return FORBIDDEN.errors[0];
+  if (!isStaff(caller.role) && owner.id !== caller.id) return FORBIDDEN.errors[0];
   return null;
 }
 
@@ -409,6 +414,48 @@ function invalidLoanTransition(loan: Loan, action: string): string {
   return `No se puede ${action} un préstamo en estado "${LOAN_STATUS_CONFIG[loan.status].label}"`;
 }
 
+function errorBody(message: string) {
+  return { errors: [{ message }] };
+}
+
+// La cedula es el usuario de login y el email el contacto: ninguno se repite
+function normalizeUserFields(f: UserFields): UserFields {
+  return { ...f, name: f.name.trim(), dni: f.dni.trim(), email: f.email.trim().toLowerCase() };
+}
+
+function duplicateUserError(
+  fields: { dni: string; email: string },
+  exceptId?: string,
+): string | null {
+  const others = mockUsers.filter((u) => u.id !== exceptId);
+  if (others.some((u) => u.dni === fields.dni)) {
+    return `Ya existe un usuario con cédula ${fields.dni}`;
+  }
+  if (others.some((u) => u.email.toLowerCase() === fields.email)) {
+    return `Ya existe un usuario con email ${fields.email}`;
+  }
+  return null;
+}
+
+// El rol del root_admin es fijo, nadie se vuelve root_admin y nadie se cambia su
+// propio rol (un admin que se baja a tecnico se queda sin acceso para deshacerlo)
+function roleChangeError(caller: User, user: User, role: string): string | null {
+  if (role === user.role) return null;
+  if (user.role === "root_admin") return "El rol del Super Admin no se puede cambiar";
+  if (!ASSIGNABLE_ROLES.includes(role as UserRole)) return "No se puede asignar el rol Super Admin";
+  if (user.id === caller.id) return "No podés cambiar tu propio rol";
+  return null;
+}
+
+// La regla vive en lib/roles (la interfaz la usa para mostrar el boton); aca
+// solo se traduce a un mensaje
+function activationError(caller: User, user: User): string | null {
+  if (canToggleUserActive(caller, user)) return null;
+  if (user.role === "root_admin") return "El Super Admin no se puede desactivar";
+  if (user.id === caller.id) return "No podés desactivar tu propia cuenta";
+  return FORBIDDEN.errors[0].message;
+}
+
 export const handlers = [
   graphql.query("Login", ({ variables }) => {
     const { dni, password } = variables as { dni: string; password: string };
@@ -432,7 +479,7 @@ export const handlers = [
   graphql.query("GetUsers", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
-    if (!isStaff(caller)) return HttpResponse.json(FORBIDDEN);
+    if (!isStaff(caller.role)) return HttpResponse.json(FORBIDDEN);
     const { role, isActive } = variables as { role?: string; isActive?: boolean };
     let users = [...mockUsers];
     if (role) users = users.filter((u) => u.role === role);
@@ -444,7 +491,7 @@ export const handlers = [
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
     const { id } = variables as { id: string };
-    if (!isStaff(caller) && id !== caller.id) return HttpResponse.json(FORBIDDEN);
+    if (!isStaff(caller.role) && id !== caller.id) return HttpResponse.json(FORBIDDEN);
     const user = mockUsers.find((u) => u.id === id);
     return HttpResponse.json({ data: { user: user ?? null } });
   }),
@@ -510,7 +557,7 @@ export const handlers = [
       equipmentId?: string;
     };
     // El solicitante solo ve sus tickets, mande el filtro que mande
-    const scopedSubmittedById = isStaff(caller) ? submittedById : caller.id;
+    const scopedSubmittedById = isStaff(caller.role) ? submittedById : caller.id;
     let tickets = [...mockTickets];
     if (status) tickets = tickets.filter((t) => t.status === status);
     if (assignedToId) tickets = tickets.filter((t) => t.assignedTo?.id === assignedToId);
@@ -526,7 +573,7 @@ export const handlers = [
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
     const { id } = variables as { id: string };
     const ticket = mockTickets.find((t) => t.id === id) ?? null;
-    if (ticket && !isStaff(caller) && ticket.submittedBy.id !== caller.id) {
+    if (ticket && !isStaff(caller.role) && ticket.submittedBy.id !== caller.id) {
       return HttpResponse.json(FORBIDDEN);
     }
     return HttpResponse.json({ data: { ticket } });
@@ -540,7 +587,7 @@ export const handlers = [
 
   graphql.query("GetLoans", ({ request, variables }) => {
     const caller = getCaller(request);
-    if (!caller) return HttpResponse.json({ errors: [{ message: "No autenticado" }] });
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
     syncOverdueLoans();
     const { status, userId, equipmentId } = variables as {
       status?: LoanStatus;
@@ -548,7 +595,7 @@ export const handlers = [
       equipmentId?: string;
     };
     // El solicitante solo ve sus prestamos, mande el filtro que mande
-    const scopedUserId = isStaff(caller) ? userId : caller.id;
+    const scopedUserId = isStaff(caller.role) ? userId : caller.id;
     let loans = [...mockLoans];
     if (status) loans = filterByStatus<Loan>(loans, status);
     if (scopedUserId) loans = loans.filter((l) => l.user.id === scopedUserId);
@@ -558,12 +605,12 @@ export const handlers = [
 
   graphql.query("GetLoan", ({ request, variables }) => {
     const caller = getCaller(request);
-    if (!caller) return HttpResponse.json({ errors: [{ message: "No autenticado" }] });
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
     syncOverdueLoans();
     const { id } = variables as { id: string };
     const loan = mockLoans.find((l) => l.id === id) ?? null;
-    if (loan && !isStaff(caller) && loan.user.id !== caller.id) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+    if (loan && !isStaff(caller.role) && loan.user.id !== caller.id) {
+      return HttpResponse.json(FORBIDDEN);
     }
     return HttpResponse.json({ data: { loan } });
   }),
@@ -576,7 +623,7 @@ export const handlers = [
       requestedById?: string;
     };
     // El solicitante solo ve sus solicitudes, mande el filtro que mande
-    const scopedRequestedById = isStaff(caller) ? requestedById : caller.id;
+    const scopedRequestedById = isStaff(caller.role) ? requestedById : caller.id;
     let services = [...mockServices];
     if (status) services = filterByStatus<ServiceRequest>(services, status);
     if (scopedRequestedById) {
@@ -590,7 +637,7 @@ export const handlers = [
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
     const { id } = variables as { id: string };
     const serviceRequest = mockServices.find((s) => s.id === id) ?? null;
-    if (serviceRequest && !isStaff(caller) && serviceRequest.requestedBy.id !== caller.id) {
+    if (serviceRequest && !isStaff(caller.role) && serviceRequest.requestedBy.id !== caller.id) {
       return HttpResponse.json(FORBIDDEN);
     }
     return HttpResponse.json({ data: { serviceRequest } });
@@ -604,7 +651,7 @@ export const handlers = [
     const { days, bucketDays } = PERIOD_BUCKETS[period as DashboardPeriod] ?? PERIOD_BUCKETS["7d"];
 
     // El staff ve el sistema completo; el solicitante, solo lo suyo
-    const staff = isStaff(caller);
+    const staff = isStaff(caller.role);
     const tickets = staff ? mockTickets : mockTickets.filter((t) => t.submittedBy.id === caller.id);
     const loans = staff ? mockLoans : mockLoans.filter((l) => l.user.id === caller.id);
     const services = staff
@@ -667,7 +714,7 @@ export const handlers = [
   }),
 
   graphql.query("GetReports", ({ request }) => {
-    if (!hasRole(getCaller(request), ELEVATED_ROLES)) return HttpResponse.json(FORBIDDEN);
+    if (!hasRole(getCaller(request), ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
     syncOverdueLoans();
     const now = Date.now();
     const DAY = 24 * 60 * 60 * 1000;
@@ -718,7 +765,7 @@ export const handlers = [
   }),
 
   graphql.query("GetActivityLogs", ({ request, variables }) => {
-    if (!hasRole(getCaller(request), ELEVATED_ROLES)) return HttpResponse.json(FORBIDDEN);
+    if (!hasRole(getCaller(request), ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
     const { userId, operation, startDate, endDate } = variables as {
       userId?: string;
       operation?: string;
@@ -735,7 +782,7 @@ export const handlers = [
 
   graphql.mutation("CreateTicket", ({ request, variables }) => {
     const user = getCaller(request);
-    if (!user) return HttpResponse.json({ errors: [{ message: "No autenticado" }] });
+    if (!user) return HttpResponse.json(UNAUTHENTICATED);
     const { input } = variables as {
       input: { title: string; description: string; category: string; equipmentId?: string };
     };
@@ -766,7 +813,7 @@ export const handlers = [
   graphql.mutation("ClaimTicket", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!hasRole(caller, STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+      return HttpResponse.json(FORBIDDEN);
     }
     const { id } = variables as { id: string };
     const ticket = mockTickets.find((t) => t.id === id);
@@ -785,7 +832,7 @@ export const handlers = [
 
   graphql.mutation("UpdateTicket", ({ request, variables }) => {
     if (!hasRole(getCaller(request), STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+      return HttpResponse.json(FORBIDDEN);
     }
     const { id, input } = variables as {
       id: string;
@@ -809,7 +856,7 @@ export const handlers = [
   graphql.mutation("ChangeTicketStatus", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!hasRole(caller, STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+      return HttpResponse.json(FORBIDDEN);
     }
     const { id, status } = variables as { id: string; status: TicketStatus };
     const ticket = mockTickets.find((t) => t.id === id);
@@ -842,7 +889,7 @@ export const handlers = [
   graphql.mutation("CompleteTicket", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!hasRole(caller, STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+      return HttpResponse.json(FORBIDDEN);
     }
     const { id, input } = variables as {
       id: string;
@@ -872,7 +919,7 @@ export const handlers = [
 
   graphql.mutation("CreateLoan", ({ request, variables }) => {
     const caller = getCaller(request);
-    if (!caller) return HttpResponse.json({ errors: [{ message: "No autenticado" }] });
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
     const { input } = variables as {
       input: {
         equipmentId: string;
@@ -884,7 +931,7 @@ export const handlers = [
     };
     // El staff puede registrar un prestamo a nombre de otro usuario; el
     // solicitante solo puede pedirlo para si mismo.
-    const loanUserId = isStaff(caller) ? (input.userId ?? caller.id) : caller.id;
+    const loanUserId = isStaff(caller.role) ? (input.userId ?? caller.id) : caller.id;
     const equipment = mockProducts.find((p) => p.id === input.equipmentId && p.deletedAt === null);
     const loanUser = mockUsers.find((u) => u.id === loanUserId && u.isActive);
     if (!equipment || !loanUser) {
@@ -926,7 +973,7 @@ export const handlers = [
   graphql.mutation("ApproveLoan", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!hasRole(caller, STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+      return HttpResponse.json(FORBIDDEN);
     }
     const { id } = variables as { id: string };
     const loan = mockLoans.find((l) => l.id === id);
@@ -949,7 +996,7 @@ export const handlers = [
   graphql.mutation("RejectLoan", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!hasRole(caller, STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+      return HttpResponse.json(FORBIDDEN);
     }
     const { id, reason } = variables as { id: string; reason: string };
     const loan = mockLoans.find((l) => l.id === id);
@@ -970,7 +1017,7 @@ export const handlers = [
   graphql.mutation("DeliverLoan", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!hasRole(caller, STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+      return HttpResponse.json(FORBIDDEN);
     }
     const { id } = variables as { id: string };
     const loan = mockLoans.find((l) => l.id === id);
@@ -996,7 +1043,7 @@ export const handlers = [
 
   graphql.mutation("ReturnLoan", ({ request, variables }) => {
     if (!hasRole(getCaller(request), STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+      return HttpResponse.json(FORBIDDEN);
     }
     const { id, damaged, issues } = variables as {
       id: string;
@@ -1023,7 +1070,7 @@ export const handlers = [
 
   graphql.mutation("CreateServiceRequest", ({ request, variables }) => {
     const user = getCaller(request);
-    if (!user) return HttpResponse.json({ errors: [{ message: "No autenticado" }] });
+    if (!user) return HttpResponse.json(UNAUTHENTICATED);
     const { input } = variables as {
       input: {
         type: string;
@@ -1054,7 +1101,7 @@ export const handlers = [
   graphql.mutation("UpdateServiceRequest", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!hasRole(caller, STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+      return HttpResponse.json(FORBIDDEN);
     }
     const { id, input } = variables as {
       id: string;
@@ -1084,7 +1131,7 @@ export const handlers = [
   graphql.mutation("ClaimServiceRequest", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!hasRole(caller, STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+      return HttpResponse.json(FORBIDDEN);
     }
     const { id } = variables as { id: string };
     const service = mockServices.find((s) => s.id === id);
@@ -1106,13 +1153,13 @@ export const handlers = [
   graphql.mutation("AssignServiceRequest", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!hasRole(caller, STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+      return HttpResponse.json(FORBIDDEN);
     }
     const { id, technicianId } = variables as { id: string; technicianId: string };
     const service = mockServices.find((s) => s.id === id);
     const tech = mockUsers.find((u) => u.id === technicianId && u.isActive);
     if (!service || !tech) return HttpResponse.json({ errors: [{ message: "No encontrado" }] });
-    if (!isStaff(tech)) {
+    if (!isStaff(tech.role)) {
       return HttpResponse.json({
         errors: [{ message: "Solo se puede asignar a personal técnico" }],
       });
@@ -1127,9 +1174,7 @@ export const handlers = [
   }),
 
   graphql.mutation("CreateUser", ({ request, variables }) => {
-    if (!hasRole(getCaller(request), ELEVATED_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
-    }
+    if (!hasRole(getCaller(request), ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
     const { input } = variables as {
       input: {
         name: string;
@@ -1140,48 +1185,98 @@ export const handlers = [
         isActive?: boolean;
       };
     };
+    const fields = normalizeUserFields({ ...input, password: input.password ?? "" });
+    const error =
+      firstError(validateUser(fields, true)) ??
+      (ASSIGNABLE_ROLES.includes(fields.role as UserRole)
+        ? null
+        : "No se puede crear otro Super Admin") ??
+      duplicateUserError(fields);
+    if (error) return HttpResponse.json(errorBody(error));
+    const now = new Date().toISOString();
     const newUser: User = {
-      id: nextId(USER_ID_PREFIX[input.role as UserRole] ?? "u-", mockUsers),
-      name: input.name,
-      dni: input.dni,
-      email: input.email,
-      role: input.role as User["role"],
+      id: nextId(USER_ID_PREFIX[fields.role as UserRole], mockUsers),
+      name: fields.name,
+      dni: fields.dni,
+      email: fields.email,
+      role: fields.role as UserRole,
       isActive: input.isActive ?? true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
-    if (input.password) {
-      mockPasswords[input.dni] = input.password;
-    }
+    mockPasswords[newUser.dni] = fields.password;
     mockUsers.push(newUser);
     return HttpResponse.json({ data: { createUser: newUser } });
   }),
 
   graphql.mutation("UpdateUser", ({ request, variables }) => {
-    if (!hasRole(getCaller(request), ELEVATED_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
-    }
+    const caller = getCaller(request);
+    if (!hasRole(caller, ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
     const { id, input } = variables as {
       id: string;
-      input: Partial<User & { password?: string }>;
+      input: Partial<Pick<User, "name" | "dni" | "email" | "role" | "isActive">> & {
+        password?: string;
+      };
     };
     const user = mockUsers.find((u) => u.id === id);
-    if (!user) return HttpResponse.json({ errors: [{ message: "Usuario no encontrado" }] });
-    const { password, ...rest } = input;
-    Object.assign(user, rest, { updatedAt: new Date().toISOString() });
-    if (password) mockPasswords[user.dni] = password;
+    if (!user) return HttpResponse.json(errorBody("Usuario no encontrado"));
+    if (!canEditUser(caller, user)) return HttpResponse.json(FORBIDDEN);
+    // Solo estos campos: el id, las fechas y demas no se tocan desde afuera
+    const fields = normalizeUserFields({
+      name: input.name ?? user.name,
+      dni: input.dni ?? user.dni,
+      email: input.email ?? user.email,
+      role: input.role ?? user.role,
+      password: input.password ?? "",
+    });
+    const togglesActive = input.isActive !== undefined && input.isActive !== user.isActive;
+    const error =
+      firstError(validateUser(fields, false)) ??
+      roleChangeError(caller, user, fields.role) ??
+      duplicateUserError(fields, user.id) ??
+      (togglesActive ? activationError(caller, user) : null);
+    if (error) return HttpResponse.json(errorBody(error));
+    // La contraseña se guarda por cedula: si cambia la cedula, la contraseña la sigue
+    if (fields.dni !== user.dni) {
+      mockPasswords[fields.dni] = mockPasswords[user.dni];
+      delete mockPasswords[user.dni];
+    }
+    Object.assign(user, {
+      name: fields.name,
+      dni: fields.dni,
+      email: fields.email,
+      role: fields.role as UserRole,
+      isActive: input.isActive ?? user.isActive,
+      updatedAt: new Date().toISOString(),
+    });
+    if (fields.password) mockPasswords[user.dni] = fields.password;
     return HttpResponse.json({ data: { updateUser: user } });
   }),
 
+  // Alta y baja logica de un usuario: inactivo no puede iniciar sesion
+  graphql.mutation("SetUserActive", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { id, isActive } = variables as { id: string; isActive: boolean };
+    if (typeof isActive !== "boolean") return HttpResponse.json(errorBody("Indicá si el usuario queda activo"));
+    const user = mockUsers.find((u) => u.id === id);
+    if (!user) return HttpResponse.json(errorBody("Usuario no encontrado"));
+    const error = activationError(caller, user);
+    if (error) return HttpResponse.json(errorBody(error));
+    user.isActive = isActive;
+    user.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ data: { setUserActive: user } });
+  }),
+
+  // Se mantiene por compatibilidad: equivale a setUserActive(id, false)
   graphql.mutation("DeleteUser", ({ request, variables }) => {
-    if (!hasRole(getCaller(request), ELEVATED_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
-    }
+    const caller = getCaller(request);
+    if (!hasRole(caller, ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
     const { id } = variables as { id: string };
     const user = mockUsers.find((u) => u.id === id);
-    if (!user || user.role === "root_admin") {
-      return HttpResponse.json({ errors: [{ message: "No se puede eliminar este usuario" }] });
-    }
+    if (!user) return HttpResponse.json(errorBody("Usuario no encontrado"));
+    const error = activationError(caller, user);
+    if (error) return HttpResponse.json(errorBody(error));
     user.isActive = false;
     user.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { deleteUser: true } });
@@ -1189,7 +1284,7 @@ export const handlers = [
 
   graphql.mutation("CreateProduct", ({ request, variables }) => {
     if (!hasRole(getCaller(request), STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+      return HttpResponse.json(FORBIDDEN);
     }
     const { input } = variables as {
       input: {
@@ -1237,7 +1332,7 @@ export const handlers = [
 
   graphql.mutation("UpdateProduct", ({ request, variables }) => {
     if (!hasRole(getCaller(request), STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+      return HttpResponse.json(FORBIDDEN);
     }
     const { id, input } = variables as {
       id: string;
@@ -1277,7 +1372,7 @@ export const handlers = [
 
   graphql.mutation("SoftDeleteProduct", ({ request, variables }) => {
     if (!hasRole(getCaller(request), STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+      return HttpResponse.json(FORBIDDEN);
     }
     const { id } = variables as { id: string };
     const product = mockProducts.find((p) => p.id === id && p.deletedAt === null);
@@ -1312,7 +1407,7 @@ export const handlers = [
 
   graphql.mutation("CreateComponent", ({ request, variables }) => {
     if (!hasRole(getCaller(request), STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+      return HttpResponse.json(FORBIDDEN);
     }
     const { input } = variables as {
       input: {
@@ -1351,7 +1446,7 @@ export const handlers = [
 
   graphql.mutation("UpdateComponent", ({ request, variables }) => {
     if (!hasRole(getCaller(request), STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+      return HttpResponse.json(FORBIDDEN);
     }
     const { id, input } = variables as {
       id: string;
@@ -1389,7 +1484,7 @@ export const handlers = [
 
   graphql.mutation("SoftDeleteComponent", ({ request, variables }) => {
     if (!hasRole(getCaller(request), STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+      return HttpResponse.json(FORBIDDEN);
     }
     const { id } = variables as { id: string };
     const component = mockComponents.find((c) => c.id === id && c.deletedAt === null);
@@ -1417,22 +1512,35 @@ export const handlers = [
     return HttpResponse.json({ data: { softDeleteComponent: true } });
   }),
 
-  graphql.mutation("ChangePassword", ({ request }) => {
-    if (!getCaller(request)) return HttpResponse.json({ errors: [{ message: "No autenticado" }] });
+  graphql.mutation("ChangePassword", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    const { currentPassword, newPassword } = variables as {
+      currentPassword: string;
+      newPassword: string;
+    };
+    if (mockPasswords[caller.dni] !== currentPassword) {
+      return HttpResponse.json(errorBody("La contraseña actual no es correcta"));
+    }
+    const error =
+      validatePassword(newPassword ?? "") ??
+      (newPassword === currentPassword ? "La nueva contraseña tiene que ser distinta" : null);
+    if (error) return HttpResponse.json(errorBody(error));
+    mockPasswords[caller.dni] = newPassword;
     return HttpResponse.json({ data: { changePassword: true } });
   }),
 
   graphql.mutation("AssignTicket", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!hasRole(caller, STAFF_ROLES)) {
-      return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
+      return HttpResponse.json(FORBIDDEN);
     }
     const { id, technicianId } = variables as { id: string; technicianId: string };
     const ticket = mockTickets.find((t) => t.id === id);
     // Como en solicitudes: a alguien dado de baja no se le asigna (ni se le avisa)
     const tech = mockUsers.find((u) => u.id === technicianId && u.isActive);
     if (!ticket || !tech) return HttpResponse.json({ errors: [{ message: "No encontrado" }] });
-    if (!isStaff(tech)) {
+    if (!isStaff(tech.role)) {
       return HttpResponse.json({
         errors: [{ message: "Solo se puede asignar a personal técnico" }],
       });
@@ -1459,7 +1567,7 @@ export const handlers = [
     syncReservations();
     const { status } = variables as { status?: ReservationStatus };
     // El solicitante solo ve las suyas, mande el filtro que mande
-    let reservations = isStaff(caller)
+    let reservations = isStaff(caller.role)
       ? [...mockReservations]
       : mockReservations.filter((r) => r.user.id === caller.id);
     if (status) reservations = reservations.filter((r) => r.status === status);
@@ -1473,7 +1581,7 @@ export const handlers = [
     syncReservations();
     const { id } = variables as { id: string };
     const reservation = mockReservations.find((r) => r.id === id) ?? null;
-    if (reservation && !isStaff(caller) && reservation.user.id !== caller.id) {
+    if (reservation && !isStaff(caller.role) && reservation.user.id !== caller.id) {
       return HttpResponse.json(FORBIDDEN);
     }
     return HttpResponse.json({ data: { reservation } });
@@ -1697,7 +1805,7 @@ export const handlers = [
   graphql.query("GetPendingNews", ({ request }) => {
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
-    if (!isStaff(caller)) return HttpResponse.json({ data: { pendingNews: [] } });
+    if (!isStaff(caller.role)) return HttpResponse.json({ data: { pendingNews: [] } });
     syncReservations();
     const pendingNews = PENDING_SECTIONS.filter((section) => hasNewPending(caller, section));
     return HttpResponse.json({ data: { pendingNews } });

@@ -10,6 +10,7 @@ import { DiagnosisStep } from "./steps/DiagnosisStep";
 import { SummaryStep } from "./steps/SummaryStep";
 import { Button } from "@/components/ui/button";
 import { gql } from "@/lib/utils";
+import { SPRING_TRANSITION } from "@/lib/constants";
 
 const COMPLETE_TICKET_MUTATION = `
  mutation CompleteTicket($id: ID!, $input: TicketCompleteInput!) {
@@ -137,7 +138,7 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
             initial={{ opacity: 0, x: 12 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -12 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            transition={SPRING_TRANSITION}
             className="flex-1 min-w-0"
           >
             {renderStep()}

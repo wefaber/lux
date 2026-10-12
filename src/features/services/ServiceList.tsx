@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Pagination, clampPage } from "@/components/ui/pagination";
 import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
 import { idQuery, pinnedFirst, servicePin } from "@/lib/pins";
+import { STAFF_ROLES } from "@/lib/roles";
 
 const SERVICES_QUERY = `
   query GetServiceRequests($requestedById: ID) {
@@ -65,7 +66,7 @@ export function ServiceList() {
   const [searchParams] = useSearchParams();
   const [createOpen, setCreateOpen] = useState(() => searchParams.get("nuevo") === "1");
 
-  const isSolicitante = !hasRole("root_admin", "admin", "tecnico");
+  const isSolicitante = !hasRole(...STAFF_ROLES);
 
   const { data, isLoading, refetch } = useAsync<{ serviceRequests: ServiceRequest[] }>(
     () => gql(SERVICES_QUERY, { requestedById: isSolicitante ? user?.id : undefined }),

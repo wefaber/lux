@@ -15,7 +15,7 @@ import { LuxPieChart } from "@/components/charts/PieChart";
 import { LuxBarChart } from "@/components/charts/BarChart";
 import { CardSkeleton, ChartSkeleton } from "@/components/skeletons/CardSkeleton";
 import { Button } from "@/components/ui/button";
-import { isStaff } from "@/lib/roles";
+import { isStaff, ADMIN_ROLES } from "@/lib/roles";
 import { MetricCard } from "./MetricCard";
 import { WorkQueue } from "./WorkQueue";
 import { RequesterHome } from "./RequesterHome";
@@ -112,7 +112,7 @@ function StaffDashboard() {
             onValueChange={(v) => setPeriod(v as DashboardPeriod)}
             options={DASHBOARD_PERIODS.map((p) => ({ value: p, label: DASHBOARD_PERIOD_LABELS[p] }))}
           />
-          {hasRole("root_admin", "admin") && (
+          {hasRole(...ADMIN_ROLES) && (
             <Button variant="secondary" size="sm" onClick={handleExport} disabled={!stats}>
               <Download className="h-3.5 w-3.5" />
               Exportar CSV

@@ -5,7 +5,12 @@ import { useState } from "react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { gql, formatDate } from "@/lib/utils";
-import { SERVICE_STATUS_CONFIG, SERVICE_TYPE_LABELS, ROUTES } from "@/lib/constants";
+import {
+  SERVICE_STATUS_CONFIG,
+  SERVICE_TYPE_LABELS,
+  ROUTES,
+  SPRING_TRANSITION,
+} from "@/lib/constants";
 import type { ServiceRequest, ServiceStatus, User } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { CommentThread } from "@/components/comments/CommentThread";
 import { UserSearchSelect, type UserOption } from "@/components/search-pickers";
+import { STAFF_ROLES } from "@/lib/roles";
 
 const SERVICE_QUERY = `
  query GetServiceRequest($id: ID!) {
@@ -68,7 +74,7 @@ export function ServiceDetail() {
   // Al recargar se sigue mostrando la solicitud (y el comentario a medio escribir);
   // solo se descarta si es la de otra ruta
   const service = data?.serviceRequest?.id === id ? data?.serviceRequest : null;
-  const canManage = hasRole("root_admin", "admin", "tecnico"); // Verificacion si puede gestionar
+  const canManage = hasRole(...STAFF_ROLES); // Verificacion si puede gestionar
   const [assignError, setAssignError] = useState("");
   // El responsable recien elegido se muestra mientras se recarga la solicitud;
   // deja de valer en cuanto llegan los datos nuevos
@@ -160,7 +166,7 @@ export function ServiceDetail() {
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          transition={SPRING_TRANSITION}
           // En pantallas anchas los comentarios van al costado, en el espacio que
           // dejaba libre el detalle; en angostas quedan debajo
           className="grid gap-4 xl:grid-cols-[minmax(0,42rem)_minmax(0,1fr)]"
@@ -266,7 +272,10 @@ export function ServiceDetail() {
                 <CardContent className="space-y-4">
                   <div className="space-y-1.5">
                     <Label>Nuevo estado</Label>
-                    <Select value={newStatus} onValueChange={(v) => setNewStatus(v as ServiceStatus)}>
+                    <Select
+                      value={newStatus}
+                      onValueChange={(v) => setNewStatus(v as ServiceStatus)}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar estado..." />
                       </SelectTrigger>

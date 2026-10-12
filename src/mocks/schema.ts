@@ -35,6 +35,7 @@ export const schema = `
     createUser(input: UserInput!): User!
     updateUser(id: ID!, input: UserInput!): User!
     deleteUser(id: ID!): Boolean!
+    setUserActive(id: ID!, isActive: Boolean!): User!
     createProduct(input: ProductInput!): Product!
     updateProduct(id: ID!, input: ProductUpdateInput!): Product!
     softDeleteProduct(id: ID!): Boolean!

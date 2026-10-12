@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { motion } from "motion/react";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ROUTES } from "@/lib/constants";
+import { ROUTES, SPRING_TRANSITION } from "@/lib/constants";
 
 export function NotFoundPage() {
   return (
@@ -10,7 +10,7 @@ export function NotFoundPage() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        transition={SPRING_TRANSITION}
         className="text-center space-y-4"
       >
         <p className="text-8xl font-semibold tracking-[-0.04em] text-black/10 dark:text-foreground/10">

@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Pagination, clampPage } from "@/components/ui/pagination";
 import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
 import { idQuery, loanPin, pinnedFirst } from "@/lib/pins";
+import { STAFF_ROLES } from "@/lib/roles";
 
 const LOANS_QUERY = `
  query GetLoans($status: String, $userId: ID) {
@@ -60,7 +61,7 @@ export function LoansPage() {
   const { noticeFor } = useNotices();
 
   // El solicitante solo pide y consulta; aprobar, rechazar, entregar y devolver es del staff
-  const isStaff = hasRole("root_admin", "admin", "tecnico");
+  const isStaff = hasRole(...STAFF_ROLES);
 
   const { data, isLoading, refetch } = useAsync<{ loans: Loan[] }>(
     () =>

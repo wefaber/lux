@@ -14,6 +14,13 @@ import type {
   ReservationStatus,
 } from "./types";
 
+/** Colores de badge que usan las configuraciones de estados, roles, etc. */
+export type StatusColor = "success" | "warning" | "info" | "destructive" | "muted";
+export interface StatusConfig {
+  label: string;
+  color: StatusColor;
+}
+
 export const AUTH_STORAGE_KEY = "lux_auth"; // Clave de localStorage compartida entre useAuth y gql()
 
 export const ROUTES = {
@@ -39,10 +46,7 @@ export const ROUTES = {
   SERVER_ERROR: "/500",
 } as const; // Rutas de la aplicacion, constantes y de solo lectura
 
-export const TICKET_STATUS_CONFIG: Record<
-  TicketStatus,
-  { label: string; color: "success" | "warning" | "info" | "destructive" | "muted" }
-> = {
+export const TICKET_STATUS_CONFIG: Record<TicketStatus, StatusConfig> = {
   pending: { label: "Pendiente", color: "warning" },
   in_progress: { label: "En progreso", color: "info" },
   in_resolution: { label: "En resolución", color: "warning" },
@@ -62,20 +66,14 @@ export const TICKET_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
   resolved: ["in_progress"],
 };
 
-export const EQUIPMENT_STATUS_CONFIG: Record<
-  EquipmentStatus,
-  { label: string; color: "success" | "warning" | "info" | "destructive" | "muted" }
-> = {
+export const EQUIPMENT_STATUS_CONFIG: Record<EquipmentStatus, StatusConfig> = {
   available: { label: "Disponible", color: "success" },
   in_use: { label: "En uso", color: "info" },
   in_repair: { label: "En reparación", color: "warning" },
   retired: { label: "Dado de baja", color: "destructive" },
 }; // Configuracion de estados de equipos, con etiquetas y colores para UI
 
-export const LOAN_STATUS_CONFIG: Record<
-  LoanStatus,
-  { label: string; color: "success" | "warning" | "info" | "destructive" | "muted" }
-> = {
+export const LOAN_STATUS_CONFIG: Record<LoanStatus, StatusConfig> = {
   pending: { label: "Pendiente", color: "warning" },
   approved: { label: "Aprobado", color: "success" },
   rejected: { label: "Rechazado", color: "destructive" },
@@ -84,10 +82,7 @@ export const LOAN_STATUS_CONFIG: Record<
   returned: { label: "Devuelto", color: "muted" },
 }; // Configuracion de estados de prestamos
 
-export const SERVICE_STATUS_CONFIG: Record<
-  ServiceStatus,
-  { label: string; color: "success" | "warning" | "info" | "destructive" | "muted" }
-> = {
+export const SERVICE_STATUS_CONFIG: Record<ServiceStatus, StatusConfig> = {
   pending: { label: "Pendiente", color: "warning" },
   approved: { label: "Aprobado", color: "success" },
   in_progress: { label: "En progreso", color: "info" },
@@ -133,10 +128,7 @@ export const LOCATION_KIND_LETTER: Record<LocationKind, string> = {
   other: "O",
 };
 
-export const RESERVATION_STATUS_CONFIG: Record<
-  ReservationStatus,
-  { label: string; color: "success" | "warning" | "info" | "destructive" | "muted" }
-> = {
+export const RESERVATION_STATUS_CONFIG: Record<ReservationStatus, StatusConfig> = {
   pending: { label: "Pendiente", color: "warning" },
   approved: { label: "Aprobada", color: "success" },
   rejected: { label: "Rechazada", color: "destructive" },
@@ -184,12 +176,21 @@ export const INTERVENTION_TYPE_LABELS: Record<InterventionType, string> = {
   other: "Otra",
 }; // Labels de tipos de intervencion
 
-export const ROLE_LABELS: Record<UserRole, string> = {
-  root_admin: "Super Admin",
-  admin: "Administrador",
-  tecnico: "Técnico",
-  solicitante: "Solicitante",
-}; // Labels de roles
+export const ROLE_CONFIG: Record<UserRole, StatusConfig> = {
+  root_admin: { label: "Super Admin", color: "destructive" },
+  admin: { label: "Administrador", color: "warning" },
+  tecnico: { label: "Técnico", color: "info" },
+  solicitante: { label: "Solicitante", color: "muted" },
+}; // Etiqueta y color de cada rol
+
+export const ROLE_LABELS = Object.fromEntries(
+  Object.entries(ROLE_CONFIG).map(([role, { label }]) => [role, label]),
+) as Record<UserRole, string>; // Derivado de ROLE_CONFIG: un solo lugar para los nombres
+
+export const USER_STATUS_CONFIG: Record<"active" | "inactive", StatusConfig> = {
+  active: { label: "Activo", color: "success" },
+  inactive: { label: "Inactivo", color: "destructive" },
+}; // Estado de la cuenta de un usuario
 
 export const KIND_MACHINE_CODE: Record<string, string> = {
   AIO: "PC",
@@ -237,5 +238,5 @@ export const PAGE_TRANSITION = {
   initial: { opacity: 0, y: 10 },
   animate: { opacity: 1, y: 0 },
   exit: { opacity: 0, y: -10 },
-  transition: { type: "spring" as const, stiffness: 300, damping: 30 },
+  transition: SPRING_TRANSITION,
 };
