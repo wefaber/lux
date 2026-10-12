@@ -60,6 +60,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(AUTH_STORAGE_KEY);
   }, []); // Logica de logout
 
+  // La sesion se comparte entre pestañas: si en otra se entra con otro usuario o
+  // se cierra la sesion, esta lo refleja (si no, mostraria a uno y pediria como otro)
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === AUTH_STORAGE_KEY) setUser(loadStoredUser());
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
   // Lo guardado en el navegador es una copia: el rol o el estado pudieron cambiar
   // desde que se inicio sesion. Al cargar se le pregunta a la API y, si la cuenta
   // ya no esta activa, se cierra la sesion en vez de dejar que todo falle.
@@ -67,22 +77,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    gql<{ me: User | null }>(ME_QUERY)
-      .then(({ me }) => {
-        if (cancelled) return;
-        if (!me) {
-          logout();
-          return;
-        }
-        const fresh: AuthUser = { ...me, token };
-        setUser(fresh);
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(fresh));
-      })
-      .catch(() => {
-        // Sin conexion con la API no se sabe nada nuevo: se mantiene la sesion
-      });
+    const refresh = () =>
+      gql<{ me: User | null }>(ME_QUERY)
+        .then(({ me }) => {
+          if (cancelled) return;
+          if (!me) {
+            logout();
+            return;
+          }
+          const fresh: AuthUser = { ...me, token };
+          setUser(fresh);
+          localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(fresh));
+        })
+        .catch(() => {
+          // Sin conexion con la API no se sabe nada nuevo: se mantiene la sesion
+        });
+    // Al volver a la pestaña tambien: en otra pudieron desactivar o cambiar al usuario
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    void refresh();
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [token, logout]);
 
