@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useLocations } from "@/hooks/useLocations";
-import { gql } from "@/lib/utils";
+import { gql, errorMessage } from "@/lib/utils";
 import { SERVICE_TYPE_LABELS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { EquipmentSearchSelect, LabSearchSelect } from "@/components/search-pickers";
 import type { Product, ServiceType } from "@/lib/types";
+import { ErrorAlert } from "@/components/ui/error-alert";
+import { firstError, validateServiceRequest } from "@/lib/validation";
 
 const CREATE_SERVICE_MUTATION = `
  mutation CreateServiceRequest($input: ServiceRequestInput!) {
@@ -41,8 +43,9 @@ export function ServiceForm({ onSuccess }: ServiceFormProps) {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault(); // Previene que se dispare el evento por defecto.
-    if (!description.trim()) {
-      setError("La descripción es requerida.");
+    const invalid = firstError(validateServiceRequest({ type, description }));
+    if (invalid) {
+      setError(invalid);
       return;
     }
     setSaving(true);
@@ -59,7 +62,7 @@ export function ServiceForm({ onSuccess }: ServiceFormProps) {
       }); // Entrada a la base de datos
       onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al crear solicitud"); // Disparador de error en caso de datos erroneos
+      setError(errorMessage(err, "Error al crear solicitud")); // Disparador de error en caso de datos erroneos
     } finally {
       setSaving(false);
     }
@@ -135,11 +138,7 @@ export function ServiceForm({ onSuccess }: ServiceFormProps) {
         />
       </div>
 
-      {error && (
-        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+      <ErrorAlert>{error}</ErrorAlert>
 
       <div className="flex justify-end">
         <Button type="submit" disabled={saving}>

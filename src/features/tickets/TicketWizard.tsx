@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { CheckCircle2 } from "lucide-react";
 import type { Ticket } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, errorMessage } from "@/lib/utils";
 import { IncidentStep } from "./steps/IncidentStep";
 import { PcStatusStep } from "./steps/PcStatusStep";
 import { PcHistoryStep } from "./steps/PcHistoryStep";
@@ -54,7 +54,7 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
       });
       onComplete();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al completar el ticket");
+      setError(errorMessage(err, "Error al completar el ticket"));
     } finally {
       setCompleting(false);
     }

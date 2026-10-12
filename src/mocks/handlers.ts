@@ -11,6 +11,7 @@ import { mockServices } from "./data/services";
 import { mockNotices, mockPendingSeen } from "./data/notices";
 import { mockActivityLogs } from "./generators";
 import {
+  firstError,
   validateComment,
   validateComponent,
   validateIntervention,
@@ -18,19 +19,28 @@ import {
   validateLocation,
   validateProduct,
   validateReservation,
+  validateServiceRequest,
+  validateTicket,
   validatePassword,
   validateUser,
-  type FieldErrors,
   type UserFields,
   type InterventionFields,
   type LocationFields,
 } from "@/lib/validation";
 import {
+  CHANGEABLE_RESERVATION_STATUSES,
+  CLOSED_SERVICE_STATUSES,
+  INITIAL_EQUIPMENT_STATUSES,
   LOAN_STATUS_CONFIG,
+  RETURNABLE_LOAN_STATUSES,
   RESERVATION_STATUS_CONFIG,
+  SERVICE_STATUS_CONFIG,
+  SERVICE_TRANSITIONS,
   TICKET_STATUS_CONFIG,
   TICKET_TRANSITIONS,
   type DashboardPeriod,
+  UNRESERVABLE_EQUIPMENT_STATUSES,
+  EQUIPMENT_STATUS_CONFIG,
 } from "@/lib/constants";
 import {
   ADMIN_ROLES,
@@ -56,6 +66,7 @@ import type {
   ReservationStatus,
   Product,
   Component,
+  EquipmentStatus,
   Ticket,
   Loan,
   ServiceRequest,
@@ -90,7 +101,6 @@ const USER_ID_PREFIX: Record<UserRole, string> = {
   tecnico: "u-tec-",
   solicitante: "u-sol-",
 };
-
 
 // Simula la verificacion de un token en un backend real: lo resuelve desde
 // el header Authorization en vez de leer localStorage directamente.
@@ -248,8 +258,9 @@ function invalidTicketTransition(ticket: Ticket, to: TicketStatus): string {
   return `No se puede pasar un ticket de "${TICKET_STATUS_CONFIG[ticket.status].label}" a "${TICKET_STATUS_CONFIG[to].label}"`;
 }
 
-function firstError(errors: FieldErrors<string>): string | null {
-  return Object.values(errors)[0] ?? null;
+// Equipo vigente por id: uno dado de baja no se vincula a tickets ni solicitudes nuevas
+function activeProduct(id: string | undefined): Product | undefined {
+  return mockProducts.find((p) => p.id === id && p.deletedAt === null);
 }
 
 // machineId y n° de serie identifican al equipo: no se repiten entre los vigentes
@@ -373,7 +384,11 @@ function withProductCount(location: Location): Location {
 
 // "Administración" y "administracion" son la misma ubicacion
 function normalizeName(name: string): string {
-  return name.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  return name
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
 }
 
 // Nombre y codigo (tipo + numero) no se repiten entre las ubicaciones vigentes
@@ -389,8 +404,6 @@ function duplicateLocationError(
   }
   return null;
 }
-
-const CLOSED_SERVICE_STATUSES = new Set<ServiceStatus>(["completed", "rejected"]);
 
 // Estados de una solicitud que son una respuesta para quien la pidio
 const SERVICE_RESPONSE_NOTICES = {
@@ -523,7 +536,8 @@ export const handlers = [
   graphql.query("GetProductByMachineId", ({ request, variables }) => {
     if (!getCaller(request)) return HttpResponse.json(UNAUTHENTICATED);
     const { machineId } = variables as { machineId: string };
-    const product = mockProducts.find((p) => p.machineId === machineId && p.deletedAt === null) ?? null;
+    const product =
+      mockProducts.find((p) => p.machineId === machineId && p.deletedAt === null) ?? null;
     return HttpResponse.json({ data: { productByMachineId: product } });
   }),
 
@@ -786,13 +800,16 @@ export const handlers = [
     const { input } = variables as {
       input: { title: string; description: string; category: string; equipmentId?: string };
     };
-    const equipment = input.equipmentId
-      ? (mockProducts.find((p) => p.id === input.equipmentId) ?? null)
-      : null;
+    const error = firstError(validateTicket(input));
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    const equipment = input.equipmentId ? (activeProduct(input.equipmentId) ?? null) : null;
+    if (input.equipmentId && !equipment) {
+      return HttpResponse.json({ errors: [{ message: "Equipo no encontrado" }] });
+    }
     const newTicket: Ticket = {
       id: nextId("tkt-", mockTickets, 3),
-      title: input.title,
-      description: input.description,
+      title: input.title.trim(),
+      description: input.description.trim(),
       category: input.category as Ticket["category"],
       status: "pending",
       submittedBy: user,
@@ -841,13 +858,24 @@ export const handlers = [
     const ticket = mockTickets.find((t) => t.id === id);
     if (!ticket) return HttpResponse.json({ errors: [{ message: "Ticket no encontrado" }] });
     // Solo datos descriptivos: el estado se mueve por changeTicketStatus/completeTicket
-    const { title, description, category, equipmentId } = input;
-    if (title !== undefined) ticket.title = title;
-    if (description !== undefined) ticket.description = description;
-    if (category !== undefined) ticket.category = category;
+    const fields = {
+      title: input.title ?? ticket.title,
+      description: input.description ?? ticket.description,
+      category: input.category ?? ticket.category,
+    };
+    const error = firstError(validateTicket(fields));
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    const { equipmentId } = input;
+    const equipment = equipmentId ? activeProduct(equipmentId) : undefined;
+    if (equipmentId && !equipment) {
+      return HttpResponse.json({ errors: [{ message: "Equipo no encontrado" }] });
+    }
+    ticket.title = fields.title.trim();
+    ticket.description = fields.description.trim();
+    ticket.category = fields.category;
     if (equipmentId !== undefined) {
-      ticket.equipmentId = equipmentId;
-      ticket.equipment = mockProducts.find((p) => p.id === equipmentId) ?? null;
+      ticket.equipmentId = equipmentId || null;
+      ticket.equipment = equipment ?? null;
     }
     ticket.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { updateTicket: ticket } });
@@ -947,9 +975,15 @@ export const handlers = [
         errors: [{ message: "La fecha de devolución debe ser posterior a la de entrega" }],
       });
     }
-    const components = input.componentIds
-      ? mockComponents.filter((c) => input.componentIds!.includes(c.id))
-      : [];
+    const componentIds = input.componentIds ?? [];
+    const components = mockComponents.filter(
+      (c) => componentIds.includes(c.id) && c.deletedAt === null && c.productId === equipment.id,
+    );
+    if (components.length !== new Set(componentIds).size) {
+      return HttpResponse.json({
+        errors: [{ message: "Algún componente no existe o no pertenece a este equipo" }],
+      });
+    }
     const newLoan: Loan = {
       id: nextId("loan-", mockLoans, 3),
       equipment,
@@ -1052,7 +1086,7 @@ export const handlers = [
     };
     const loan = mockLoans.find((l) => l.id === id);
     if (!loan) return HttpResponse.json({ errors: [{ message: "Préstamo no encontrado" }] });
-    if (loan.status !== "active" && loan.status !== "overdue") {
+    if (!RETURNABLE_LOAN_STATUSES.includes(loan.status)) {
       return HttpResponse.json({ errors: [{ message: invalidLoanTransition(loan, "devolver") }] });
     }
     const now = new Date().toISOString();
@@ -1080,13 +1114,18 @@ export const handlers = [
         equipmentId?: string;
       };
     };
+    const error = firstError(validateServiceRequest(input));
+    if (error) return HttpResponse.json({ errors: [{ message: error }] });
+    if (input.equipmentId && !activeProduct(input.equipmentId)) {
+      return HttpResponse.json({ errors: [{ message: "Equipo no encontrado" }] });
+    }
     const newService: ServiceRequest = {
       id: nextId("svc-", mockServices, 3),
       type: input.type as ServiceRequest["type"],
       status: "pending",
       requestedBy: user,
       assignedTo: null,
-      description: input.description,
+      description: input.description.trim(),
       labNumber: input.labNumber ?? null,
       softwareName: input.softwareName ?? null,
       equipmentId: input.equipmentId ?? null,
@@ -1110,7 +1149,22 @@ export const handlers = [
     const service = mockServices.find((s) => s.id === id);
     if (!service) return HttpResponse.json({ errors: [{ message: "Solicitud no encontrada" }] });
     const previousStatus = service.status;
-    if (input.status) service.status = input.status as ServiceRequest["status"];
+    const status = input.status as ServiceStatus | undefined;
+    if (status !== undefined && status !== previousStatus) {
+      if (!Object.hasOwn(SERVICE_STATUS_CONFIG, status)) {
+        return HttpResponse.json({ errors: [{ message: "Estado inválido" }] });
+      }
+      if (!SERVICE_TRANSITIONS[previousStatus].includes(status)) {
+        return HttpResponse.json({
+          errors: [
+            {
+              message: `No se puede pasar una solicitud de "${SERVICE_STATUS_CONFIG[previousStatus].label}" a "${SERVICE_STATUS_CONFIG[status].label}"`,
+            },
+          ],
+        });
+      }
+      service.status = status;
+    }
     // Quien la pone en marcha o la cierra sin responsable queda como responsable.
     // Va antes que la respuesta: si tambien la cierra, el aviso que queda es ese
     if (!service.assignedTo && (input.status === "in_progress" || input.status === "completed")) {
@@ -1121,8 +1175,12 @@ export const handlers = [
     service.updatedAt = new Date().toISOString();
     // Al solicitante se le avisa la respuesta: aprobada, rechazada o completada
     // hasOwn y no `in`: el estado viene del cliente y "constructor" pasaria
-    if (service.status !== previousStatus && Object.hasOwn(SERVICE_RESPONSE_NOTICES, service.status)) {
-      const kind = SERVICE_RESPONSE_NOTICES[service.status as keyof typeof SERVICE_RESPONSE_NOTICES];
+    if (
+      service.status !== previousStatus &&
+      Object.hasOwn(SERVICE_RESPONSE_NOTICES, service.status)
+    ) {
+      const kind =
+        SERVICE_RESPONSE_NOTICES[service.status as keyof typeof SERVICE_RESPONSE_NOTICES];
       notify(service.requestedBy, "service_request", service.id, kind, caller);
     }
     return HttpResponse.json({ data: { updateServiceRequest: service } });
@@ -1136,7 +1194,7 @@ export const handlers = [
     const { id } = variables as { id: string };
     const service = mockServices.find((s) => s.id === id);
     if (!service) return HttpResponse.json({ errors: [{ message: "Solicitud no encontrada" }] });
-    if (CLOSED_SERVICE_STATUSES.has(service.status)) {
+    if (CLOSED_SERVICE_STATUSES.includes(service.status)) {
       return HttpResponse.json({ errors: [{ message: "La solicitud ya está cerrada" }] });
     }
     if (service.assignedTo) {
@@ -1164,7 +1222,7 @@ export const handlers = [
         errors: [{ message: "Solo se puede asignar a personal técnico" }],
       });
     }
-    if (CLOSED_SERVICE_STATUSES.has(service.status)) {
+    if (CLOSED_SERVICE_STATUSES.includes(service.status)) {
       return HttpResponse.json({ errors: [{ message: "La solicitud ya está cerrada" }] });
     }
     handOver("service_request", service.id, service.requestedBy, service.assignedTo, tech, caller);
@@ -1258,7 +1316,8 @@ export const handlers = [
     const caller = getCaller(request);
     if (!hasRole(caller, ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
     const { id, isActive } = variables as { id: string; isActive: boolean };
-    if (typeof isActive !== "boolean") return HttpResponse.json(errorBody("Indicá si el usuario queda activo"));
+    if (typeof isActive !== "boolean")
+      return HttpResponse.json(errorBody("Indicá si el usuario queda activo"));
     const user = mockUsers.find((u) => u.id === id);
     if (!user) return HttpResponse.json(errorBody("Usuario no encontrado"));
     const error = activationError(caller, user);
@@ -1309,7 +1368,11 @@ export const handlers = [
       serialNumber: input.serialNumber.trim().toUpperCase(),
       partNumber: input.partNumber.trim().toUpperCase(),
     };
-    const error = firstError(validateProduct(fields)) ?? duplicateProductError(fields);
+    const status = (input.status || "available") as EquipmentStatus;
+    const error =
+      firstError(validateProduct(fields)) ??
+      duplicateProductError(fields) ??
+      (INITIAL_EQUIPMENT_STATUSES.includes(status) ? null : "Estado inicial inválido");
     if (error || !location) {
       return HttpResponse.json({ errors: [{ message: error ?? "Ubicación inválida" }] });
     }
@@ -1317,7 +1380,7 @@ export const handlers = [
       id: nextId("prod-", mockProducts),
       type: "product",
       ...fields,
-      status: input.status as Product["status"],
+      status,
       locationId: location.id,
       location: location.name,
       issues: input.issues?.trim() || null,
@@ -1606,15 +1669,11 @@ export const handlers = [
     if (input.resourceType === "equipment") {
       equipment = mockProducts.find((p) => p.id === input.equipmentId && !p.deletedAt) ?? null;
       if (!equipment) return HttpResponse.json({ errors: [{ message: "Equipo no encontrado" }] });
-      if (equipment.status === "in_repair") {
-        return HttpResponse.json({
-          errors: [{ message: "El equipo está en reparación: no se puede reservar" }],
-        });
-      }
       // Hay equipos con estado "retired" sin deletedAt: tampoco se reservan
-      if (equipment.status === "retired") {
+      if (UNRESERVABLE_EQUIPMENT_STATUSES.includes(equipment.status)) {
+        const state = EQUIPMENT_STATUS_CONFIG[equipment.status].label.toLowerCase();
         return HttpResponse.json({
-          errors: [{ message: "El equipo está dado de baja: no se puede reservar" }],
+          errors: [{ message: `El equipo está ${state}: no se puede reservar` }],
         });
       }
     } else if (input.resourceType === "location") {
@@ -1721,7 +1780,7 @@ export const handlers = [
     const reservation = mockReservations.find((r) => r.id === id);
     if (!reservation) return HttpResponse.json({ errors: [{ message: "Reserva no encontrada" }] });
     // Lo que ya empezo o se cerro no se reprograma
-    if (reservation.status !== "pending" && reservation.status !== "approved") {
+    if (!CHANGEABLE_RESERVATION_STATUSES.includes(reservation.status)) {
       return HttpResponse.json({
         errors: [{ message: invalidReservationTransition(reservation, "modificar") }],
       });
@@ -1762,7 +1821,7 @@ export const handlers = [
     // Solo quien la pidio la cancela, y antes de que empiece. El staff aprueba,
     // rechaza o modifica, pero no cancela reservas ajenas
     if (reservation.user.id !== caller.id) return HttpResponse.json(FORBIDDEN);
-    if (reservation.status !== "pending" && reservation.status !== "approved") {
+    if (!CHANGEABLE_RESERVATION_STATUSES.includes(reservation.status)) {
       return HttpResponse.json({
         errors: [{ message: invalidReservationTransition(reservation, "cancelar") }],
       });
@@ -2032,9 +2091,7 @@ export const handlers = [
     if (!location) return HttpResponse.json({ errors: [{ message: "Ubicación no encontrada" }] });
     syncReservations();
     if (
-      mockReservations.some(
-        (r) => r.location?.id === id && OPEN_RESERVATION_STATUSES.has(r.status),
-      )
+      mockReservations.some((r) => r.location?.id === id && OPEN_RESERVATION_STATUSES.has(r.status))
     ) {
       return HttpResponse.json({
         errors: [{ message: "No se puede eliminar: la ubicación tiene reservas vigentes" }],

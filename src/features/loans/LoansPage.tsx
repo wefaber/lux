@@ -3,14 +3,20 @@ import { Plus, RotateCcw, CheckCircle, XCircle, PackageCheck, Search } from "luc
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotices } from "@/hooks/useNotices";
-import { gql, formatDate, cn } from "@/lib/utils";
-import { LOAN_STATUS_CONFIG } from "@/lib/constants";
+import { gql, formatDate, cn, errorMessage } from "@/lib/utils";
+import { LOAN_STATUS_CONFIG, RETURNABLE_LOAN_STATUSES } from "@/lib/constants";
 import type { Loan, LoanStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import { MetricCardSkeleton } from "@/components/skeletons/CardSkeleton";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { LoanForm } from "./LoanForm";
 import { RejectLoanDialog, ReturnLoanDialog } from "./LoanActionDialogs";
 import { StatusFilter } from "@/components/ui/status-filter";
@@ -19,6 +25,7 @@ import { Pagination, clampPage } from "@/components/ui/pagination";
 import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
 import { idQuery, loanPin, pinnedFirst } from "@/lib/pins";
 import { STAFF_ROLES } from "@/lib/roles";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 const LOANS_QUERY = `
  query GetLoans($status: String, $userId: ID) {
@@ -121,7 +128,7 @@ export function LoansPage() {
       await gql(mutation, { id });
       refetch();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Error al actualizar el préstamo");
+      setActionError(errorMessage(err, "Error al actualizar el préstamo"));
     } finally {
       setBusyId(null);
     }
@@ -233,11 +240,7 @@ export function LoansPage() {
         )}
       </div>
 
-      {actionError && (
-        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-          {actionError}
-        </div>
-      )}
+      <ErrorAlert>{actionError}</ErrorAlert>
 
       <div className="space-y-3">
         {showSkeleton ? (
@@ -365,7 +368,7 @@ export function LoansPage() {
                                 Registrar entrega
                               </Button>
                             )}
-                            {(l.status === "active" || l.status === "overdue") && (
+                            {RETURNABLE_LOAN_STATUSES.includes(l.status) && (
                               <Button
                                 size="sm"
                                 variant="secondary"

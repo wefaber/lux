@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { Lock, Type } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
-import { gql } from "@/lib/utils";
+import { gql, initials, errorMessage } from "@/lib/utils";
 import { ROLE_CONFIG, ROLE_LABELS, SPRING_TRANSITION } from "@/lib/constants";
 import { validatePassword } from "@/lib/validation";
 import type { User } from "@/lib/types";
@@ -17,21 +17,13 @@ import { ThemeSwitcher } from "@/components/accessibility/ThemeSwitcher";
 import { FontSizeControl } from "@/components/accessibility/FontSizeControl";
 import { HighContrastToggle } from "@/components/accessibility/HighContrastToggle";
 import { Separator } from "@/components/ui/separator";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 const CHANGE_PASSWORD_MUTATION = `
  mutation ChangePassword($currentPassword: String!, $newPassword: String!) {
  changePassword(currentPassword: $currentPassword, newPassword: $newPassword)
  }
 `;
-
-function initials(name: string): string {
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase();
-}
 
 // Datos de la cuenta: se muestran a la derecha en escritorio y debajo en el telefono
 function ProfileFields({ user }: { user: User }) {
@@ -86,7 +78,7 @@ export function ProfilePage() {
       setNewPw("");
       setConfirmPw("");
     } catch (err) {
-      setPwError(err instanceof Error ? err.message : "Error al cambiar contraseña");
+      setPwError(errorMessage(err, "Error al cambiar contraseña"));
     } finally {
       setSaving(false);
     }
@@ -172,11 +164,7 @@ export function ProfilePage() {
                     required
                   />
                 </div>
-                {pwError && (
-                  <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-                    {pwError}
-                  </div>
-                )}
+                <ErrorAlert>{pwError}</ErrorAlert>
                 {pwSuccess && (
                   <div className="rounded-xl bg-[rgba(52,199,89,0.08)] border border-success-border p-3 text-sm text-success">
                     Contraseña actualizada correctamente.

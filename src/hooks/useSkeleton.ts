@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { errorMessage } from "@/lib/utils";
 
 export function useSkeleton(delay = 200): boolean {
   const [showing, setShowing] = useState(true);
@@ -31,7 +32,7 @@ export function useAsync<T>(
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Error desconocido");
+          setError(errorMessage(err, "Error desconocido"));
         }
       })
       .finally(() => {

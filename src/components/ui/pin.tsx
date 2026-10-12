@@ -4,6 +4,7 @@ import { useNotices } from "@/hooks/useNotices";
 import { NOTICE_ENTITY_GENDER, NOTICE_KIND_LABELS } from "@/lib/constants";
 import type { PinState } from "@/lib/pins";
 import type { Notice } from "@/lib/types";
+import { errorMessage } from "@/lib/utils";
 
 // Fondo de la fila fijada: suave para lo asignado, ambar para un aviso sin ver
 export function pinRowClass(state: PinState): string {
@@ -57,7 +58,7 @@ export function NoticeLine({ notice }: { notice: Notice }) {
     try {
       await acknowledge(notice.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo marcar como visto");
+      setError(errorMessage(err, "No se pudo marcar como visto"));
       setSaving(false);
     }
   };

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Plus, Search } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
-import { gql, cn } from "@/lib/utils";
+import { gql, cn, errorMessage } from "@/lib/utils";
 import { ROLE_CONFIG, USER_STATUS_CONFIG } from "@/lib/constants";
 import { USER_ROLES, canEditUser, canToggleUserActive } from "@/lib/roles";
 import { useAuth } from "@/hooks/useAuth";
@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { UserForm } from "./UserForm";
 import { OptionSelect } from "@/components/ui/option-select";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 const USERS_QUERY = `
   query GetUsers {
@@ -59,7 +60,7 @@ export function UserManagement() {
     try {
       await gql(SET_USER_ACTIVE_MUTATION, { id: u.id, isActive });
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "No se pudo cambiar el estado");
+      setActionError(errorMessage(err, "No se pudo cambiar el estado"));
     }
     refetch();
   }; // Alta / baja logica: un usuario inactivo no puede iniciar sesion
@@ -101,14 +102,7 @@ export function UserManagement() {
         />
       </div>
 
-      {actionError && (
-        <div
-          role="alert"
-          className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive"
-        >
-          {actionError}
-        </div>
-      )}
+      <ErrorAlert>{actionError}</ErrorAlert>
 
       {showSkeleton ? (
         <TableSkeleton rows={8} cols={5} />

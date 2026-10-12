@@ -16,6 +16,8 @@ import { RetireEquipmentDialog } from "./RetireEquipmentDialog";
 import { EquipmentHistory } from "./EquipmentHistory";
 import { EquipmentInterventions } from "./EquipmentInterventions";
 import { STAFF_ROLES } from "@/lib/roles";
+import { ErrorAlert } from "@/components/ui/error-alert";
+import { DetailRow } from "@/components/ui/detail-row";
 
 const PRODUCT_QUERY = `
   query GetProduct($id: ID!) {
@@ -26,17 +28,6 @@ const PRODUCT_QUERY = `
     }
   }
 `;
-
-function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
-        {label}
-      </span>
-      <span className="text-sm text-foreground">{value ?? "—"}</span>
-    </div>
-  );
-}
 
 export function ProductDetail() {
   const { id } = useParams<{ id: string }>();
@@ -96,11 +87,7 @@ export function ProductDetail() {
         />
       )}
 
-      {error && (
-        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
-          Error: {error}
-        </div>
-      )}
+      {error && <ErrorAlert>Error: {error}</ErrorAlert>}
 
       {isLoading ? (
         <div className="space-y-4">

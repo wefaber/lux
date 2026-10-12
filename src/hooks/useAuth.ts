@@ -1,6 +1,6 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 import { createElement } from "react";
-import type { AuthUser, UserRole } from "@/lib/types";
+import type { AuthUser, User, UserRole } from "@/lib/types";
 import { gql } from "@/lib/utils";
 import { AUTH_STORAGE_KEY } from "@/lib/constants";
 
@@ -15,21 +15,15 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null); // Creacion de contexto de auth
 
+const USER_FIELDS = "id name dni email role isActive createdAt updatedAt";
+
 const LOGIN_QUERY = `
   query Login($dni: String!, $password: String!) {
-    login(dni: $dni, password: $password) {
-      id
-      name
-      dni
-      email
-      role
-      isActive
-      createdAt
-      updatedAt
-      token
-    }
+    login(dni: $dni, password: $password) { ${USER_FIELDS} token }
   }
 `; // Login query para comprobacion de datos
+
+const ME_QUERY = `query GetMe { me { ${USER_FIELDS} } }`; // Datos vigentes del usuario de la sesion
 
 interface LoginData {
   login: AuthUser;
@@ -65,6 +59,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     localStorage.removeItem(AUTH_STORAGE_KEY);
   }, []); // Logica de logout
+
+  // Lo guardado en el navegador es una copia: el rol o el estado pudieron cambiar
+  // desde que se inicio sesion. Al cargar se le pregunta a la API y, si la cuenta
+  // ya no esta activa, se cierra la sesion en vez de dejar que todo falle.
+  const token = user?.token;
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    gql<{ me: User | null }>(ME_QUERY)
+      .then(({ me }) => {
+        if (cancelled) return;
+        if (!me) {
+          logout();
+          return;
+        }
+        const fresh: AuthUser = { ...me, token };
+        setUser(fresh);
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(fresh));
+      })
+      .catch(() => {
+        // Sin conexion con la API no se sabe nada nuevo: se mantiene la sesion
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, logout]);
 
   const hasRole = useCallback(
     (...roles: UserRole[]) => {

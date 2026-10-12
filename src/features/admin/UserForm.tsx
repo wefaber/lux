@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { gql } from "@/lib/utils";
+import { gql, errorMessage } from "@/lib/utils";
 import { ROLE_LABELS } from "@/lib/constants";
 import { ASSIGNABLE_ROLES } from "@/lib/roles";
 import { validateUser, type FieldErrors, type UserFields } from "@/lib/validation";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OptionSelect } from "@/components/ui/option-select";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 const CREATE_USER_MUTATION = `
  mutation CreateUser($input: UserInput!) { createUser(input: $input) { id } }
@@ -57,7 +58,7 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
       }
       onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al guardar");
+      setError(errorMessage(err, "Error al guardar"));
     } finally {
       setSaving(false);
     }
@@ -121,11 +122,7 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
         />
         <FieldError message={fieldErrors.password} />
       </div>
-      {error && (
-        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+      <ErrorAlert>{error}</ErrorAlert>
       <div className="flex justify-end gap-2">
         <Button type="submit" size="sm" disabled={saving}>
           {saving ? "Guardando..." : isEdit ? "Guardar cambios" : "Crear usuario"}

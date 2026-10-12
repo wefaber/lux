@@ -1,13 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useLocations } from "@/hooks/useLocations";
-import { gql, toDateTimeInput, fromDateTimeInput } from "@/lib/utils";
-import { RESERVATION_RESOURCE_LABELS } from "@/lib/constants";
-import {
-  validateReservation,
-  type FieldErrors,
-  type ReservationFields,
-} from "@/lib/validation";
+import { gql, toDateTimeInput, fromDateTimeInput, errorMessage } from "@/lib/utils";
+import { RESERVATION_RESOURCE_LABELS, UNRESERVABLE_EQUIPMENT_STATUSES } from "@/lib/constants";
+import { validateReservation, type FieldErrors, type ReservationFields } from "@/lib/validation";
 import type { Product, Reservation, ReservationResource } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { EquipmentSearchSelect, LocationSearchSelect } from "@/components/search-pickers";
 import { Textarea } from "@/components/ui/textarea";
 import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 const PRODUCTS_QUERY = `
   query GetProducts {
@@ -51,7 +48,7 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
   const { locations } = useLocations();
   // En reparacion o de baja no se reserva
   const products = (productsData?.products ?? []).filter(
-    (p) => p.status !== "in_repair" && p.status !== "retired",
+    (p) => !UNRESERVABLE_EQUIPMENT_STATUSES.includes(p.status),
   );
 
   const defaultStart = new Date(Date.now() + 60 * 60_000);
@@ -66,9 +63,9 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
     ),
     purpose: reservation?.purpose ?? "",
   });
-  const [fieldErrors, setFieldErrors] = useState<
-    FieldErrors<keyof ReservationFields | "resource">
-  >({});
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<keyof ReservationFields | "resource">>(
+    {},
+  );
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -106,7 +103,7 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
           }));
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al guardar la reserva");
+      setError(errorMessage(err, "Error al guardar la reserva"));
     } finally {
       setSaving(false);
     }
@@ -220,11 +217,7 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
           />
           {fieldError("purpose")}
         </div>
-        {error && (
-          <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+        <ErrorAlert>{error}</ErrorAlert>
       </div>
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onCancel}>

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Plus, Pencil, Trash2, MapPin } from "lucide-react";
 import { useLocations } from "@/hooks/useLocations";
-import { gql, formatDate, cn } from "@/lib/utils";
+import { gql, formatDate, cn, errorMessage } from "@/lib/utils";
 import {
   locationCode,
   validateLocation,
@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { OptionSelect } from "@/components/ui/option-select";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 const CREATE_LOCATION_MUTATION = `
   mutation CreateLocation($input: LocationInput!) { createLocation(input: $input) { id } }
@@ -53,7 +54,8 @@ export function LocationsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Ubicaciones</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Laboratorios, salones y oficinas. El código (L1 = Laboratorio 1) arranca el ID de sus equipos: L1-PC3.
+            Laboratorios, salones y oficinas. El código (L1 = Laboratorio 1) arranca el ID de sus
+            equipos: L1-PC3.
           </p>
         </div>
         <Button size="sm" onClick={() => setEditing("new")}>
@@ -62,11 +64,7 @@ export function LocationsPage() {
         </Button>
       </div>
 
-      {error && (
-        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
-          Error: {error}
-        </div>
-      )}
+      {error && <ErrorAlert>Error: {error}</ErrorAlert>}
 
       {isLoading && locations.length === 0 ? (
         <TableSkeleton rows={4} cols={5} />
@@ -199,7 +197,9 @@ function LocationForm({ location, existing, onDone, onCancel }: LocationFormProp
   const update = <K extends keyof LocationFields>(k: K, v: LocationFields[K]) => {
     setForm((f) => {
       const next = { ...f, [k]: v };
-      return nameTouched || k === "name" ? next : { ...next, name: autoName(next.kind, next.number) };
+      return nameTouched || k === "name"
+        ? next
+        : { ...next, name: autoName(next.kind, next.number) };
     });
     setFieldErrors((e) => ({ ...e, [k]: undefined, ...(nameTouched ? {} : { name: undefined }) }));
   };
@@ -218,7 +218,7 @@ function LocationForm({ location, existing, onDone, onCancel }: LocationFormProp
         : gql(CREATE_LOCATION_MUTATION, { input }));
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al guardar la ubicación");
+      setError(errorMessage(err, "Error al guardar la ubicación"));
     } finally {
       setSaving(false);
     }
@@ -298,11 +298,7 @@ function LocationForm({ location, existing, onDone, onCancel }: LocationFormProp
           />
           {fieldError("name")}
         </div>
-        {error && (
-          <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+        <ErrorAlert>{error}</ErrorAlert>
       </div>
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onCancel}>
@@ -339,7 +335,7 @@ function DeleteLocationDialog({ location, onDone, onCancel }: DeleteLocationDial
       await gql(DELETE_LOCATION_MUTATION, { id: location.id });
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al eliminar la ubicación");
+      setError(errorMessage(err, "Error al eliminar la ubicación"));
     } finally {
       setSaving(false);
     }
@@ -354,11 +350,7 @@ function DeleteLocationDialog({ location, onDone, onCancel }: DeleteLocationDial
             {location?.name} ({location?.code}) deja de figurar en filtros y formularios.
           </DialogDescription>
         </DialogHeader>
-        {error && (
-          <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+        <ErrorAlert>{error}</ErrorAlert>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={close}>
             Cancelar

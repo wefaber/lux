@@ -21,6 +21,16 @@ export interface StatusConfig {
   color: StatusColor;
 }
 
+// Color de cada tono como variable CSS del tema (sigue el modo oscuro y el alto
+// contraste): para graficos, que no usan las clases de Tailwind
+export const STATUS_COLOR_VAR: Record<StatusColor, string> = {
+  success: "var(--success)",
+  warning: "var(--warning)",
+  info: "var(--info)",
+  destructive: "var(--destructive)",
+  muted: "var(--muted-foreground)",
+};
+
 export const AUTH_STORAGE_KEY = "lux_auth"; // Clave de localStorage compartida entre useAuth y gql()
 
 export const ROUTES = {
@@ -73,6 +83,13 @@ export const EQUIPMENT_STATUS_CONFIG: Record<EquipmentStatus, StatusConfig> = {
   retired: { label: "Dado de baja", color: "destructive" },
 }; // Configuracion de estados de equipos, con etiquetas y colores para UI
 
+// Con que estado se da de alta un equipo: "en uso" lo pone un prestamo y
+// "dado de baja" la baja logica
+export const INITIAL_EQUIPMENT_STATUSES: EquipmentStatus[] = ["available", "in_repair"];
+
+// Equipos que no se pueden reservar ni elegir para una solicitud nueva
+export const UNRESERVABLE_EQUIPMENT_STATUSES: EquipmentStatus[] = ["in_repair", "retired"];
+
 export const LOAN_STATUS_CONFIG: Record<LoanStatus, StatusConfig> = {
   pending: { label: "Pendiente", color: "warning" },
   approved: { label: "Aprobado", color: "success" },
@@ -82,6 +99,9 @@ export const LOAN_STATUS_CONFIG: Record<LoanStatus, StatusConfig> = {
   returned: { label: "Devuelto", color: "muted" },
 }; // Configuracion de estados de prestamos
 
+// Entregados y todavia sin devolver: son los que se pueden devolver
+export const RETURNABLE_LOAN_STATUSES: LoanStatus[] = ["active", "overdue"];
+
 export const SERVICE_STATUS_CONFIG: Record<ServiceStatus, StatusConfig> = {
   pending: { label: "Pendiente", color: "warning" },
   approved: { label: "Aprobado", color: "success" },
@@ -89,6 +109,23 @@ export const SERVICE_STATUS_CONFIG: Record<ServiceStatus, StatusConfig> = {
   completed: { label: "Completado", color: "success" },
   rejected: { label: "Rechazado", color: "destructive" },
 }; // Configuracion de estado de servicios
+
+// Ciclo de vida de una solicitud: completada y rechazada la cierran
+export const SERVICE_TRANSITIONS: Record<ServiceStatus, ServiceStatus[]> = {
+  pending: ["approved", "in_progress", "completed", "rejected"],
+  approved: ["in_progress", "completed", "rejected"],
+  in_progress: ["completed", "rejected"],
+  completed: [],
+  rejected: [],
+};
+
+// Derivado de SERVICE_TRANSITIONS: cerrada es la que ya no pasa a ningun otro estado
+export const CLOSED_SERVICE_STATUSES = (Object.keys(SERVICE_TRANSITIONS) as ServiceStatus[]).filter(
+  (s) => SERVICE_TRANSITIONS[s].length === 0,
+);
+
+// Estados de una solicitud que exigen texto de resolucion (o motivo del rechazo)
+export const SERVICE_STATUSES_WITH_RESOLUTION: ServiceStatus[] = ["completed", "rejected"];
 
 export const DASHBOARD_PERIODS = ["7d", "30d", "90d"] as const;
 export type DashboardPeriod = (typeof DASHBOARD_PERIODS)[number];
@@ -136,6 +173,9 @@ export const RESERVATION_STATUS_CONFIG: Record<ReservationStatus, StatusConfig> 
   completed: { label: "Finalizada", color: "muted" },
   cancelled: { label: "Cancelada", color: "muted" },
 }; // Configuracion de estados de reservas
+
+// Las que todavia no empezaron ni se cerraron: se pueden modificar o cancelar
+export const CHANGEABLE_RESERVATION_STATUSES: ReservationStatus[] = ["pending", "approved"];
 
 export const RESERVATION_RESOURCE_LABELS: Record<ReservationResource, string> = {
   equipment: "Equipo",

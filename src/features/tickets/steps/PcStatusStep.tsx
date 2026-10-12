@@ -1,20 +1,10 @@
 import type { Ticket } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { EQUIPMENT_STATUS_CONFIG } from "@/lib/constants";
+import { DetailRow } from "@/components/ui/detail-row";
 
 interface PcStatusStepProps {
   ticket: Ticket;
-}
-
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
-        {label}
-      </span>
-      <span className="text-sm text-foreground">{value ?? "—"}</span>
-    </div>
-  );
 }
 
 export function PcStatusStep({ ticket }: PcStatusStepProps) {
@@ -40,19 +30,24 @@ export function PcStatusStep({ ticket }: PcStatusStepProps) {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <Row
+        <DetailRow
           label="ID de máquina"
-          value={<span className="font-mono font-semibold text-primary">{equipment.machineId}</span>}
+          value={
+            <span className="font-mono font-semibold text-primary">{equipment.machineId}</span>
+          }
         />
-        <Row label="Ubicación" value={equipment.location} />
-        <Row label="Estado" value={<Badge color={statusConf.color}>{statusConf.label}</Badge>} />
-        <Row label="Tipo" value={equipment.kind} />
-        <Row label="Marca / Modelo" value={`${equipment.brand} ${equipment.model}`} />
-        <Row
+        <DetailRow label="Ubicación" value={equipment.location} />
+        <DetailRow
+          label="Estado"
+          value={<Badge color={statusConf.color}>{statusConf.label}</Badge>}
+        />
+        <DetailRow label="Tipo" value={equipment.kind} />
+        <DetailRow label="Marca / Modelo" value={`${equipment.brand} ${equipment.model}`} />
+        <DetailRow
           label="N° de serie"
           value={<span className="font-mono text-xs">{equipment.serialNumber}</span>}
         />
-        <Row
+        <DetailRow
           label="Part number"
           value={<span className="font-mono text-xs">{equipment.partNumber}</span>}
         />

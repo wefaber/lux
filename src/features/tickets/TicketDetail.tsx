@@ -3,7 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { ArrowLeft, UserCheck, RotateCcw, Undo2, Hourglass, PlayCircle } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
-import { gql, formatDateTime } from "@/lib/utils";
+import { gql, formatDateTime, errorMessage } from "@/lib/utils";
 import {
   ROUTES,
   TICKET_CATEGORY_LABELS,
@@ -18,6 +18,7 @@ import { WizardSkeleton } from "@/components/skeletons/WizardSkeleton";
 import { TicketWizard } from "./TicketWizard";
 import { CommentThread } from "@/components/comments/CommentThread";
 import { STAFF_ROLES } from "@/lib/roles";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 const TICKET_QUERY = `
  query GetTicket($id: ID!) {
@@ -128,7 +129,7 @@ export function TicketDetail() {
       await gql(mutation, variables);
       refetch();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Error al actualizar el ticket");
+      setActionError(errorMessage(err, "Error al actualizar el ticket"));
     } finally {
       setBusy(false);
     }
@@ -181,11 +182,7 @@ export function TicketDetail() {
         )}
       </div>
 
-      {(error || actionError) && (
-        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
-          Error: {actionError || error}
-        </div>
-      )}
+      {(error || actionError) && <ErrorAlert>Error: {actionError || error}</ErrorAlert>}
 
       {isLoading && !ticket ? (
         <Card>

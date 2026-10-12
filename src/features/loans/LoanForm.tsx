@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
-import { gql } from "@/lib/utils";
+import { gql, errorMessage } from "@/lib/utils";
 import type { Product, User } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { UserSearchSelect } from "@/components/search-pickers";
 import { OptionSelect } from "@/components/ui/option-select";
 import { STAFF_ROLES } from "@/lib/roles";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 const CREATE_LOAN_MUTATION = `
  mutation CreateLoan($input: LoanInput!) {
@@ -27,7 +28,6 @@ const ACTIVE_USERS_QUERY = `
  users(isActive: $isActive) { id name dni }
  }
 `;
-
 
 interface LoanFormProps {
   onSuccess: () => void;
@@ -72,7 +72,7 @@ export function LoanForm({ onSuccess }: LoanFormProps) {
       });
       onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al registrar");
+      setError(errorMessage(err, "Error al registrar"));
     } finally {
       setSaving(false);
     }
@@ -132,11 +132,7 @@ export function LoanForm({ onSuccess }: LoanFormProps) {
         </div>
       </div>
 
-      {error && (
-        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+      <ErrorAlert>{error}</ErrorAlert>
 
       <div className="flex gap-2 justify-end">
         <Button type="submit" disabled={saving}>

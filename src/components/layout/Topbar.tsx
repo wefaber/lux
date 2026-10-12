@@ -14,15 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ROUTES, ROLE_LABELS } from "@/lib/constants";
 import { ADMIN_ROLES } from "@/lib/roles";
-
-function initials(name: string): string {
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase();
-}
+import { initials } from "@/lib/utils";
 
 export function Topbar() {
   const { user, logout, hasRole } = useAuth();
