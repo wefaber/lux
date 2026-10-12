@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { SPRING_TRANSITION } from "@/lib/constants";
 import { useAuth } from "@/hooks/useAuth";
 import { navItemsFor } from "./navItems";
+import { NavIcon } from "./NavIcon";
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
@@ -46,11 +47,11 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 px-2 py-2 space-y-2 overflow-y-auto">
-        {visibleItems.map(({ icon: Icon, label, to, end }) => (
+        {visibleItems.map((item) => (
           <NavLink
-            key={to}
-            to={to}
-            end={end}
+            key={item.to}
+            to={item.to}
+            end={item.end}
             className={({ isActive }) =>
               cn(
                 "flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-all duration-200 cursor-pointer",
@@ -62,7 +63,7 @@ export function Sidebar() {
               )
             }
           >
-            <Icon className="h-4 w-4 shrink-0" />
+            <NavIcon item={item} className="h-4 w-4" />
             <AnimatePresence initial={false}>
               {!collapsed && (
                 <motion.span
@@ -72,7 +73,7 @@ export function Sidebar() {
                   transition={{ duration: 0.15 }}
                   className="truncate overflow-hidden whitespace-nowrap"
                 >
-                  {label}
+                  {item.label}
                 </motion.span>
               )}
             </AnimatePresence>

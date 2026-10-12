@@ -1,7 +1,9 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "motion/react";
 import { ArrowLeft, UserCheck } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
+import { useNotices } from "@/hooks/useNotices";
 import { gql, formatDate } from "@/lib/utils";
 import { TICKET_CATEGORY_LABELS, ROUTES, SPRING_TRANSITION } from "@/lib/constants";
 import type { Ticket } from "@/lib/types";
@@ -24,6 +26,12 @@ const CLAIM_MUTATION = `
 
 export function OolList() {
   const { data, isLoading, refetch } = useAsync<{ oolTickets: Ticket[] }>(() => gql(OOL_QUERY), []);
+  const { markPendingSeen } = useNotices();
+
+  // Entrar a OOL da por vistos los tickets sin asignar: se apaga el punto del boton
+  useEffect(() => {
+    markPendingSeen("ticket");
+  }, [markPendingSeen]);
 
   const tickets = data?.oolTickets ?? [];
 

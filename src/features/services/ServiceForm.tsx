@@ -1,17 +1,26 @@
 import { useState, type FormEvent } from "react";
+import { useAsync } from "@/hooks/useSkeleton";
+import { useLocations } from "@/hooks/useLocations";
 import { gql } from "@/lib/utils";
 import { SERVICE_TYPE_LABELS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { ServiceType } from "@/lib/types";
+import { EquipmentSearchSelect, LabSearchSelect } from "@/components/search-pickers";
+import type { Product, ServiceType } from "@/lib/types";
 
 const CREATE_SERVICE_MUTATION = `
  mutation CreateServiceRequest($input: ServiceRequestInput!) {
  createServiceRequest(input: $input) { id }
  }
-`; // Query, alteracion/creacion de service 
+`; // Query, alteracion/creacion de service
+
+const PRODUCTS_QUERY = `
+ query GetProducts {
+ products { id machineId kind brand model location status }
+ }
+`;
 
 interface ServiceFormProps {
   onSuccess: () => void;
@@ -25,6 +34,10 @@ export function ServiceForm({ onSuccess }: ServiceFormProps) {
   const [equipmentId, setEquipmentId] = useState("");
   const [saving, setSaving] = useState(false); // Variable bool que marca si esta siendo guardado o no en el sistema
   const [error, setError] = useState("");
+  const { locations } = useLocations();
+  const { data: productsData } = useAsync<{ products: Product[] }>(() => gql(PRODUCTS_QUERY), []);
+  // Un equipo dado de baja ya no se prepara
+  const products = (productsData?.products ?? []).filter((p) => p.status !== "retired");
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault(); // Previene que se dispare el evento por defecto.
@@ -76,12 +89,12 @@ export function ServiceForm({ onSuccess }: ServiceFormProps) {
 
       {type === "lab_preparation" && (
         <div className="space-y-1.5">
-          <Label htmlFor="lab-number">Número de laboratorio</Label>
-          <Input
+          <Label htmlFor="lab-number">Laboratorio</Label>
+          <LabSearchSelect
             id="lab-number"
+            items={locations}
             value={labNumber}
-            onChange={(e) => setLabNumber(e.target.value)}
-            placeholder="Ej: 3"
+            onChange={setLabNumber}
           />
         </div>
       )}
@@ -100,12 +113,12 @@ export function ServiceForm({ onSuccess }: ServiceFormProps) {
 
       {type === "equipment_setup" && (
         <div className="space-y-1.5">
-          <Label htmlFor="eq-id">ID del equipo</Label>
-          <Input
+          <Label htmlFor="eq-id">Equipo</Label>
+          <EquipmentSearchSelect
             id="eq-id"
+            items={products}
             value={equipmentId}
-            onChange={(e) => setEquipmentId(e.target.value)}
-            placeholder="Ej: prod-3"
+            onChange={setEquipmentId}
           />
         </div>
       )}

@@ -8,6 +8,7 @@ import { mockReservations } from "./data/reservations";
 import { mockTickets } from "./data/tickets";
 import { mockLoans } from "./data/loans";
 import { mockServices } from "./data/services";
+import { mockNotices, mockPendingSeen } from "./data/notices";
 import { mockActivityLogs } from "./generators";
 import {
   validateComment,
@@ -37,6 +38,8 @@ import type {
   InterventionType,
   Comment,
   CommentEntity,
+  NoticeEntity,
+  NoticeKind,
   Reservation,
   ReservationResource,
   ReservationStatus,
@@ -128,8 +131,108 @@ function syncOverdueLoans(): void {
   for (const loan of mockLoans) {
     if (loan.status === "active" && new Date(loan.returnDate) < now) {
       loan.status = "overdue";
+      notify(loan.approvedBy, "loan", loan.id, "overdue", null);
+      notify(loan.user, "loan", loan.id, "overdue", null);
     }
   }
+}
+
+const PENDING_SECTIONS: NoticeEntity[] = ["ticket", "service_request", "reservation", "loan"];
+
+// Lo que espera que alguien del staff lo tome o lo apruebe, con quien lo pidio.
+// En tickets es lo que esta en OOL: pendiente y sin responsable
+function pendingIn(section: NoticeEntity): Array<{ createdAt: string; by: User }> {
+  switch (section) {
+    case "ticket":
+      return mockTickets
+        .filter((t) => t.status === "pending" && !t.assignedTo)
+        .map((t) => ({ createdAt: t.createdAt, by: t.submittedBy }));
+    case "service_request":
+      return mockServices
+        .filter((s) => s.status === "pending")
+        .map((s) => ({ createdAt: s.createdAt, by: s.requestedBy }));
+    case "reservation":
+      return mockReservations
+        .filter((r) => r.status === "pending")
+        .map((r) => ({ createdAt: r.createdAt, by: r.user }));
+    case "loan":
+      return mockLoans
+        .filter((l) => l.status === "pending")
+        .map((l) => ({ createdAt: l.createdAt, by: l.user }));
+  }
+}
+
+// Hay algo pendiente que llego despues de la ultima vez que miro (y no lo pidio el)
+function hasNewPending(user: User, section: NoticeEntity): boolean {
+  const seen = mockPendingSeen.find((s) => s.userId === user.id && s.section === section);
+  const seenAt = seen ? Date.parse(seen.seenAt) : 0;
+  return pendingIn(section).some((p) => p.by.id !== user.id && Date.parse(p.createdAt) > seenAt);
+}
+
+// Un ticket o solicitud cambia de responsable (`next` null: queda sin asignar).
+// Se avisa a quien lo tenia, a quien lo recibe y al solicitante, que ahora sabe
+// quien lo atiende. Volver a asignar a la misma persona no avisa nada
+function handOver(
+  entityType: "ticket" | "service_request",
+  entityId: string,
+  requester: User,
+  previous: User | null,
+  next: User | null,
+  by: User,
+): void {
+  if (previous?.id === next?.id) return;
+  if (previous) notify(previous, entityType, entityId, "unassigned", by);
+  if (next) {
+    notify(next, entityType, entityId, "assigned", by);
+    notify(requester, entityType, entityId, "taken", next);
+  }
+}
+
+// Los avisos vistos se borran: con nextId, marcar como visto el ultimo haria que
+// el siguiente reuse su id, y una pestaña desactualizada podria marcar como visto
+// uno nuevo. Se lleva la cuenta aparte (desde lo guardado al cargar la pagina)
+let lastNoticeNumber = 0;
+function nextNoticeId(): string {
+  const fromData = Number(nextId("ntc-", mockNotices).slice("ntc-".length)) - 1;
+  lastNoticeNumber = Math.max(lastNoticeNumber, fromData) + 1;
+  return `ntc-${String(lastNoticeNumber).padStart(3, "0")}`;
+}
+
+// Saca los avisos de un elemento que ya no tienen sentido (de un tipo dado)
+function dropNotices(entityType: NoticeEntity, entityId: string, kind: NoticeKind): void {
+  for (let i = mockNotices.length - 1; i >= 0; i--) {
+    const n = mockNotices[i];
+    if (n.entityType === entityType && n.entityId === entityId && n.kind === kind) {
+      mockNotices.splice(i, 1);
+    }
+  }
+}
+
+// Deja un aviso a `to` sobre algo que hizo `by` (null: el sistema). Lo que uno
+// hace sobre lo suyo no se avisa. Un aviso nuevo reemplaza al que hubiera
+// sobre el mismo elemento: se muestra solo lo ultimo que paso
+function notify(
+  to: User | null | undefined,
+  entityType: NoticeEntity,
+  entityId: string,
+  kind: NoticeKind,
+  by: User | null,
+): void {
+  if (!to || to.id === by?.id) return;
+  const id = nextNoticeId();
+  const previous = mockNotices.findIndex(
+    (n) => n.userId === to.id && n.entityType === entityType && n.entityId === entityId,
+  );
+  if (previous !== -1) mockNotices.splice(previous, 1);
+  mockNotices.push({
+    id,
+    userId: to.id,
+    entityType,
+    entityId,
+    kind,
+    by,
+    createdAt: new Date().toISOString(),
+  });
 }
 
 function canTransitionTicket(ticket: Ticket, to: TicketStatus): boolean {
@@ -230,6 +333,17 @@ function commentAccessError(
   return null;
 }
 
+// Quienes siguen el hilo de un ticket o solicitud: quien lo abrio y quien lo atiende
+function threadParticipants(entityType: CommentEntity, entityId: string): User[] {
+  const item =
+    entityType === "ticket"
+      ? mockTickets.find((t) => t.id === entityId)
+      : mockServices.find((s) => s.id === entityId);
+  if (!item) return [];
+  const owner = "submittedBy" in item ? item.submittedBy : item.requestedBy;
+  return item.assignedTo && item.assignedTo.id !== owner.id ? [owner, item.assignedTo] : [owner];
+}
+
 // Si la intervencion dice venir de un ticket, tiene que ser un ticket de ese equipo
 function interventionTicketError(ticketId: string | null, equipmentId: string): string | null {
   if (!ticketId) return null;
@@ -272,6 +386,13 @@ function duplicateLocationError(
 }
 
 const CLOSED_SERVICE_STATUSES = new Set<ServiceStatus>(["completed", "rejected"]);
+
+// Estados de una solicitud que son una respuesta para quien la pidio
+const SERVICE_RESPONSE_NOTICES = {
+  approved: "approved",
+  rejected: "rejected",
+  completed: "completed",
+} as const satisfies Partial<Record<ServiceStatus, NoticeKind>>;
 
 // Horas entre el alta y la resolucion, redondeadas a un decimal
 function averageResolutionHours(tickets: Ticket[]): number | null {
@@ -655,6 +776,7 @@ export const handlers = [
         errors: [{ message: invalidTicketTransition(ticket, "in_progress") }],
       });
     }
+    handOver("ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, caller, caller);
     ticket.assignedTo = caller;
     ticket.status = "in_progress";
     ticket.updatedAt = new Date().toISOString();
@@ -685,7 +807,8 @@ export const handlers = [
   }),
 
   graphql.mutation("ChangeTicketStatus", ({ request, variables }) => {
-    if (!hasRole(getCaller(request), STAFF_ROLES)) {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) {
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
     const { id, status } = variables as { id: string; status: TicketStatus };
@@ -703,15 +826,22 @@ export const handlers = [
     if (ticket.status === "pending" || !canTransitionTicket(ticket, status)) {
       return HttpResponse.json({ errors: [{ message: invalidTicketTransition(ticket, status) }] });
     }
-    if (status === "pending") ticket.assignedTo = null;
+    if (status === "pending") {
+      handOver("ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, null, caller);
+      ticket.assignedTo = null;
+    }
     if (ticket.status === "resolved") ticket.resolvedAt = null;
     ticket.status = status;
     ticket.updatedAt = new Date().toISOString();
+    if (status === "in_resolution") {
+      notify(ticket.submittedBy, "ticket", ticket.id, "in_resolution", caller);
+    }
     return HttpResponse.json({ data: { changeTicketStatus: ticket } });
   }),
 
   graphql.mutation("CompleteTicket", ({ request, variables }) => {
-    if (!hasRole(getCaller(request), STAFF_ROLES)) {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) {
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
     const { id, input } = variables as {
@@ -736,6 +866,7 @@ export const handlers = [
     ticket.actionsTaken = input.actionsTaken;
     ticket.resolvedAt = new Date().toISOString();
     ticket.updatedAt = new Date().toISOString();
+    notify(ticket.submittedBy, "ticket", ticket.id, "resolved", caller);
     return HttpResponse.json({ data: { completeTicket: ticket } });
   }),
 
@@ -811,11 +942,13 @@ export const handlers = [
     loan.status = "approved";
     loan.approvedBy = caller;
     loan.updatedAt = new Date().toISOString();
+    notify(loan.user, "loan", loan.id, "approved", caller);
     return HttpResponse.json({ data: { approveLoan: loan } });
   }),
 
   graphql.mutation("RejectLoan", ({ request, variables }) => {
-    if (!hasRole(getCaller(request), STAFF_ROLES)) {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) {
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
     const { id, reason } = variables as { id: string; reason: string };
@@ -830,6 +963,7 @@ export const handlers = [
     loan.status = "rejected";
     loan.rejectionReason = reason.trim();
     loan.updatedAt = new Date().toISOString();
+    notify(loan.user, "loan", loan.id, "rejected", caller);
     return HttpResponse.json({ data: { rejectLoan: loan } });
   }),
 
@@ -856,6 +990,7 @@ export const handlers = [
     loan.updatedAt = now;
     loan.equipment.status = "in_use";
     loan.equipment.updatedAt = now;
+    notify(loan.user, "loan", loan.id, "delivered", caller);
     return HttpResponse.json({ data: { deliverLoan: loan } });
   }),
 
@@ -881,6 +1016,8 @@ export const handlers = [
     loan.equipment.status = damaged ? "in_repair" : "available";
     if (damaged && issues?.trim()) loan.equipment.issues = issues.trim();
     loan.equipment.updatedAt = now;
+    // Ya devuelto, el "vencio" no le sirve a nadie y lo dejaria fijado arriba
+    dropNotices("loan", loan.id, "overdue");
     return HttpResponse.json({ data: { returnLoan: loan } });
   }),
 
@@ -925,13 +1062,22 @@ export const handlers = [
     };
     const service = mockServices.find((s) => s.id === id);
     if (!service) return HttpResponse.json({ errors: [{ message: "Solicitud no encontrada" }] });
+    const previousStatus = service.status;
     if (input.status) service.status = input.status as ServiceRequest["status"];
-    // Quien la pone en marcha o la cierra sin responsable queda como responsable
+    // Quien la pone en marcha o la cierra sin responsable queda como responsable.
+    // Va antes que la respuesta: si tambien la cierra, el aviso que queda es ese
     if (!service.assignedTo && (input.status === "in_progress" || input.status === "completed")) {
+      handOver("service_request", service.id, service.requestedBy, null, caller, caller);
       service.assignedTo = caller;
     }
     if (input.resolutionText !== undefined) service.resolutionText = input.resolutionText;
     service.updatedAt = new Date().toISOString();
+    // Al solicitante se le avisa la respuesta: aprobada, rechazada o completada
+    // hasOwn y no `in`: el estado viene del cliente y "constructor" pasaria
+    if (service.status !== previousStatus && Object.hasOwn(SERVICE_RESPONSE_NOTICES, service.status)) {
+      const kind = SERVICE_RESPONSE_NOTICES[service.status as keyof typeof SERVICE_RESPONSE_NOTICES];
+      notify(service.requestedBy, "service_request", service.id, kind, caller);
+    }
     return HttpResponse.json({ data: { updateServiceRequest: service } });
   }),
 
@@ -951,13 +1097,15 @@ export const handlers = [
         errors: [{ message: `La solicitud ya la tomó ${service.assignedTo.name}` }],
       });
     }
+    handOver("service_request", service.id, service.requestedBy, null, caller, caller);
     service.assignedTo = caller;
     service.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { claimServiceRequest: service } });
   }),
 
   graphql.mutation("AssignServiceRequest", ({ request, variables }) => {
-    if (!hasRole(getCaller(request), STAFF_ROLES)) {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) {
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
     const { id, technicianId } = variables as { id: string; technicianId: string };
@@ -972,6 +1120,7 @@ export const handlers = [
     if (CLOSED_SERVICE_STATUSES.has(service.status)) {
       return HttpResponse.json({ errors: [{ message: "La solicitud ya está cerrada" }] });
     }
+    handOver("service_request", service.id, service.requestedBy, service.assignedTo, tech, caller);
     service.assignedTo = tech;
     service.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { assignServiceRequest: service } });
@@ -1274,12 +1423,14 @@ export const handlers = [
   }),
 
   graphql.mutation("AssignTicket", ({ request, variables }) => {
-    if (!hasRole(getCaller(request), STAFF_ROLES)) {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) {
       return HttpResponse.json({ errors: [{ message: "No tenés permisos para esta acción" }] });
     }
     const { id, technicianId } = variables as { id: string; technicianId: string };
     const ticket = mockTickets.find((t) => t.id === id);
-    const tech = mockUsers.find((u) => u.id === technicianId);
+    // Como en solicitudes: a alguien dado de baja no se le asigna (ni se le avisa)
+    const tech = mockUsers.find((u) => u.id === technicianId && u.isActive);
     if (!ticket || !tech) return HttpResponse.json({ errors: [{ message: "No encontrado" }] });
     if (!isStaff(tech)) {
       return HttpResponse.json({
@@ -1292,6 +1443,7 @@ export const handlers = [
         errors: [{ message: "No se puede reasignar un ticket resuelto" }],
       });
     }
+    handOver("ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, tech, caller);
     ticket.assignedTo = tech;
     if (ticket.status === "pending") ticket.status = "in_progress";
     ticket.updatedAt = new Date().toISOString();
@@ -1420,6 +1572,7 @@ export const handlers = [
     reservation.reviewedBy = caller;
     reservation.updatedAt = new Date().toISOString();
     syncReservations();
+    notify(reservation.user, "reservation", reservation.id, "approved", caller);
     return HttpResponse.json({ data: { approveReservation: reservation } });
   }),
 
@@ -1445,11 +1598,13 @@ export const handlers = [
     reservation.reviewedBy = caller;
     reservation.rejectionReason = reason.trim();
     reservation.updatedAt = new Date().toISOString();
+    notify(reservation.user, "reservation", reservation.id, "rejected", caller);
     return HttpResponse.json({ data: { rejectReservation: reservation } });
   }),
 
   graphql.mutation("UpdateReservation", ({ request, variables }) => {
-    if (!hasRole(getCaller(request), STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
     syncReservations();
     const { id, input } = variables as {
       id: string;
@@ -1485,6 +1640,7 @@ export const handlers = [
       updatedAt: new Date().toISOString(),
     });
     syncReservations();
+    notify(reservation.user, "reservation", reservation.id, "modified", caller);
     return HttpResponse.json({ data: { updateReservation: reservation } });
   }),
 
@@ -1506,21 +1662,59 @@ export const handlers = [
     reservation.status = "cancelled";
     reservation.cancelledBy = caller;
     reservation.updatedAt = new Date().toISOString();
-    // Quien la aprobo no se entera de otra forma: le queda fijada con aviso
-    reservation.unseenCancellation = reservation.reviewedBy !== null;
+    // Quien la aprobo no se entera de otra forma (si seguia pendiente no hay a quien)
+    notify(reservation.reviewedBy, "reservation", reservation.id, "cancelled", caller);
     return HttpResponse.json({ data: { cancelReservation: reservation } });
   }),
 
-  // Quien aprobo la reserva marca como vista la cancelacion: se desfija
-  graphql.mutation("AcknowledgeReservationCancellation", ({ request, variables }) => {
+  // ── Avisos ─────────────────────────────────────────────────────────────────
+  // Cada uno ve solo los suyos y los marca como vistos de a uno
+
+  graphql.query("GetNotices", ({ request }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    // Un prestamo puede haber vencido sin que nadie abriera la lista
+    syncOverdueLoans();
+    const notices = mockNotices
+      .filter((n) => n.userId === caller.id)
+      .toSorted((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return HttpResponse.json({ data: { notices } });
+  }),
+
+  graphql.mutation("AcknowledgeNotice", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
     const { id } = variables as { id: string };
-    const reservation = mockReservations.find((r) => r.id === id);
-    if (!reservation) return HttpResponse.json({ errors: [{ message: "Reserva no encontrada" }] });
-    if (reservation.reviewedBy?.id !== caller.id) return HttpResponse.json(FORBIDDEN);
-    reservation.unseenCancellation = false;
-    return HttpResponse.json({ data: { acknowledgeReservationCancellation: { id } } });
+    const index = mockNotices.findIndex((n) => n.id === id);
+    if (index === -1) return HttpResponse.json({ errors: [{ message: "Aviso no encontrado" }] });
+    if (mockNotices[index].userId !== caller.id) return HttpResponse.json(FORBIDDEN);
+    mockNotices.splice(index, 1);
+    return HttpResponse.json({ data: { acknowledgeNotice: true } });
+  }),
+
+  // Secciones con pedidos pendientes que el staff todavia no vio: el punto del
+  // boton OOL (tickets) o de la opcion "Pendiente" del filtro (las demas)
+  graphql.query("GetPendingNews", ({ request }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    if (!isStaff(caller)) return HttpResponse.json({ data: { pendingNews: [] } });
+    syncReservations();
+    const pendingNews = PENDING_SECTIONS.filter((section) => hasNewPending(caller, section));
+    return HttpResponse.json({ data: { pendingNews } });
+  }),
+
+  graphql.mutation("MarkPendingSeen", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { section } = variables as { section: NoticeEntity };
+    if (!PENDING_SECTIONS.includes(section)) {
+      return HttpResponse.json({ errors: [{ message: "Sección inválida" }] });
+    }
+    const seenAt = new Date().toISOString();
+    const seen = mockPendingSeen.find((s) => s.userId === caller.id && s.section === section);
+    if (seen) seen.seenAt = seenAt;
+    else mockPendingSeen.push({ userId: caller.id, section, seenAt });
+    return HttpResponse.json({ data: { markPendingSeen: true } });
   }),
 
   // ── Comentarios ────────────────────────────────────────────────────────────
@@ -1557,6 +1751,10 @@ export const handlers = [
       createdAt: new Date().toISOString(),
     };
     mockComments.push(comment);
+    // Se avisa a la otra parte del hilo: quien lo abrio y quien lo atiende
+    for (const participant of threadParticipants(input.entityType, input.entityId)) {
+      notify(participant, input.entityType, input.entityId, "comment", caller);
+    }
     return HttpResponse.json({ data: { createComment: comment } });
   }),
 

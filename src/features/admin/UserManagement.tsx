@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { UserForm } from "./UserForm";
 import { OptionSelect } from "@/components/ui/option-select";
 
@@ -164,6 +164,7 @@ export function UserManagement() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Nuevo usuario</DialogTitle>
+            <DialogDescription>Con su cédula y contraseña va a poder ingresar al sistema.</DialogDescription>
           </DialogHeader>
           <UserForm
             onSuccess={() => {
@@ -178,6 +179,7 @@ export function UserManagement() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Editar usuario</DialogTitle>
+            <DialogDescription>Modificá los datos y el rol de la persona.</DialogDescription>
           </DialogHeader>
           {editUser && (
             <UserForm

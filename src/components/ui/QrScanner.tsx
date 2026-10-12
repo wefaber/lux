@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import jsQR from "jsqr";
 import { Camera, X } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
 interface QrScannerProps {
@@ -87,6 +87,7 @@ export function QrScanner({ open, onOpenChange, onScan }: QrScannerProps) {
             <Camera className="h-4 w-4" />
             Escanear QR del equipo
           </DialogTitle>
+          <DialogDescription>Apuntá la cámara al código QR pegado en el equipo.</DialogDescription>
         </DialogHeader>
         <div className="relative rounded-xl overflow-hidden bg-black aspect-square">
           <video

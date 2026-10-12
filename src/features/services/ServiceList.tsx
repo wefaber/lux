@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Plus, Search } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
+import { useNotices } from "@/hooks/useNotices";
 import { gql, formatDate, truncate, cn } from "@/lib/utils";
 import { SERVICE_STATUS_CONFIG, SERVICE_TYPE_LABELS, ROUTES } from "@/lib/constants";
 import type { ServiceRequest, ServiceStatus } from "@/lib/types";
@@ -12,15 +13,17 @@ import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   AnimatePresence,
 } from "@/components/ui/dialog";
 import { ServiceForm } from "./ServiceForm";
 import { OptionSelect } from "@/components/ui/option-select";
+import { StatusFilter } from "@/components/ui/status-filter";
 import { Input } from "@/components/ui/input";
 import { Pagination, clampPage } from "@/components/ui/pagination";
-import { PinMark, pinRowClass } from "@/components/ui/pin";
+import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
 import { idQuery, pinnedFirst, servicePin } from "@/lib/pins";
 
 const SERVICES_QUERY = `
@@ -52,6 +55,7 @@ const SERVICE_COLUMNS = [
 
 export function ServiceList() {
   const { user, hasRole } = useAuth(); // Verificacion de roles con Auth
+  const { noticeFor } = useNotices();
   const [statusFilter, setStatusFilter] = useState<ServiceStatus | "">(""); // Obtencion de status para filtros
   // "" todos, el id propio (asignadas a mi) o "none" sin asignar
   const [assigneeFilter, setAssigneeFilter] = useState("");
@@ -72,7 +76,8 @@ export function ServiceList() {
   const term = search.trim().toLowerCase();
   const idTerm = idQuery(term, "svc");
   const matchesId = (s: ServiceRequest) => idTerm !== null && s.id.toLowerCase().includes(idTerm);
-  const pin = (s: ServiceRequest) => servicePin(s, user?.id);
+  const pin = (s: ServiceRequest) =>
+    servicePin(s, user?.id, !!noticeFor("service_request", s.id));
 
   const matching = allServices.filter(
     (s) =>
@@ -87,11 +92,13 @@ export function ServiceList() {
   );
 
   // Como en tickets: al staff las completadas y rechazadas no le aparecen salvo
-  // que filtre por estado o las busque por su ID. El solicitante ve todas las
-  // suyas. Lo asignado a uno queda fijado arriba
+  // que filtre por estado o las busque por su ID (o tengan un aviso sin ver). El
+  // solicitante ve todas las suyas. Lo asignado a uno queda fijado arriba
   const hideClosed = !isSolicitante && !statusFilter;
   const services = pinnedFirst(
-    hideClosed ? matching.filter((s) => !CLOSED_STATUSES.has(s.status) || matchesId(s)) : matching,
+    hideClosed
+      ? matching.filter((s) => !CLOSED_STATUSES.has(s.status) || matchesId(s) || pin(s))
+      : matching,
     pin,
   );
   const hiddenClosed = matching.length - services.length;
@@ -133,7 +140,8 @@ export function ServiceList() {
               className="pl-9"
             />
           </div>
-          <OptionSelect
+          <StatusFilter
+            section="service_request"
             aria-label="Filtrar por estado"
             value={statusFilter}
             onValueChange={(v) => {
@@ -206,6 +214,7 @@ export function ServiceList() {
                 {visible.map((s) => {
                   const statusConf = SERVICE_STATUS_CONFIG[s.status];
                   const pinState = pin(s);
+                  const notice = noticeFor("service_request", s.id);
                   return (
                     <tr
                       key={s.id}
@@ -221,11 +230,10 @@ export function ServiceList() {
                       <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
                         {SERVICE_TYPE_LABELS[s.type]}
                       </td>
-                      <td
-                        className="px-4 py-3 text-sm text-foreground min-w-48 max-w-xs whitespace-normal"
-                        title={s.description}
-                      >
-                        {truncate(s.description, 60)}
+                      <td className="px-4 py-3 text-sm text-foreground min-w-48 max-w-xs whitespace-normal">
+                        {/* El tooltip con la descripcion completa va solo sobre el texto, no sobre el aviso */}
+                        <span title={s.description}>{truncate(s.description, 60)}</span>
+                        {notice && <NoticeLine notice={notice} />}
                       </td>
                       <td className="px-4 py-3">
                         <Badge color={statusConf.color} withDot>
@@ -269,6 +277,9 @@ export function ServiceList() {
             <DialogContent className="max-w-lg">
               <DialogHeader>
                 <DialogTitle>Nueva solicitud de servicio</DialogTitle>
+                <DialogDescription>
+                  Contá qué necesitás y el staff se encarga de revisarla.
+                </DialogDescription>
               </DialogHeader>
               <ServiceForm
                 onSuccess={() => {

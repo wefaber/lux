@@ -12,9 +12,9 @@ import type { Product, Reservation, ReservationResource } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SearchSelect } from "@/components/ui/search-select";
+import { EquipmentSearchSelect, LocationSearchSelect } from "@/components/search-pickers";
 import { Textarea } from "@/components/ui/textarea";
-import { DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const PRODUCTS_QUERY = `
   query GetProducts {
@@ -119,6 +119,11 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
     <form onSubmit={handleSubmit} noValidate>
       <DialogHeader>
         <DialogTitle>{isEdit ? "Modificar reserva" : "Nueva reserva"}</DialogTitle>
+        <DialogDescription>
+          {isEdit
+            ? "Cambiá las fechas o el motivo; el equipo o espacio queda igual."
+            : "Elegí el equipo o el espacio y el horario en que lo vas a usar."}
+        </DialogDescription>
       </DialogHeader>
       <div className="space-y-4">
         {isEdit ? (
@@ -155,7 +160,7 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
               </Label>
               {resourceType === "equipment" ? (
                 // Mismo buscador que el equipo de un ticket: por ID, marca, modelo o ubicacion
-                <SearchSelect
+                <EquipmentSearchSelect
                   id="rsv-resource"
                   items={products}
                   value={equipmentId}
@@ -163,22 +168,9 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
                     setEquipmentId(eqId);
                     setFieldErrors((er) => ({ ...er, resource: undefined }));
                   }}
-                  getKey={(p) => p.id}
-                  getLabel={(p) => `${p.machineId} · ${p.brand} ${p.model}`}
-                  getSearchText={(p) => `${p.machineId} ${p.kind} ${p.brand} ${p.model} ${p.location}`}
-                  placeholder="Buscar: proyector, L1-PC3, Laboratorio 1..."
-                  renderOption={(p) => (
-                    <>
-                      <span className="font-mono text-xs text-primary font-semibold">{p.machineId}</span>
-                      <span className="text-foreground">
-                        {p.brand} {p.model}
-                      </span>
-                      <span className="ml-auto text-xs text-muted-foreground">{p.location}</span>
-                    </>
-                  )}
                 />
               ) : (
-                <SearchSelect
+                <LocationSearchSelect
                   id="rsv-resource"
                   items={locations}
                   value={locationId}
@@ -186,15 +178,6 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
                     setLocationId(locId);
                     setFieldErrors((er) => ({ ...er, resource: undefined }));
                   }}
-                  getKey={(l) => l.id}
-                  getLabel={(l) => `${l.name} (${l.code})`}
-                  placeholder="Buscar: laboratorio 2, L2..."
-                  renderOption={(l) => (
-                    <>
-                      <span className="font-mono text-xs text-primary font-semibold">{l.code}</span>
-                      <span className="text-foreground">{l.name}</span>
-                    </>
-                  )}
                 />
               )}
               {fieldError("resource")}

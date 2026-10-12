@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { gql, formatDate } from "@/lib/utils";
-import { SERVICE_STATUS_CONFIG, SERVICE_TYPE_LABELS, ROUTES, ROLE_LABELS } from "@/lib/constants";
+import { SERVICE_STATUS_CONFIG, SERVICE_TYPE_LABELS, ROUTES } from "@/lib/constants";
 import type { ServiceRequest, ServiceStatus, User } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CommentThread } from "@/components/comments/CommentThread";
-import { SearchSelect } from "@/components/ui/search-select";
+import { UserSearchSelect, type UserOption } from "@/components/search-pickers";
 
 const SERVICE_QUERY = `
  query GetServiceRequest($id: ID!) {
@@ -50,6 +50,8 @@ const ASSIGN_SERVICE_MUTATION = `
 const STAFF_USERS_QUERY = `
  query GetUsers($isActive: Boolean) { users(isActive: $isActive) { id name dni role } }
 `;
+// Estados a los que el staff puede pasar una solicitud
+const NEXT_STATUSES: ServiceStatus[] = ["approved", "in_progress", "completed", "rejected"];
 
 export function ServiceDetail() {
   const { id } = useParams<{ id: string }>(); // Variable constante ID con parametros String
@@ -58,22 +60,34 @@ export function ServiceDetail() {
   const [newStatus, setNewStatus] = useState<ServiceStatus | "">(""); // Actualizacion de Estatus con parametro de estado de servicio
   const [resolution, setResolution] = useState(""); // Setear resolucion y establecer
 
-  const { data, isLoading, error, refetch } = useAsync<{ serviceRequest: ServiceRequest | null }>(
+  const { data, error, refetch } = useAsync<{ serviceRequest: ServiceRequest | null }>(
     () => gql(SERVICE_QUERY, { id }),
     [id],
   ); // Solicitud (Fetch) de servicio por parte del frontend
 
-  const service = data?.serviceRequest; // Verificacion e informacion (Si existe) de servicio
+  // Al recargar se sigue mostrando la solicitud (y el comentario a medio escribir);
+  // solo se descarta si es la de otra ruta
+  const service = data?.serviceRequest?.id === id ? data?.serviceRequest : null;
   const canManage = hasRole("root_admin", "admin", "tecnico"); // Verificacion si puede gestionar
   const [assignError, setAssignError] = useState("");
-  // "" mientras se busca otro responsable; null muestra el asignado actual
-  const [assigneeSearch, setAssigneeSearch] = useState<string | null>(null);
+  // El responsable recien elegido se muestra mientras se recarga la solicitud;
+  // deja de valer en cuanto llegan los datos nuevos
+  const [pendingAssignee, setPendingAssignee] = useState<{ id: string; data: typeof data } | null>(
+    null,
+  );
 
   const { data: usersData } = useAsync<{ users: User[] } | null>(
     () => (canManage ? gql(STAFF_USERS_QUERY, { isActive: true }) : Promise.resolve(null)),
     [canManage],
   );
-  const technicians = (usersData?.users ?? []).filter((u) => u.role !== "solicitante");
+  const staff = (usersData?.users ?? []).filter((u) => u.role !== "solicitante");
+  // El asignado puede no estar en la lista (dado de baja, o la lista todavia cargando):
+  // se suma igual para que el campo lo muestre
+  const assignee = service?.assignedTo;
+  const technicians: UserOption[] =
+    assignee && !staff.some((u) => u.id === assignee.id) ? [...staff, assignee] : staff;
+  const assigneeId =
+    pendingAssignee && pendingAssignee.data === data ? pendingAssignee.id : (assignee?.id ?? "");
   const isClosed = service ? ["completed", "rejected"].includes(service.status) : true;
 
   const assign = async (mutation: string, variables: Record<string, unknown>) => {
@@ -82,6 +96,7 @@ export function ServiceDetail() {
       await gql(mutation, variables);
       refetch();
     } catch (err) {
+      setPendingAssignee(null);
       setAssignError(err instanceof Error ? err.message : "Error al asignar");
     }
   };
@@ -141,7 +156,7 @@ export function ServiceDetail() {
         </div>
       )}
 
-      {!isLoading && service && (
+      {service && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -151,9 +166,7 @@ export function ServiceDetail() {
           className="grid gap-4 xl:grid-cols-[minmax(0,42rem)_minmax(0,1fr)]"
         >
           <div className="space-y-4 min-w-0">
-            {/* Por encima de "Actualizar estado": la lista del buscador de responsable
-                se despliega sobre esa tarjeta y no debajo de ella */}
-            <Card className="relative z-10">
+            <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>{SERVICE_TYPE_LABELS[service.type]}</CardTitle>
@@ -176,54 +189,39 @@ export function ServiceDetail() {
                     </p>
                     <p className="text-foreground">{formatDate(service.createdAt)}</p>
                   </div>
-                  <div>
-                    <label
-                      htmlFor="service-assignee"
-                      className="block text-xs text-muted-foreground uppercase tracking-widest mb-0.5"
-                    >
-                      Asignado a
-                    </label>
-                    {canManage && !isClosed ? (
-                      // Al salir del campo sin elegir a nadie vuelve a mostrar el asignado
-                      <div className="max-w-60" onBlur={() => setAssigneeSearch(null)}>
-                        <SearchSelect
+                  {canManage && !isClosed ? (
+                    <div>
+                      <label
+                        htmlFor="service-assignee"
+                        className="block text-xs text-muted-foreground uppercase tracking-widest mb-0.5"
+                      >
+                        Asignado a
+                      </label>
+                      <div className="max-w-60">
+                        {/* No se puede dejar sin responsable: borrar el campo y salir
+                            vuelve a mostrar el asignado */}
+                        <UserSearchSelect
                           id="service-assignee"
                           items={technicians}
-                          value={assigneeSearch ?? service.assignedTo?.id ?? ""}
+                          value={assigneeId}
                           onChange={(technicianId) => {
-                            if (!technicianId) {
-                              setAssigneeSearch("");
-                              return;
-                            }
-                            setAssigneeSearch(null);
-                            if (technicianId !== service.assignedTo?.id) {
-                              void assign(ASSIGN_SERVICE_MUTATION, { id, technicianId });
-                            }
+                            if (!technicianId || technicianId === assigneeId) return;
+                            setPendingAssignee({ id: technicianId, data });
+                            void assign(ASSIGN_SERVICE_MUTATION, { id, technicianId });
                           }}
-                          getKey={(t) => t.id}
-                          getLabel={(t) => `${t.dni} · ${t.name}`}
-                          getSearchText={(t) => `${t.name} ${t.dni}`}
-                          placeholder="Buscar por nombre o cédula..."
-                          // Como el equipo al crear un ticket: la cedula resaltada, el
-                          // nombre y el rol a la derecha. La lista es mas ancha que el campo
-                          listClassName="w-max min-w-full max-w-[min(26rem,80vw)] right-auto"
-                          renderOption={(t) => (
-                            <>
-                              <span className="font-mono text-xs text-primary font-semibold">
-                                {t.dni}
-                              </span>
-                              <span className="text-muted-foreground">{t.name}</span>
-                              <span className="ml-auto pl-4 text-xs text-muted-foreground">
-                                {ROLE_LABELS[t.role]}
-                              </span>
-                            </>
-                          )}
+                          // La lista es mas ancha que el campo
+                          listClassName="w-max max-w-[min(26rem,80vw)]"
                         />
                       </div>
-                    ) : (
-                      <p className="text-foreground">{service.assignedTo?.name ?? "Sin asignar"}</p>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
+                        Asignado a
+                      </p>
+                      <p className="text-foreground">{assignee?.name ?? "Sin asignar"}</p>
+                    </div>
+                  )}
                   {service.labNumber && (
                     <div>
                       <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
@@ -260,7 +258,7 @@ export function ServiceDetail() {
               </CardContent>
             </Card>
 
-            {canManage && !["completed", "rejected"].includes(service.status) && (
+            {canManage && !isClosed && (
               <Card>
                 <CardHeader>
                   <CardTitle>Actualizar estado</CardTitle>
@@ -273,10 +271,11 @@ export function ServiceDetail() {
                         <SelectValue placeholder="Seleccionar estado..." />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="approved">Aprobado</SelectItem>
-                        <SelectItem value="in_progress">En progreso</SelectItem>
-                        <SelectItem value="completed">Completado</SelectItem>
-                        <SelectItem value="rejected">Rechazado</SelectItem>
+                        {NEXT_STATUSES.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {SERVICE_STATUS_CONFIG[s].label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>

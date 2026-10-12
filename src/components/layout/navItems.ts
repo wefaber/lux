@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { ROUTES } from "@/lib/constants";
 import { isStaff } from "@/lib/roles";
-import type { UserRole } from "@/lib/types";
+import type { NoticeEntity, UserRole } from "@/lib/types";
 
 export interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
@@ -22,6 +22,8 @@ export interface NavItem {
   staffOnly?: boolean;
   /** Aparece en la barra inferior del telefono (el espacio es limitado). */
   inTabBar?: boolean;
+  /** Avisos que se listan en la seccion: con alguno sin ver se marca con un punto. */
+  notices?: NoticeEntity;
 }
 
 // Unica lista de secciones para el menu lateral y la barra del telefono, asi
@@ -31,10 +33,23 @@ const NAV_ITEMS: NavItem[] = [
   { icon: Package, label: "Inventario", to: ROUTES.INVENTORY, staffOnly: true, inTabBar: true },
   { icon: Monitor, label: "Estado de Equipos", to: ROUTES.EQUIPMENT_STATUS, staffOnly: true },
   { icon: MapPin, label: "Ubicaciones", to: ROUTES.LOCATIONS, staffOnly: true },
-  { icon: Ticket, label: "Tickets", to: ROUTES.TICKETS, inTabBar: true },
-  { icon: BookOpen, label: "Préstamos", to: ROUTES.LOANS, staffOnly: true, inTabBar: true },
-  { icon: Wrench, label: "Solicitudes", to: ROUTES.SERVICES, inTabBar: true },
-  { icon: CalendarClock, label: "Reservas", to: ROUTES.RESERVATIONS, inTabBar: true },
+  { icon: Ticket, label: "Tickets", to: ROUTES.TICKETS, inTabBar: true, notices: "ticket" },
+  // El solicitante ve los suyos (pedirlos y seguir su estado); el staff los gestiona
+  { icon: BookOpen, label: "Préstamos", to: ROUTES.LOANS, inTabBar: true, notices: "loan" },
+  {
+    icon: Wrench,
+    label: "Solicitudes",
+    to: ROUTES.SERVICES,
+    inTabBar: true,
+    notices: "service_request",
+  },
+  {
+    icon: CalendarClock,
+    label: "Reservas",
+    to: ROUTES.RESERVATIONS,
+    inTabBar: true,
+    notices: "reservation",
+  },
   { icon: User, label: "Perfil", to: ROUTES.PROFILE, inTabBar: true },
 ];
 

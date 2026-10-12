@@ -1,13 +1,9 @@
 import { useState } from "react";
 import { BellRing, Check, Pin } from "lucide-react";
-import { gql } from "@/lib/utils";
+import { useNotices } from "@/hooks/useNotices";
+import { NOTICE_ENTITY_GENDER, NOTICE_KIND_LABELS } from "@/lib/constants";
 import type { PinState } from "@/lib/pins";
-
-const ACKNOWLEDGE_MUTATION = `
-  mutation AcknowledgeReservationCancellation($id: ID!) {
-    acknowledgeReservationCancellation(id: $id) { id }
-  }
-`;
+import type { Notice } from "@/lib/types";
 
 // Fondo de la fila fijada: suave para lo asignado, ambar para un aviso sin ver
 export function pinRowClass(state: PinState): string {
@@ -32,25 +28,26 @@ export function PinMark({ state }: { state: PinState }) {
     return (
       <BellRing
         className="inline h-3.5 w-3.5 mr-1.5 -mt-0.5 text-amber-500"
-        aria-label="Fijado: la canceló el solicitante"
+        aria-label="Fijado: tenés un aviso sin ver"
       >
-        <title>Fijado: la canceló el solicitante</title>
+        <title>Fijado: tenés un aviso sin ver</title>
       </BellRing>
     );
   }
   return null;
 }
 
-interface CancellationNoticeProps {
-  id: string;
-  /** Nombre de quien la cancelo */
-  cancelledBy: string;
-  onSeen: () => void;
+// "La aprobó Ana", "Te lo asignó Nicolás", "Venció la fecha de devolución"
+export function noticeText(notice: Pick<Notice, "entityType" | "kind" | "by">): string {
+  return NOTICE_KIND_LABELS[notice.kind]
+    .replace("{o}", NOTICE_ENTITY_GENDER[notice.entityType])
+    .replace("{by}", notice.by?.name ?? "el sistema");
 }
 
-// Aviso de que el solicitante cancelo una reserva que aprobaste. Sigue fijada
-// hasta que la marcas como vista.
-export function CancellationNotice({ id, cancelledBy, onSeen }: CancellationNoticeProps) {
+// Que paso y el boton para marcarlo como visto. Hasta entonces la fila sigue
+// fijada arriba de todo
+export function NoticeLine({ notice }: { notice: Notice }) {
+  const { acknowledge } = useNotices();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -58,27 +55,29 @@ export function CancellationNotice({ id, cancelledBy, onSeen }: CancellationNoti
     setSaving(true);
     setError("");
     try {
-      await gql(ACKNOWLEDGE_MUTATION, { id });
-      onSeen();
+      await acknowledge(notice.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo marcar como vista");
+      setError(err instanceof Error ? err.message : "No se pudo marcar como visto");
       setSaving(false);
     }
   };
 
+  const text = noticeText(notice);
+
   return (
     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs whitespace-normal">
-      <span className="text-amber-600 dark:text-amber-400 font-medium">
-        La canceló {cancelledBy}
-      </span>
+      <span className="text-amber-600 dark:text-amber-400 font-medium">{text}</span>
+      {/* Con varios avisos en la lista, el lector de pantalla tiene que poder
+          distinguir cual se marca */}
       <button
         type="button"
         onClick={markSeen}
         disabled={saving}
+        aria-label={`Marcar como visto: ${text} (${notice.entityId})`}
         className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 px-1.5 py-0.5 font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-500/15 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
       >
         <Check className="h-3 w-3" />
-        {saving ? "Marcando..." : "Marcar como vista"}
+        {saving ? "Marcando..." : "Marcar como visto"}
       </button>
       {error && <span className="text-destructive">{error}</span>}
     </div>

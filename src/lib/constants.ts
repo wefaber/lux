@@ -8,6 +8,8 @@ import type {
   UserRole,
   InterventionType,
   LocationKind,
+  NoticeEntity,
+  NoticeKind,
   ReservationResource,
   ReservationStatus,
 } from "./types";
@@ -147,6 +149,31 @@ export const RESERVATION_RESOURCE_LABELS: Record<ReservationResource, string> = 
   equipment: "Equipo",
   location: "Espacio",
 }; // Que se reserva
+
+// Texto de un aviso. {o} es la vocal del elemento ("lo resolvió" un ticket, "la
+// aprobó" una reserva) y {by} quien lo provocó
+export const NOTICE_KIND_LABELS: Record<NoticeKind, string> = {
+  assigned: "Te l{o} asignó {by}",
+  unassigned: "Te l{o} sacó {by}",
+  taken: "Ahora l{o} atiende {by}",
+  approved: "L{o} aprobó {by}",
+  rejected: "L{o} rechazó {by}",
+  in_resolution: "L{o} puso en resolución {by}",
+  resolved: "L{o} resolvió {by}",
+  completed: "L{o} completó {by}",
+  modified: "L{o} modificó {by}",
+  cancelled: "L{o} canceló {by}",
+  delivered: "Te l{o} entregó {by}",
+  comment: "Comentario nuevo de {by}",
+  overdue: "Venció la fecha de devolución",
+}; // Labels de avisos
+
+export const NOTICE_ENTITY_GENDER: Record<NoticeEntity, "o" | "a"> = {
+  ticket: "o",
+  service_request: "a",
+  loan: "o",
+  reservation: "a",
+}; // Vocal para concordar el texto del aviso
 
 export const INTERVENTION_TYPE_LABELS: Record<InterventionType, string> = {
   preventive_maintenance: "Mantenimiento preventivo",

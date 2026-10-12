@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Plus, Search, AlertCircle, Camera } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
+import { useNotices } from "@/hooks/useNotices";
 import { gql, formatDate, truncate, cn } from "@/lib/utils";
 import { TICKET_STATUS_CONFIG, TICKET_CATEGORY_LABELS, ROUTES } from "@/lib/constants";
 import type { Ticket, TicketStatus, Product } from "@/lib/types";
@@ -13,6 +14,7 @@ import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -28,10 +30,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { QrScanner } from "@/components/ui/QrScanner";
-import { SearchSelect } from "@/components/ui/search-select";
+import { EquipmentSearchSelect } from "@/components/search-pickers";
 import { OptionSelect } from "@/components/ui/option-select";
 import { Pagination, clampPage } from "@/components/ui/pagination";
-import { PinMark, pinRowClass } from "@/components/ui/pin";
+import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
+import { UnseenDot } from "@/components/ui/unseen-dot";
 import { idQuery, pinnedFirst, ticketPin } from "@/lib/pins";
 
 const TICKETS_QUERY = `
@@ -64,6 +67,7 @@ const PAGE_SIZE = 10;
 
 export function TicketList() {
   const { user, hasRole } = useAuth();
+  const { noticeFor, hasNewPending } = useNotices();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TicketStatus | "">("");
   const [page, setPage] = useState(0);
@@ -96,7 +100,7 @@ export function TicketList() {
   const term = search.trim().toLowerCase();
   const idTerm = idQuery(term, "tkt");
   const matchesId = (t: Ticket) => idTerm !== null && t.id.toLowerCase().includes(idTerm);
-  const pin = (t: Ticket) => ticketPin(t, user?.id);
+  const pin = (t: Ticket) => ticketPin(t, user?.id, !!noticeFor("ticket", t.id));
 
   const matching = (data?.tickets ?? []).filter((t) => {
     const matchSearch = !term || t.title.toLowerCase().includes(term) || matchesId(t);
@@ -105,10 +109,13 @@ export function TicketList() {
   }); // Comprueba que los tickets mostrados matcheen con los filtros
 
   // Al staff los resueltos no le aparecen en la lista del dia a dia: se ven
-  // filtrando por estado o buscandolos por su ID. El solicitante ve todos los suyos
+  // filtrando por estado o buscandolos por su ID (o si tienen un aviso sin ver).
+  // El solicitante ve todos los suyos
   const hideResolved = !isSolicitante && !statusFilter;
   const tickets = pinnedFirst(
-    hideResolved ? matching.filter((t) => t.status !== "resolved" || matchesId(t)) : matching,
+    hideResolved
+      ? matching.filter((t) => t.status !== "resolved" || matchesId(t) || pin(t))
+      : matching,
     pin,
   );
   const hiddenResolved = matching.length - tickets.length;
@@ -159,10 +166,12 @@ export function TicketList() {
             Nuevo ticket
           </Button>
           {hasRole("root_admin", "admin", "tecnico") && (
-            <Button variant="secondary" size="sm" asChild>
+            <Button variant="secondary" size="sm" asChild className="relative">
               <Link to={`${ROUTES.TICKETS}/ool`}>
                 <AlertCircle className="h-3.5 w-3.5" />
                 OOL
+                {/* Llegaron tickets sin asignar desde la ultima vez que entraste */}
+                {hasNewPending("ticket") && <UnseenDot label="tickets nuevos sin asignar" />}
               </Link>
             </Button>
           )}
@@ -247,6 +256,7 @@ export function TicketList() {
               {visible.map((t) => {
                 const statusConf = TICKET_STATUS_CONFIG[t.status];
                 const pinState = pin(t);
+                const notice = noticeFor("ticket", t.id);
                 return (
                   <tr
                     key={t.id}
@@ -266,6 +276,7 @@ export function TicketList() {
                       >
                         {truncate(t.title, 48)}
                       </Link>
+                      {notice && <NoticeLine notice={notice} />}
                     </td>
                     <td className="px-4 py-2">
                       <Badge color={statusConf.color} withDot>
@@ -300,6 +311,9 @@ export function TicketList() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Crear nuevo ticket</DialogTitle>
+                <DialogDescription>
+                  Reportá un problema; si es de un equipo, elegilo o escaneá su QR.
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-1.5">
@@ -340,27 +354,11 @@ export function TicketList() {
                   <Label>Equipo (opcional)</Label>
                   <div className="flex gap-2">
                     <div className="flex-1">
-                      <SearchSelect
+                      <EquipmentSearchSelect
                         items={products}
                         value={form.equipmentId}
                         onChange={(equipmentId) => setForm((f) => ({ ...f, equipmentId }))}
-                        getKey={(p) => p.id}
-                        getLabel={(p) => `${p.machineId} · ${p.brand} ${p.model}`}
-                        placeholder="Buscar por ID o nombre..."
                         direction="up"
-                        renderOption={(p) => (
-                          <>
-                            <span className="font-mono text-xs text-primary font-semibold">
-                              {p.machineId}
-                            </span>
-                            <span className="text-muted-foreground">
-                              {p.brand} {p.model}
-                            </span>
-                            <span className="ml-auto text-xs text-muted-foreground">
-                              {p.location}
-                            </span>
-                          </>
-                        )}
                       />
                     </div>
                     <Button
