@@ -17,19 +17,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { UserForm } from "./UserForm";
+import { UPDATE_USER_MUTATION, UserForm } from "./UserForm";
 import { OptionSelect } from "@/components/ui/option-select";
 import { ErrorAlert } from "@/components/ui/error-alert";
 
 const USERS_QUERY = `
   query GetUsers {
     users { id name dni email role isActive createdAt updatedAt }
-  }
-`;
-
-const SET_USER_ACTIVE_MUTATION = `
-  mutation SetUserActive($id: ID!, $isActive: Boolean!) {
-    setUserActive(id: $id, isActive: $isActive) { id isActive }
   }
 `;
 
@@ -58,7 +52,9 @@ export function UserManagement() {
     if (!confirm(`¿${isActive ? "Activar" : "Desactivar"} a ${u.name}?`)) return;
     setActionError("");
     try {
-      await gql(SET_USER_ACTIVE_MUTATION, { id: u.id, isActive });
+      // UserInput exige los datos de la persona: se mandan los actuales con el estado nuevo
+      const { name, dni, email, role } = u;
+      await gql(UPDATE_USER_MUTATION, { id: u.id, input: { name, dni, email, role, isActive } });
     } catch (err) {
       setActionError(errorMessage(err, "No se pudo cambiar el estado"));
     }

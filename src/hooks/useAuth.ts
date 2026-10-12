@@ -15,15 +15,19 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null); // Creacion de contexto de auth
 
-const USER_FIELDS = "id name dni email role isActive createdAt updatedAt";
-
+// Texto plano sin interpolar: api/scripts/check-frontend-docs.ts valida estas
+// consultas contra el schema del backend leyendo el codigo fuente
 const LOGIN_QUERY = `
   query Login($dni: String!, $password: String!) {
-    login(dni: $dni, password: $password) { ${USER_FIELDS} token }
+    login(dni: $dni, password: $password) {
+      id name dni email role isActive createdAt updatedAt token
+    }
   }
 `; // Login query para comprobacion de datos
 
-const ME_QUERY = `query GetMe { me { ${USER_FIELDS} } }`; // Datos vigentes del usuario de la sesion
+const ME_QUERY = `
+  query GetMe { me { id name dni email role isActive createdAt updatedAt } }
+`; // Datos vigentes del usuario de la sesion
 
 interface LoginData {
   login: AuthUser;

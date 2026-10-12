@@ -6,7 +6,6 @@ useMockServer();
 
 const { ROOT, ADMIN, TECNICO } = USERS;
 
-const SET_ACTIVE = `mutation SetUserActive($id: ID!, $isActive: Boolean!) { setUserActive(id: $id, isActive: $isActive) { id isActive } }`;
 const UPDATE = `mutation UpdateUser($id: ID!, $input: UserInput!) { updateUser(id: $id, input: $input) { id dni role isActive } }`;
 const CREATE = `mutation CreateUser($input: UserInput!) { createUser(input: $input) { id role } }`;
 const CHANGE_PW = `mutation ChangePassword($currentPassword: String!, $newPassword: String!) { changePassword(currentPassword: $currentPassword, newPassword: $newPassword) }`;
@@ -15,40 +14,44 @@ const LOGIN = `query Login($dni: String!, $password: String!) { login(dni: $dni,
 const user = (id: string) => mockUsers.find((u) => u.id === id)!;
 const errorOf = (res: { errors?: Array<{ message: string }> }) => res.errors?.[0].message;
 
+// Igual que la pantalla de usuarios: updateUser con los datos actuales y el estado nuevo
+function setActive(caller: string, id: string, isActive: boolean) {
+  const { name, dni, email, role } = user(id);
+  return gqlAs<{ updateUser: { isActive: boolean } }>(caller, UPDATE, {
+    id,
+    input: { name, dni, email, role, isActive },
+  });
+}
+
 describe("activar y desactivar usuarios", () => {
   test("un usuario desactivado se puede volver a activar y vuelve a entrar", async () => {
     const target = user("u-sol-3");
-    expect(errorOf(await gqlAs(ADMIN, SET_ACTIVE, { id: target.id, isActive: false }))).toBe(
-      undefined,
-    );
+    expect(errorOf(await setActive(ADMIN, target.id, false))).toBe(undefined);
     expect(target.isActive).toBe(false);
     const password = mockPasswords[target.dni];
     expect(errorOf(await gqlAs(null, LOGIN, { dni: target.dni, password }))).toBe(
       "Credenciales inválidas",
     );
 
-    const res = await gqlAs<{ setUserActive: { isActive: boolean } }>(ADMIN, SET_ACTIVE, {
-      id: target.id,
-      isActive: true,
-    });
-    expect(res.data!.setUserActive.isActive).toBe(true);
+    const res = await setActive(ADMIN, target.id, true);
+    expect(res.data!.updateUser.isActive).toBe(true);
     expect(errorOf(await gqlAs(null, LOGIN, { dni: target.dni, password }))).toBeUndefined();
   });
 
   test("el root_admin y la propia cuenta no se desactivan", async () => {
-    expect(errorOf(await gqlAs(ADMIN, SET_ACTIVE, { id: ROOT, isActive: false }))).toBe(
+    // Un admin ni siquiera edita al root; el root tampoco se desactiva a si mismo
+    expect(errorOf(await setActive(ADMIN, ROOT, false))).toBe(FORBIDDEN);
+    expect(errorOf(await setActive(ROOT, ROOT, false))).toBe(
       "El Super Admin no se puede desactivar",
     );
-    expect(errorOf(await gqlAs(ADMIN, SET_ACTIVE, { id: ADMIN, isActive: false }))).toBe(
+    expect(errorOf(await setActive(ADMIN, ADMIN, false))).toBe(
       "No podés desactivar tu propia cuenta",
     );
     expect(user(ROOT).isActive && user(ADMIN).isActive).toBe(true);
   });
 
   test("solo un admin cambia el estado", async () => {
-    expect(errorOf(await gqlAs(TECNICO, SET_ACTIVE, { id: "u-sol-4", isActive: false }))).toBe(
-      FORBIDDEN,
-    );
+    expect(errorOf(await setActive(TECNICO, "u-sol-4", false))).toBe(FORBIDDEN);
   });
 });
 

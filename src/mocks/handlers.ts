@@ -1311,23 +1311,7 @@ export const handlers = [
     return HttpResponse.json({ data: { updateUser: user } });
   }),
 
-  // Alta y baja logica de un usuario: inactivo no puede iniciar sesion
-  graphql.mutation("SetUserActive", ({ request, variables }) => {
-    const caller = getCaller(request);
-    if (!hasRole(caller, ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
-    const { id, isActive } = variables as { id: string; isActive: boolean };
-    if (typeof isActive !== "boolean")
-      return HttpResponse.json(errorBody("Indicá si el usuario queda activo"));
-    const user = mockUsers.find((u) => u.id === id);
-    if (!user) return HttpResponse.json(errorBody("Usuario no encontrado"));
-    const error = activationError(caller, user);
-    if (error) return HttpResponse.json(errorBody(error));
-    user.isActive = isActive;
-    user.updatedAt = new Date().toISOString();
-    return HttpResponse.json({ data: { setUserActive: user } });
-  }),
-
-  // Se mantiene por compatibilidad: equivale a setUserActive(id, false)
+  // Baja logica directa; activar y desactivar desde la gestion usa updateUser(isActive)
   graphql.mutation("DeleteUser", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!hasRole(caller, ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);

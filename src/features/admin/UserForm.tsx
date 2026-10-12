@@ -14,7 +14,7 @@ const CREATE_USER_MUTATION = `
  mutation CreateUser($input: UserInput!) { createUser(input: $input) { id } }
 `; //Mutacion de usuarios en caso de creacion
 
-const UPDATE_USER_MUTATION = `
+export const UPDATE_USER_MUTATION = `
  mutation UpdateUser($id: ID!, $input: UserInput!) { updateUser(id: $id, input: $input) { id } }
 `; // Mutacion de usuarios en caso de actualizacion
 
