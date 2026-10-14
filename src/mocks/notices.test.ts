@@ -27,7 +27,7 @@ const CREATE_LOAN = `mutation CreateLoan($input: LoanInput!) { createLoan(input:
 const APPROVE_LOAN = `mutation ApproveLoan($id: ID!) { approveLoan(id: $id) { id } }`;
 const DELIVER_LOAN = `mutation DeliverLoan($id: ID!) { deliverLoan(id: $id) { id } }`;
 const RETURN_LOAN = `mutation ReturnLoan($id: ID!) { returnLoan(id: $id) { id } }`;
-const REJECT_LOAN =`mutation RejectLoan($id: ID!, $reason: String!) { rejectLoan(id: $id, reason: $reason) { id } }`;
+const REJECT_LOAN = `mutation RejectLoan($id: ID!, $reason: String!) { rejectLoan(id: $id, reason: $reason) { id } }`;
 const CLAIM_TICKET = `mutation ClaimTicket($id: ID!) { claimTicket(id: $id) { id } }`;
 const CHANGE_TICKET_STATUS = `mutation ChangeTicketStatus($id: ID!, $status: String!) { changeTicketStatus(id: $id, status: $status) { id } }`;
 const CLAIM_SERVICE = `mutation ClaimServiceRequest($id: ID!) { claimServiceRequest(id: $id) { id } }`;
@@ -59,7 +59,11 @@ async function newTicket(): Promise<string> {
 
 async function newService(): Promise<string> {
   const res = await gqlAs<{ createServiceRequest: { id: string } }>(SOLICITANTE, CREATE_SERVICE, {
-    input: { type: "software_installation", description: "Instalar Python", softwareName: "Python" },
+    input: {
+      type: "software_installation",
+      description: "Instalar Python",
+      softwareName: "Python",
+    },
   });
   expect(res.errors).toBeUndefined();
   return res.data!.createServiceRequest.id;
@@ -351,10 +355,9 @@ describe("ids y estados raros", () => {
 
   test("un estado que no es respuesta no deja aviso, aunque sea una clave de Object", async () => {
     const id = await newService();
-    await gqlAs(ADMIN, UPDATE_SERVICE, { id, input: { status: "constructor" } });
+    const res = await gqlAs(ADMIN, UPDATE_SERVICE, { id, input: { status: "constructor" } });
+    expect(res.errors?.[0].message).toBe("Estado inválido");
     expect(noticeOf(SOLICITANTE, "service_request", id)).toBeUndefined();
-    // Se devuelve a un estado valido para no ensuciar a otros tests
-    await gqlAs(ADMIN, UPDATE_SERVICE, { id, input: { status: "rejected" } });
   });
 });
 

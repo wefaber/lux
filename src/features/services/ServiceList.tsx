@@ -5,7 +5,12 @@ import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotices } from "@/hooks/useNotices";
 import { gql, formatDate, truncate, cn } from "@/lib/utils";
-import { SERVICE_STATUS_CONFIG, SERVICE_TYPE_LABELS, ROUTES } from "@/lib/constants";
+import {
+  SERVICE_STATUS_CONFIG,
+  SERVICE_TYPE_LABELS,
+  ROUTES,
+  CLOSED_SERVICE_STATUSES,
+} from "@/lib/constants";
 import type { ServiceRequest, ServiceStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Pagination, clampPage } from "@/components/ui/pagination";
 import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
 import { idQuery, pinnedFirst, servicePin } from "@/lib/pins";
+import { STAFF_ROLES } from "@/lib/roles";
 
 const SERVICES_QUERY = `
   query GetServiceRequests($requestedById: ID) {
@@ -39,8 +45,6 @@ const SERVICES_QUERY = `
 
 // Solicitudes por pagina
 const PAGE_SIZE = 10;
-// Ya cerradas: el staff no las ve en el dia a dia
-const CLOSED_STATUSES = new Set<ServiceStatus>(["completed", "rejected"]);
 
 const SERVICE_COLUMNS = [
   "ID",
@@ -65,7 +69,7 @@ export function ServiceList() {
   const [searchParams] = useSearchParams();
   const [createOpen, setCreateOpen] = useState(() => searchParams.get("nuevo") === "1");
 
-  const isSolicitante = !hasRole("root_admin", "admin", "tecnico");
+  const isSolicitante = !hasRole(...STAFF_ROLES);
 
   const { data, isLoading, refetch } = useAsync<{ serviceRequests: ServiceRequest[] }>(
     () => gql(SERVICES_QUERY, { requestedById: isSolicitante ? user?.id : undefined }),
@@ -76,8 +80,7 @@ export function ServiceList() {
   const term = search.trim().toLowerCase();
   const idTerm = idQuery(term, "svc");
   const matchesId = (s: ServiceRequest) => idTerm !== null && s.id.toLowerCase().includes(idTerm);
-  const pin = (s: ServiceRequest) =>
-    servicePin(s, user?.id, !!noticeFor("service_request", s.id));
+  const pin = (s: ServiceRequest) => servicePin(s, user?.id, !!noticeFor("service_request", s.id));
 
   const matching = allServices.filter(
     (s) =>
@@ -97,7 +100,9 @@ export function ServiceList() {
   const hideClosed = !isSolicitante && !statusFilter;
   const services = pinnedFirst(
     hideClosed
-      ? matching.filter((s) => !CLOSED_STATUSES.has(s.status) || matchesId(s) || pin(s))
+      ? matching.filter(
+          (s) => !CLOSED_SERVICE_STATUSES.includes(s.status) || matchesId(s) || pin(s),
+        )
       : matching,
     pin,
   );
@@ -265,7 +270,12 @@ export function ServiceList() {
           </div>
         )}
 
-        <Pagination page={current} pageSize={PAGE_SIZE} total={services.length} onPageChange={setPage} />
+        <Pagination
+          page={current}
+          pageSize={PAGE_SIZE}
+          total={services.length}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* AnimatePresence propio, como en TicketList: sin el, la animacion de salida

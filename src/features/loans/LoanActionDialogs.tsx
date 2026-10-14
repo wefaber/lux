@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { gql } from "@/lib/utils";
+import { gql, errorMessage } from "@/lib/utils";
 import type { Loan } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 const REJECT_MUTATION = `
  mutation RejectLoan($id: ID!, $reason: String!) { rejectLoan(id: $id, reason: $reason) { id status } }
@@ -57,7 +58,7 @@ export function RejectLoanDialog({ loan, onClose, onDone }: LoanActionDialogProp
       setReason("");
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al rechazar");
+      setError(errorMessage(err, "Error al rechazar"));
     } finally {
       setSaving(false);
     }
@@ -86,11 +87,7 @@ export function RejectLoanDialog({ loan, onClose, onDone }: LoanActionDialogProp
               required
             />
           </div>
-          {error && (
-            <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-              {error}
-            </div>
-          )}
+          <ErrorAlert>{error}</ErrorAlert>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={close}>
               Cancelar
@@ -140,7 +137,7 @@ export function ReturnLoanDialog({ loan, onClose, onDone }: LoanActionDialogProp
       reset();
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al registrar la devolución");
+      setError(errorMessage(err, "Error al registrar la devolución"));
     } finally {
       setSaving(false);
     }
@@ -181,11 +178,7 @@ export function ReturnLoanDialog({ loan, onClose, onDone }: LoanActionDialogProp
               />
             </div>
           )}
-          {error && (
-            <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-              {error}
-            </div>
-          )}
+          <ErrorAlert>{error}</ErrorAlert>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={close}>
               Cancelar

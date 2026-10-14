@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { CheckCircle2 } from "lucide-react";
 import type { Ticket } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, errorMessage } from "@/lib/utils";
 import { IncidentStep } from "./steps/IncidentStep";
 import { PcStatusStep } from "./steps/PcStatusStep";
 import { PcHistoryStep } from "./steps/PcHistoryStep";
@@ -10,6 +10,7 @@ import { DiagnosisStep } from "./steps/DiagnosisStep";
 import { SummaryStep } from "./steps/SummaryStep";
 import { Button } from "@/components/ui/button";
 import { gql } from "@/lib/utils";
+import { SPRING_TRANSITION } from "@/lib/constants";
 
 const COMPLETE_TICKET_MUTATION = `
  mutation CompleteTicket($id: ID!, $input: TicketCompleteInput!) {
@@ -53,7 +54,7 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
       });
       onComplete();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al completar el ticket");
+      setError(errorMessage(err, "Error al completar el ticket"));
     } finally {
       setCompleting(false);
     }
@@ -137,7 +138,7 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
             initial={{ opacity: 0, x: 12 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -12 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            transition={SPRING_TRANSITION}
             className="flex-1 min-w-0"
           >
             {renderStep()}

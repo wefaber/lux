@@ -5,7 +5,7 @@ import { ArrowLeft, Edit2, Trash2 } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { gql, formatDate } from "@/lib/utils";
-import { EQUIPMENT_STATUS_CONFIG, ROUTES } from "@/lib/constants";
+import { EQUIPMENT_STATUS_CONFIG, ROUTES, SPRING_TRANSITION } from "@/lib/constants";
 import type { Product } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,9 @@ import { QrCode } from "@/components/ui/QrCode";
 import { RetireEquipmentDialog } from "./RetireEquipmentDialog";
 import { EquipmentHistory } from "./EquipmentHistory";
 import { EquipmentInterventions } from "./EquipmentInterventions";
+import { STAFF_ROLES } from "@/lib/roles";
+import { ErrorAlert } from "@/components/ui/error-alert";
+import { DetailRow } from "@/components/ui/detail-row";
 
 const PRODUCT_QUERY = `
   query GetProduct($id: ID!) {
@@ -25,17 +28,6 @@ const PRODUCT_QUERY = `
     }
   }
 `;
-
-function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
-        {label}
-      </span>
-      <span className="text-sm text-foreground">{value ?? "—"}</span>
-    </div>
-  );
-}
 
 export function ProductDetail() {
   const { id } = useParams<{ id: string }>();
@@ -48,7 +40,7 @@ export function ProductDetail() {
   );
 
   const product = data?.product;
-  const isStaff = hasRole("root_admin", "admin", "tecnico");
+  const isStaff = hasRole(...STAFF_ROLES);
   const canEdit = isStaff && !product?.deletedAt;
 
   return (
@@ -95,11 +87,7 @@ export function ProductDetail() {
         />
       )}
 
-      {error && (
-        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
-          Error: {error}
-        </div>
-      )}
+      {error && <ErrorAlert>Error: {error}</ErrorAlert>}
 
       {isLoading ? (
         <div className="space-y-4">
@@ -121,7 +109,7 @@ export function ProductDetail() {
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          transition={SPRING_TRANSITION}
           className="space-y-6"
         >
           <Card>

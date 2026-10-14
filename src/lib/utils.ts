@@ -76,7 +76,7 @@ export function isMocksUnavailable(error: unknown): boolean {
 // motivo: asi un build sin mocks pliega esta rama y no arrastra nada.
 const MOCKS_ENABLED = import.meta.env.DEV || import.meta.env.VITE_ENABLE_MOCKS === "true";
 
-const MOCKS_DOWN_STATUS = [404, 405];
+const MOCKS_DOWN_STATUS = new Set([404, 405]);
 
 async function request<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
   const token = getAuthToken();
@@ -90,7 +90,7 @@ async function request<T>(query: string, variables?: Record<string, unknown>): P
   });
 
   if (!response.ok) {
-    if (MOCKS_ENABLED && MOCKS_DOWN_STATUS.includes(response.status)) {
+    if (MOCKS_ENABLED && MOCKS_DOWN_STATUS.has(response.status)) {
       // El SW quedo mudo y la peticion se fue a nginx: re-armamos y reintentamos
       // una sola vez, asi el usuario no ve el error.
       const { reArmMocks } = await import("@/lib/mocks-runtime");
@@ -131,14 +131,19 @@ export async function gql<T>(query: string, variables?: Record<string, unknown>)
   return request<T>(query, variables);
 } // Solicitudes a la API con metodos y gestion de errores
 
-export function generateId(): string {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
-} // Generacion de ID
-
-export function isOverdue(returnDate: string): boolean {
-  return new Date(returnDate) < new Date();
-} // Verificacion si esta fuera de fecha
-
 export function truncate(str: string, max: number): string {
   return str.length > max ? str.slice(0, max) + "…" : str;
 } // Truncado de datos
+
+export function initials(name: string): string {
+  return name
+    .split(" ")
+    .slice(0, 2)
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase();
+} // Iniciales del nombre para el avatar
+
+export function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : fallback;
+} // Mensaje para mostrar de un error atrapado en un catch

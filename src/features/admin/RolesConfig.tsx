@@ -2,61 +2,60 @@ import { motion } from "motion/react";
 import { Shield, CheckCircle2, XCircle } from "lucide-react";
 import { ROLE_LABELS, SPRING_TRANSITION } from "@/lib/constants";
 import type { UserRole } from "@/lib/types";
+import { ADMIN_ROLES, STAFF_ROLES, USER_ROLES } from "@/lib/roles";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 const PERMISSIONS: Array<{ label: string; key: string; roles: UserRole[] }> = [
   {
     label: "Ver dashboard",
     key: "view_dashboard",
-    roles: ["root_admin", "admin", "tecnico", "solicitante"],
+    roles: USER_ROLES,
   },
   {
     label: "Ver inventario",
     key: "view_inventory",
-    roles: ["root_admin", "admin", "tecnico", "solicitante"],
+    roles: USER_ROLES,
   },
-  { label: "Editar inventario", key: "edit_inventory", roles: ["root_admin", "admin", "tecnico"] },
+  { label: "Editar inventario", key: "edit_inventory", roles: STAFF_ROLES },
   {
     label: "Ver tickets",
     key: "view_tickets",
-    roles: ["root_admin", "admin", "tecnico", "solicitante"],
+    roles: USER_ROLES,
   },
   {
     label: "Crear tickets",
     key: "create_tickets",
-    roles: ["root_admin", "admin", "tecnico", "solicitante"],
+    roles: USER_ROLES,
   },
-  { label: "Asignar tickets", key: "assign_tickets", roles: ["root_admin", "admin"] },
-  { label: "Resolver tickets", key: "resolve_tickets", roles: ["root_admin", "admin", "tecnico"] },
+  { label: "Asignar tickets", key: "assign_tickets", roles: STAFF_ROLES },
+  { label: "Resolver tickets", key: "resolve_tickets", roles: STAFF_ROLES },
   {
     label: "Solicitar préstamos",
     key: "request_loans",
-    roles: ["root_admin", "admin", "tecnico", "solicitante"],
+    roles: USER_ROLES,
   },
   {
     label: "Ver todos los préstamos",
     key: "view_loans",
-    roles: ["root_admin", "admin", "tecnico"],
+    roles: STAFF_ROLES,
   },
-  { label: "Gestionar préstamos", key: "manage_loans", roles: ["root_admin", "admin", "tecnico"] },
+  { label: "Gestionar préstamos", key: "manage_loans", roles: STAFF_ROLES },
   {
     label: "Ver solicitudes",
     key: "view_services",
-    roles: ["root_admin", "admin", "tecnico", "solicitante"],
+    roles: USER_ROLES,
   },
   {
     label: "Gestionar solicitudes",
     key: "manage_services",
-    roles: ["root_admin", "admin", "tecnico"],
+    roles: STAFF_ROLES,
   },
-  { label: "Panel de admin", key: "admin_panel", roles: ["root_admin", "admin"] },
-  { label: "Gestionar usuarios", key: "manage_users", roles: ["root_admin", "admin"] },
-  { label: "Ver logs de actividad", key: "view_logs", roles: ["root_admin", "admin"] },
-  { label: "Ver reportes", key: "view_reports", roles: ["root_admin", "admin"] },
-  { label: "Exportar datos", key: "export_data", roles: ["root_admin", "admin"] },
+  { label: "Panel de admin", key: "admin_panel", roles: ADMIN_ROLES },
+  { label: "Gestionar usuarios", key: "manage_users", roles: ADMIN_ROLES },
+  { label: "Ver logs de actividad", key: "view_logs", roles: ADMIN_ROLES },
+  { label: "Ver reportes", key: "view_reports", roles: ADMIN_ROLES },
+  { label: "Exportar datos", key: "export_data", roles: ADMIN_ROLES },
 ]; // Vista de permisos por roles
-
-const ROLES: UserRole[] = ["root_admin", "admin", "tecnico", "solicitante"]; // Roles que tienen los usuarios en base a props
 
 export function RolesConfig() {
   return (
@@ -86,7 +85,7 @@ export function RolesConfig() {
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground">
                       Permiso
                     </th>
-                    {ROLES.map((r) => (
+                    {USER_ROLES.map((r) => (
                       <th
                         key={r}
                         className="px-4 py-3 text-center text-xs font-medium uppercase tracking-widest text-muted-foreground"
@@ -106,7 +105,7 @@ export function RolesConfig() {
                       className="border-b border-border last:border-0 hover:bg-black/2 dark:hover:bg-white/3 transition-colors"
                     >
                       <td className="px-4 py-3 text-sm text-foreground">{perm.label}</td>
-                      {ROLES.map((r) => (
+                      {USER_ROLES.map((r) => (
                         <td key={r} className="px-4 py-3 text-center">
                           {perm.roles.includes(r) ? (
                             <CheckCircle2 className="h-4 w-4 text-success mx-auto" />

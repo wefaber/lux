@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Plus, Pencil, Wrench } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
-import { gql, formatDateTime, toDateTimeInput, fromDateTimeInput } from "@/lib/utils";
+import { gql, formatDateTime, toDateTimeInput, fromDateTimeInput, errorMessage } from "@/lib/utils";
 import { INTERVENTION_TYPE_LABELS, ROUTES } from "@/lib/constants";
 import { validateIntervention, type FieldErrors, type InterventionFields } from "@/lib/validation";
 import type { Intervention, InterventionType, Ticket } from "@/lib/types";
@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { OptionSelect } from "@/components/ui/option-select";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 const INTERVENTIONS_QUERY = `
   query GetInterventions($equipmentId: ID!) {
@@ -42,7 +43,6 @@ const CREATE_MUTATION = `
 const UPDATE_MUTATION = `
   mutation UpdateIntervention($id: ID!, $input: InterventionUpdateInput!) { updateIntervention(id: $id, input: $input) { id } }
 `;
-
 
 interface EquipmentInterventionsProps {
   equipmentId: string;
@@ -95,7 +95,10 @@ export function EquipmentInterventions({ equipmentId, canEdit }: EquipmentInterv
         ) : (
           <ol className="space-y-2">
             {interventions.map((i) => (
-              <li key={i.id} className="flex items-start gap-3 rounded-xl border border-border/70 p-3">
+              <li
+                key={i.id}
+                className="flex items-start gap-3 rounded-xl border border-border/70 p-3"
+              >
                 <Wrench className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -217,7 +220,7 @@ function InterventionForm({
         : gql(CREATE_MUTATION, { input: { ...input, equipmentId } }));
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al guardar la intervención");
+      setError(errorMessage(err, "Error al guardar la intervención"));
     } finally {
       setSaving(false);
     }
@@ -230,7 +233,9 @@ function InterventionForm({
     <form onSubmit={handleSubmit} noValidate>
       <DialogHeader>
         <DialogTitle>{intervention ? "Editar intervención" : "Registrar intervención"}</DialogTitle>
-        <DialogDescription>El trabajo hecho sobre el equipo queda en su historial.</DialogDescription>
+        <DialogDescription>
+          El trabajo hecho sobre el equipo queda en su historial.
+        </DialogDescription>
       </DialogHeader>
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -295,11 +300,7 @@ function InterventionForm({
             ]}
           />
         </div>
-        {error && (
-          <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+        <ErrorAlert>{error}</ErrorAlert>
       </div>
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onCancel}>

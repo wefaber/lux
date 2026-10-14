@@ -8,6 +8,7 @@ import type { ActivityLog as ActivityLogType } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
+import type { StatusColor } from "@/lib/constants";
 
 const LOGS_QUERY = `
  query GetActivityLogs($userId: ID, $operation: String) {
@@ -17,7 +18,7 @@ const LOGS_QUERY = `
  }
 `; // Query de logs
 
-const OP_COLORS: Record<string, "success" | "info" | "warning" | "destructive" | "muted"> = {
+const OP_COLORS: Record<string, StatusColor> = {
   CREATE_USER: "success",
   UPDATE_USER: "info",
   DELETE_USER: "destructive",
@@ -48,7 +49,7 @@ export function ActivityLog() {
       l.userName.toLowerCase().includes(search.toLowerCase()) ||
       l.operation.toLowerCase().includes(search.toLowerCase()) ||
       l.entity.toLowerCase().includes(search.toLowerCase()),
-  ); // Filtrado de informacion 
+  ); // Filtrado de informacion
 
   return (
     <div className="space-y-6">

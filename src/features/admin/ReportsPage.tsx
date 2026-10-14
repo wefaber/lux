@@ -9,6 +9,7 @@ import type { Reports } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 const REPORTS_QUERY = `
  query GetReports {
@@ -85,11 +86,7 @@ export function ReportsPage() {
         </p>
       </div>
 
-      {error && (
-        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
-          Error al cargar reportes: {error}
-        </div>
-      )}
+      {error && <ErrorAlert>Error al cargar reportes: {error}</ErrorAlert>}
 
       {isLoading && !reports ? (
         <TableSkeleton rows={6} cols={4} />

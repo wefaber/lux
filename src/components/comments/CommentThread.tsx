@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { MessageSquare, Send } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
-import { gql, formatDateTime, cn } from "@/lib/utils";
+import { gql, formatDateTime, cn, errorMessage } from "@/lib/utils";
 import { ROLE_LABELS } from "@/lib/constants";
 import { isStaff } from "@/lib/roles";
 import { validateComment } from "@/lib/validation";
@@ -64,7 +64,7 @@ export function CommentThread({ entityType, entityId, fill = false }: CommentThr
       setBody("");
       refetch();
     } catch (err) {
-      setSendError(err instanceof Error ? err.message : "No se pudo enviar el comentario");
+      setSendError(errorMessage(err, "No se pudo enviar el comentario"));
     } finally {
       setSending(false);
     }

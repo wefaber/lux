@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
-import { gql } from "@/lib/utils";
+import { gql, errorMessage } from "@/lib/utils";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useLocations } from "@/hooks/useLocations";
 import { ROUTES, EQUIPMENT_KINDS } from "@/lib/constants";
@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
 import { OptionSelect } from "@/components/ui/option-select";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 const CREATE_PRODUCT_MUTATION = `
   mutation CreateProduct($input: ProductInput!) {
@@ -58,7 +59,6 @@ const COMPONENT_QUERY = `
 `;
 
 const MACHINE_IDS_QUERY = `query GetProducts { products { id machineId } }`;
-
 
 type FormState = {
   machineId: string;
@@ -216,7 +216,7 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
       }
       navigate(isEdit ? detailRoute : ROUTES.INVENTORY);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al guardar");
+      setError(errorMessage(err, "Error al guardar"));
     } finally {
       setSaving(false);
     }
@@ -297,7 +297,8 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
                   {field("machineId", "ID de máquina", { mono: true, upper: true })}
                   {suggestion && (
                     <p className="text-xs text-muted-foreground">
-                      Formato: ubicación, tipo y número (L1-PC3 = PC 3 del Laboratorio 1). Próximo libre:{" "}
+                      Formato: ubicación, tipo y número (L1-PC3 = PC 3 del Laboratorio 1). Próximo
+                      libre:{" "}
                       <button
                         type="button"
                         className="font-mono text-primary font-semibold hover:underline cursor-pointer"
@@ -360,11 +361,7 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
               </>
             )}
 
-            {error && (
-              <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-                {error}
-              </div>
-            )}
+            <ErrorAlert>{error}</ErrorAlert>
 
             <div className="flex gap-2 justify-end pt-2">
               <Button type="button" variant="secondary" asChild>

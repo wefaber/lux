@@ -1,4 +1,11 @@
-import { INTERVENTION_TYPE_LABELS, KIND_MACHINE_CODE, LOCATION_KIND_LETTER } from "./constants";
+import {
+  INTERVENTION_TYPE_LABELS,
+  KIND_MACHINE_CODE,
+  LOCATION_KIND_LETTER,
+  ROLE_CONFIG,
+  SERVICE_TYPE_LABELS,
+  TICKET_CATEGORY_LABELS,
+} from "./constants";
 import type { LocationKind } from "./types";
 
 // Reglas de nomenclatura de equipos. Las usan el formulario (feedback por
@@ -268,4 +275,85 @@ export function validateComponent(c: ComponentFields): FieldErrors<keyof Compone
     ["serialNumber", validateCode(c.serialNumber, "N° de serie")],
     ["partNumber", validateCode(c.partNumber, "Part number")],
   ]);
+}
+
+// ── Usuarios ─────────────────────────────────────────────────────────────────
+// Las usan el formulario de usuarios, el de cambio de contraseña y la API
+
+export const PASSWORD_MIN_LENGTH = 6;
+
+export interface UserFields {
+  name: string;
+  dni: string;
+  email: string;
+  role: string;
+  /** Vacio al editar: no se cambia */
+  password: string;
+}
+
+const DNI_PATTERN = /^\d{8}$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function validatePassword(password: string): string | null {
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    return `La contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres`;
+  }
+  if (password.length > 128) return "La contraseña no puede superar los 128 caracteres";
+  return null;
+}
+
+/** `requirePassword`: al crear es obligatoria; al editar, vacia significa "no cambiar". */
+export function validateUser(
+  u: UserFields,
+  requirePassword: boolean,
+): FieldErrors<keyof UserFields> {
+  return collect<keyof UserFields>([
+    ["name", validateName(u.name, "Nombre")],
+    ["dni", DNI_PATTERN.test(u.dni.trim()) ? null : "Cédula: 8 dígitos, sin puntos ni guión"],
+    ["email", EMAIL_PATTERN.test(u.email.trim()) ? null : "Email inválido"],
+    ["role", u.role in ROLE_CONFIG ? null : "Rol inválido"],
+    ["password", requirePassword || u.password ? validatePassword(u.password) : null],
+  ]);
+}
+
+// ── Tickets y solicitudes ────────────────────────────────────────────────────
+
+export interface TicketFields {
+  title: string;
+  description: string;
+  category: string;
+}
+
+function textLength(value: string, label: string, min: number, max: number): string | null {
+  const text = value.trim();
+  if (text.length < min) return `${label}: mínimo ${min} caracteres`;
+  if (text.length > max) return `${label}: máximo ${max} caracteres`;
+  return null;
+}
+
+export function validateTicket(t: TicketFields): FieldErrors<keyof TicketFields> {
+  return collect<keyof TicketFields>([
+    ["title", textLength(t.title, "Título", 3, 120)],
+    ["description", textLength(t.description, "Descripción", 5, 2000)],
+    ["category", t.category in TICKET_CATEGORY_LABELS ? null : "Elegí una categoría"],
+  ]);
+}
+
+export interface ServiceRequestFields {
+  type: string;
+  description: string;
+}
+
+export function validateServiceRequest(
+  s: ServiceRequestFields,
+): FieldErrors<keyof ServiceRequestFields> {
+  return collect<keyof ServiceRequestFields>([
+    ["type", s.type in SERVICE_TYPE_LABELS ? null : "Elegí el tipo de solicitud"],
+    ["description", textLength(s.description, "Descripción", 5, 2000)],
+  ]);
+}
+
+/** Primer error de un formulario, para mostrarlo en un solo mensaje. */
+export function firstError(errors: FieldErrors<string>): string | null {
+  return Object.values(errors)[0] ?? null;
 }

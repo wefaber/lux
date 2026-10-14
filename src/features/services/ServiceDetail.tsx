@@ -4,8 +4,15 @@ import { ArrowLeft, UserCheck } from "lucide-react";
 import { useState } from "react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
-import { gql, formatDate } from "@/lib/utils";
-import { SERVICE_STATUS_CONFIG, SERVICE_TYPE_LABELS, ROUTES } from "@/lib/constants";
+import { gql, formatDate, errorMessage } from "@/lib/utils";
+import {
+  SERVICE_STATUS_CONFIG,
+  SERVICE_TYPE_LABELS,
+  ROUTES,
+  SPRING_TRANSITION,
+  SERVICE_TRANSITIONS,
+  SERVICE_STATUSES_WITH_RESOLUTION,
+} from "@/lib/constants";
 import type { ServiceRequest, ServiceStatus, User } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +28,8 @@ import {
 } from "@/components/ui/select";
 import { CommentThread } from "@/components/comments/CommentThread";
 import { UserSearchSelect, type UserOption } from "@/components/search-pickers";
+import { STAFF_ROLES } from "@/lib/roles";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 const SERVICE_QUERY = `
  query GetServiceRequest($id: ID!) {
@@ -51,7 +60,6 @@ const STAFF_USERS_QUERY = `
  query GetUsers($isActive: Boolean) { users(isActive: $isActive) { id name dni role } }
 `;
 // Estados a los que el staff puede pasar una solicitud
-const NEXT_STATUSES: ServiceStatus[] = ["approved", "in_progress", "completed", "rejected"];
 
 export function ServiceDetail() {
   const { id } = useParams<{ id: string }>(); // Variable constante ID con parametros String
@@ -68,7 +76,7 @@ export function ServiceDetail() {
   // Al recargar se sigue mostrando la solicitud (y el comentario a medio escribir);
   // solo se descarta si es la de otra ruta
   const service = data?.serviceRequest?.id === id ? data?.serviceRequest : null;
-  const canManage = hasRole("root_admin", "admin", "tecnico"); // Verificacion si puede gestionar
+  const canManage = hasRole(...STAFF_ROLES); // Verificacion si puede gestionar
   const [assignError, setAssignError] = useState("");
   // El responsable recien elegido se muestra mientras se recarga la solicitud;
   // deja de valer en cuanto llegan los datos nuevos
@@ -88,7 +96,11 @@ export function ServiceDetail() {
     assignee && !staff.some((u) => u.id === assignee.id) ? [...staff, assignee] : staff;
   const assigneeId =
     pendingAssignee && pendingAssignee.data === data ? pendingAssignee.id : (assignee?.id ?? "");
-  const isClosed = service ? ["completed", "rejected"].includes(service.status) : true;
+  // Los estados a los que puede pasar: los mismos que acepta la API
+  const nextStatuses = service ? SERVICE_TRANSITIONS[service.status] : [];
+  const isClosed = nextStatuses.length === 0;
+  const needsResolution = !!newStatus && SERVICE_STATUSES_WITH_RESOLUTION.includes(newStatus);
+  const [updateError, setUpdateError] = useState("");
 
   const assign = async (mutation: string, variables: Record<string, unknown>) => {
     setAssignError("");
@@ -97,25 +109,24 @@ export function ServiceDetail() {
       refetch();
     } catch (err) {
       setPendingAssignee(null);
-      setAssignError(err instanceof Error ? err.message : "Error al asignar");
+      setAssignError(errorMessage(err, "Error al asignar"));
     }
   };
 
   const handleUpdate = async () => {
     if (!id || !newStatus) return;
     setSaving(true);
+    setUpdateError("");
     try {
       await gql(UPDATE_SERVICE_MUTATION, {
         id,
-        input: {
-          status: newStatus,
-          resolutionText:
-            newStatus === "completed" || newStatus === "rejected" ? resolution : undefined,
-        },
+        input: { status: newStatus, resolutionText: needsResolution ? resolution : undefined },
       });
       refetch();
       setNewStatus("");
       setResolution("");
+    } catch (err) {
+      setUpdateError(errorMessage(err, "No se pudo actualizar el estado"));
     } finally {
       setSaving(false);
     }
@@ -144,23 +155,15 @@ export function ServiceDetail() {
         )}
       </div>
 
-      {assignError && (
-        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
-          {assignError}
-        </div>
-      )}
+      <ErrorAlert>{assignError}</ErrorAlert>
 
-      {error && (
-        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
-          Error: {error}
-        </div>
-      )}
+      {error && <ErrorAlert>Error: {error}</ErrorAlert>}
 
       {service && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          transition={SPRING_TRANSITION}
           // En pantallas anchas los comentarios van al costado, en el espacio que
           // dejaba libre el detalle; en angostas quedan debajo
           className="grid gap-4 xl:grid-cols-[minmax(0,42rem)_minmax(0,1fr)]"
@@ -266,12 +269,15 @@ export function ServiceDetail() {
                 <CardContent className="space-y-4">
                   <div className="space-y-1.5">
                     <Label>Nuevo estado</Label>
-                    <Select value={newStatus} onValueChange={(v) => setNewStatus(v as ServiceStatus)}>
+                    <Select
+                      value={newStatus}
+                      onValueChange={(v) => setNewStatus(v as ServiceStatus)}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar estado..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {NEXT_STATUSES.map((s) => (
+                        {nextStatuses.map((s) => (
                           <SelectItem key={s} value={s}>
                             {SERVICE_STATUS_CONFIG[s].label}
                           </SelectItem>
@@ -279,7 +285,7 @@ export function ServiceDetail() {
                       </SelectContent>
                     </Select>
                   </div>
-                  {(newStatus === "completed" || newStatus === "rejected") && (
+                  {needsResolution && (
                     <div className="space-y-1.5">
                       <Label>Texto de resolución</Label>
                       <Textarea
@@ -290,6 +296,7 @@ export function ServiceDetail() {
                       />
                     </div>
                   )}
+                  <ErrorAlert>{updateError}</ErrorAlert>
                   <div className="flex justify-end">
                     <Button size="sm" onClick={handleUpdate} disabled={saving || !newStatus}>
                       {saving ? "Guardando..." : "Actualizar"}

@@ -5,12 +5,15 @@ import { ArrowLeft, Edit2, Trash2 } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { gql, formatDate } from "@/lib/utils";
-import { ROUTES } from "@/lib/constants";
+import { ROUTES, SPRING_TRANSITION } from "@/lib/constants";
 import type { Component } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { RetireEquipmentDialog } from "./RetireEquipmentDialog";
+import { STAFF_ROLES } from "@/lib/roles";
+import { ErrorAlert } from "@/components/ui/error-alert";
+import { DetailRow } from "@/components/ui/detail-row";
 
 const COMPONENT_QUERY = `
   query GetComponent($id: ID!) {
@@ -19,17 +22,6 @@ const COMPONENT_QUERY = `
     }
   }
 `;
-
-function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
-        {label}
-      </span>
-      <span className="text-sm text-foreground">{value ?? "—"}</span>
-    </div>
-  );
-}
 
 export function ComponentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -42,7 +34,7 @@ export function ComponentDetail() {
   );
 
   const component = data?.component;
-  const canEdit = hasRole("root_admin", "admin", "tecnico") && !component?.deletedAt;
+  const canEdit = hasRole(...STAFF_ROLES) && !component?.deletedAt;
 
   return (
     <div className="space-y-6 max-w-full">
@@ -86,17 +78,13 @@ export function ComponentDetail() {
         />
       )}
 
-      {error && (
-        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
-          Error: {error}
-        </div>
-      )}
+      {error && <ErrorAlert>Error: {error}</ErrorAlert>}
 
       {component && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          transition={SPRING_TRANSITION}
         >
           <Card>
             <CardHeader>

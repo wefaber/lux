@@ -3,8 +3,10 @@ import { motion } from "motion/react";
 import { Lock, Type } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
-import { gql } from "@/lib/utils";
-import { ROLE_LABELS } from "@/lib/constants";
+import { gql, initials, errorMessage } from "@/lib/utils";
+import { ROLE_CONFIG, ROLE_LABELS, SPRING_TRANSITION } from "@/lib/constants";
+import { validatePassword } from "@/lib/validation";
+import type { User } from "@/lib/types";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +17,7 @@ import { ThemeSwitcher } from "@/components/accessibility/ThemeSwitcher";
 import { FontSizeControl } from "@/components/accessibility/FontSizeControl";
 import { HighContrastToggle } from "@/components/accessibility/HighContrastToggle";
 import { Separator } from "@/components/ui/separator";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 const CHANGE_PASSWORD_MUTATION = `
  mutation ChangePassword($currentPassword: String!, $newPassword: String!) {
@@ -22,13 +25,24 @@ const CHANGE_PASSWORD_MUTATION = `
  }
 `;
 
-function initials(name: string): string {
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase();
+// Datos de la cuenta: se muestran a la derecha en escritorio y debajo en el telefono
+function ProfileFields({ user }: { user: User }) {
+  const fields = [
+    { label: "Nombre completo", value: user.name },
+    { label: "Cédula", value: user.dni },
+    { label: "Email", value: user.email },
+    { label: "Rol", value: ROLE_LABELS[user.role] },
+  ];
+  return (
+    <>
+      {fields.map(({ label, value }) => (
+        <div key={label}>
+          <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">{label}</p>
+          <p className="text-sm text-foreground">{value}</p>
+        </div>
+      ))}
+    </>
+  );
 }
 
 export function ProfilePage() {
@@ -51,8 +65,9 @@ export function ProfilePage() {
       setPwError("Las contraseñas no coinciden.");
       return;
     }
-    if (newPw.length < 6) {
-      setPwError("La contraseña debe tener al menos 6 caracteres.");
+    const invalid = validatePassword(newPw);
+    if (invalid) {
+      setPwError(invalid);
       return;
     }
     setSaving(true);
@@ -63,7 +78,7 @@ export function ProfilePage() {
       setNewPw("");
       setConfirmPw("");
     } catch (err) {
-      setPwError(err instanceof Error ? err.message : "Error al cambiar contraseña");
+      setPwError(errorMessage(err, "Error al cambiar contraseña"));
     } finally {
       setSaving(false);
     }
@@ -79,7 +94,7 @@ export function ProfilePage() {
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        transition={SPRING_TRANSITION}
         className="space-y-4"
       >
         <Card>
@@ -93,40 +108,16 @@ export function ProfilePage() {
               <div className="min-w-0 flex-1">
                 <h2 className="text-lg font-semibold text-foreground truncate">{user.name}</h2>
                 <div className="flex items-center gap-2 mt-1">
-                  <Badge color="info">{ROLE_LABELS[user.role]}</Badge>
+                  <Badge color={ROLE_CONFIG[user.role].color}>{ROLE_CONFIG[user.role].label}</Badge>
                   <span className="text-xs text-muted-foreground truncate">{user.email}</span>
                 </div>
               </div>
               <div className="hidden sm:grid grid-cols-2 gap-x-10 gap-y-3 shrink-0">
-                {[
-                  { label: "Nombre completo", value: user.name },
-                  { label: "Cédula", value: user.dni },
-                  { label: "Email", value: user.email },
-                  { label: "Rol", value: ROLE_LABELS[user.role] },
-                ].map(({ label, value }) => (
-                  <div key={label}>
-                    <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
-                      {label}
-                    </p>
-                    <p className="text-sm text-foreground">{value}</p>
-                  </div>
-                ))}
+                <ProfileFields user={user} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-x-10 gap-y-3 mt-5 sm:hidden">
-              {[
-                { label: "Nombre completo", value: user.name },
-                { label: "Cédula", value: user.dni },
-                { label: "Email", value: user.email },
-                { label: "Rol", value: ROLE_LABELS[user.role] },
-              ].map(({ label, value }) => (
-                <div key={label}>
-                  <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
-                    {label}
-                  </p>
-                  <p className="text-sm text-foreground">{value}</p>
-                </div>
-              ))}
+              <ProfileFields user={user} />
             </div>
           </CardContent>
         </Card>
@@ -173,11 +164,7 @@ export function ProfilePage() {
                     required
                   />
                 </div>
-                {pwError && (
-                  <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-                    {pwError}
-                  </div>
-                )}
+                <ErrorAlert>{pwError}</ErrorAlert>
                 {pwSuccess && (
                   <div className="rounded-xl bg-[rgba(52,199,89,0.08)] border border-success-border p-3 text-sm text-success">
                     Contraseña actualizada correctamente.

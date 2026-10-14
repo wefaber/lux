@@ -13,8 +13,8 @@ import {
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotices } from "@/hooks/useNotices";
-import { gql, formatDateTime, cn } from "@/lib/utils";
-import { RESERVATION_STATUS_CONFIG } from "@/lib/constants";
+import { gql, formatDateTime, cn, errorMessage } from "@/lib/utils";
+import { RESERVATION_STATUS_CONFIG, CHANGEABLE_RESERVATION_STATUSES } from "@/lib/constants";
 import { isStaff } from "@/lib/roles";
 import type { Reservation, ReservationStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +38,7 @@ import { Input } from "@/components/ui/input";
 import { Pagination, clampPage } from "@/components/ui/pagination";
 import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
 import { idQuery, pinnedFirst, reservationPin } from "@/lib/pins";
+import { ErrorAlert } from "@/components/ui/error-alert";
 
 const RESERVATIONS_QUERY = `
   query GetReservations($status: String) {
@@ -121,7 +122,7 @@ export function ReservationsPage() {
       await gql(APPROVE_MUTATION, { id });
       refetch();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "No se pudo aprobar la reserva");
+      setActionError(errorMessage(err, "No se pudo aprobar la reserva"));
     } finally {
       setBusyId(null);
     }
@@ -138,7 +139,7 @@ export function ReservationsPage() {
   // Mismas reglas que el servidor: el solicitante cancela lo suyo antes de que
   // empiece; el staff gestiona todo y tambien corta una reserva en curso
   const canCancel = (r: Reservation) =>
-    r.user.id === user?.id && ["pending", "approved"].includes(r.status);
+    r.user.id === user?.id && CHANGEABLE_RESERVATION_STATUSES.includes(r.status);
 
   // Columnas compactas para que la tabla entre entera en escritorio: el ID va
   // debajo del recurso y desde/hasta comparten una columna de horario
@@ -201,11 +202,7 @@ export function ReservationsPage() {
         )}
       </div>
 
-      {(error || actionError) && (
-        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
-          {actionError || `Error: ${error}`}
-        </div>
-      )}
+      {(error || actionError) && <ErrorAlert>{actionError || `Error: ${error}`}</ErrorAlert>}
 
       {isLoading && !data ? (
         <TableSkeleton rows={6} cols={columns.length} />
@@ -227,125 +224,130 @@ export function ReservationsPage() {
           )}
         >
           <TooltipProvider delayDuration={200}>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border">
-                {columns.map((h) => (
-                  <th
-                    key={h}
-                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((r) => {
-                const statusConf = RESERVATION_STATUS_CONFIG[r.status];
-                const busy = busyId === r.id;
-                const ResourceIcon = r.resourceType === "equipment" ? Package : MapPin;
-                const pinState = pin(r);
-                const notice = noticeFor("reservation", r.id);
-                return (
-                  <tr
-                    key={r.id}
-                    className={cn(
-                      "border-b border-border last:border-0 transition-colors",
-                      pinRowClass(pinState),
-                    )}
-                  >
-                    <td className="px-4 py-3 min-w-36 max-w-60 whitespace-normal">
-                      <span className="flex items-start gap-2 text-sm font-semibold text-foreground">
-                        <ResourceIcon className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
-                        {resourceName(r)}
-                      </span>
-                      <span className="block pl-5.5 font-mono text-xs text-muted-foreground">
-                        <PinMark state={pinState} />
-                        {r.id}
-                      </span>
-                    </td>
-                    {staff && (
-                      <td className="px-4 py-3 text-sm text-muted-foreground whitespace-normal">
-                        {r.user.name}
-                      </td>
-                    )}
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      <ReservationSchedule startsAt={r.startsAt} endsAt={r.endsAt} />
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground min-w-36 max-w-64 whitespace-normal">
-                      {r.purpose}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge color={statusConf.color} withDot>
-                        {statusConf.label}
-                      </Badge>
-                      {r.status === "rejected" && r.rejectionReason && (
-                        <p className="text-xs text-muted-foreground mt-1 max-w-48 whitespace-normal">
-                          {r.rejectionReason}
-                        </p>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  {columns.map((h) => (
+                    <th
+                      key={h}
+                      className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((r) => {
+                  const statusConf = RESERVATION_STATUS_CONFIG[r.status];
+                  const busy = busyId === r.id;
+                  const ResourceIcon = r.resourceType === "equipment" ? Package : MapPin;
+                  const pinState = pin(r);
+                  const notice = noticeFor("reservation", r.id);
+                  return (
+                    <tr
+                      key={r.id}
+                      className={cn(
+                        "border-b border-border last:border-0 transition-colors",
+                        pinRowClass(pinState),
                       )}
-                      {/* El aviso de cancelacion ya dice quien la cancelo */}
-                      {r.status === "cancelled" &&
-                        r.cancelledBy &&
-                        notice?.kind !== "cancelled" && (
+                    >
+                      <td className="px-4 py-3 min-w-36 max-w-60 whitespace-normal">
+                        <span className="flex items-start gap-2 text-sm font-semibold text-foreground">
+                          <ResourceIcon className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+                          {resourceName(r)}
+                        </span>
+                        <span className="block pl-5.5 font-mono text-xs text-muted-foreground">
+                          <PinMark state={pinState} />
+                          {r.id}
+                        </span>
+                      </td>
+                      {staff && (
+                        <td className="px-4 py-3 text-sm text-muted-foreground whitespace-normal">
+                          {r.user.name}
+                        </td>
+                      )}
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        <ReservationSchedule startsAt={r.startsAt} endsAt={r.endsAt} />
+                      </td>
+                      <td className="px-4 py-3 text-sm text-foreground min-w-36 max-w-64 whitespace-normal">
+                        {r.purpose}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge color={statusConf.color} withDot>
+                          {statusConf.label}
+                        </Badge>
+                        {r.status === "rejected" && r.rejectionReason && (
                           <p className="text-xs text-muted-foreground mt-1 max-w-48 whitespace-normal">
-                            Cancelada por {r.cancelledBy.name}
+                            {r.rejectionReason}
                           </p>
                         )}
-                      {notice && <NoticeLine notice={notice} />}
-                    </td>
-                    <td className="px-4 py-3">
-                      {/* Acciones con icono y su nombre en el tooltip: entran en una fila
+                        {/* El aviso de cancelacion ya dice quien la cancelo */}
+                        {r.status === "cancelled" &&
+                          r.cancelledBy &&
+                          notice?.kind !== "cancelled" && (
+                            <p className="text-xs text-muted-foreground mt-1 max-w-48 whitespace-normal">
+                              Cancelada por {r.cancelledBy.name}
+                            </p>
+                          )}
+                        {notice && <NoticeLine notice={notice} />}
+                      </td>
+                      <td className="px-4 py-3">
+                        {/* Acciones con icono y su nombre en el tooltip: entran en una fila
                           sin ensanchar la tabla */}
-                      <div className="flex justify-end gap-1">
-                        {staff && r.status === "pending" && (
-                          <>
+                        <div className="flex justify-end gap-1">
+                          {staff && r.status === "pending" && (
+                            <>
+                              <IconAction
+                                label="Aprobar"
+                                icon={CheckCircle}
+                                variant="success"
+                                disabled={busy}
+                                onClick={() => approve(r.id)}
+                              />
+                              <IconAction
+                                label="Rechazar"
+                                icon={XCircle}
+                                variant="destructive"
+                                disabled={busy}
+                                onClick={() => setRejecting(r)}
+                              />
+                            </>
+                          )}
+                          {staff && CHANGEABLE_RESERVATION_STATUSES.includes(r.status) && (
                             <IconAction
-                              label="Aprobar"
-                              icon={CheckCircle}
-                              variant="success"
+                              label="Modificar"
+                              icon={CalendarClock}
                               disabled={busy}
-                              onClick={() => approve(r.id)}
+                              onClick={() => setEditing(r)}
                             />
+                          )}
+                          {canCancel(r) && (
                             <IconAction
-                              label="Rechazar"
-                              icon={XCircle}
+                              label="Cancelar"
+                              icon={Ban}
                               variant="destructive"
                               disabled={busy}
-                              onClick={() => setRejecting(r)}
+                              onClick={() => setCancelling(r)}
                             />
-                          </>
-                        )}
-                        {staff && (r.status === "pending" || r.status === "approved") && (
-                          <IconAction
-                            label="Modificar"
-                            icon={CalendarClock}
-                            disabled={busy}
-                            onClick={() => setEditing(r)}
-                          />
-                        )}
-                        {canCancel(r) && (
-                          <IconAction
-                            label="Cancelar"
-                            icon={Ban}
-                            variant="destructive"
-                            disabled={busy}
-                            onClick={() => setCancelling(r)}
-                          />
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </TooltipProvider>
         </div>
       )}
 
-      <Pagination page={current} pageSize={PAGE_SIZE} total={listed.length} onPageChange={setPage} />
+      <Pagination
+        page={current}
+        pageSize={PAGE_SIZE}
+        total={listed.length}
+        onPageChange={setPage}
+      />
 
       {/* AnimatePresence propio: el alta se puede abrir al entrar (?nuevo=1) */}
       <AnimatePresence>
@@ -432,7 +434,9 @@ function ReservationSchedule({ startsAt, endsAt }: { startsAt: string; endsAt: s
   return (
     <span className="block leading-relaxed">
       {day(start)} {time(start)}
-      <span className="block">→ {day(end)} {time(end)}</span>
+      <span className="block">
+        → {day(end)} {time(end)}
+      </span>
     </span>
   );
 }
@@ -463,7 +467,7 @@ function RejectReservationDialog({ reservation, onDone, onCancel }: ActionDialog
       setReason("");
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo rechazar la reserva");
+      setError(errorMessage(err, "No se pudo rechazar la reserva"));
     } finally {
       setSaving(false);
     }
@@ -489,11 +493,7 @@ function RejectReservationDialog({ reservation, onDone, onCancel }: ActionDialog
             className="h-20"
           />
         </div>
-        {error && (
-          <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+        <ErrorAlert>{error}</ErrorAlert>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={close}>
             Volver
@@ -524,7 +524,7 @@ function CancelReservationDialog({ reservation, onDone, onCancel }: ActionDialog
       await gql(CANCEL_MUTATION, { id: reservation.id });
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo cancelar la reserva");
+      setError(errorMessage(err, "No se pudo cancelar la reserva"));
     } finally {
       setSaving(false);
     }
@@ -540,11 +540,7 @@ function CancelReservationDialog({ reservation, onDone, onCancel }: ActionDialog
               `${resourceName(reservation)}, ${formatDateTime(reservation.startsAt)}. El horario queda libre para otros.`}
           </DialogDescription>
         </DialogHeader>
-        {error && (
-          <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+        <ErrorAlert>{error}</ErrorAlert>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={close}>
             Volver

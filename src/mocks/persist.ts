@@ -12,7 +12,7 @@ import { mockActivityLogs } from "./generators";
 
 // Los datos de prueba viven en memoria: sin esto, al recargar la pagina todo
 // vuelve a como arranca. Se guardan en localStorage despues de cada respuesta
-// del mock y se recuperan al iniciar.
+// del mock (y al salir de la pagina) y se recuperan al iniciar.
 //
 // Subir VERSION cuando cambien los datos de ejemplo o su forma: lo guardado con
 // otra version se descarta y se arranca de cero.
@@ -90,6 +90,22 @@ export function saveMockData(): void {
   } catch {
     // Sin almacenamiento (modo privado, cuota llena): sigue andando en memoria
   }
+}
+
+// Las pestañas del mismo navegador comparten lo guardado pero cada una tiene su
+// copia en memoria. Cuando otra pestaña guarda, esta toma esos datos; si no, al
+// guardar los suyos (al recargar o cambiar de pestaña) pisaria los cambios ajenos.
+export function syncWithOtherTabs(): void {
+  window.addEventListener("storage", (event) => {
+    if (event.key !== STORAGE_KEY) return;
+    if (event.newValue === null) {
+      // Otra pestaña restablecio los datos de ejemplo: esta tambien vuelve a empezar
+      resetting = true;
+      window.location.reload();
+      return;
+    }
+    restoreMockData();
+  });
 }
 
 // Reemplaza el contenido de las colecciones en el lugar: los handlers tienen

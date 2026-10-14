@@ -4,7 +4,7 @@ import { Plus, Search, AlertCircle, Camera } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotices } from "@/hooks/useNotices";
-import { gql, formatDate, truncate, cn } from "@/lib/utils";
+import { gql, formatDate, truncate, cn, errorMessage } from "@/lib/utils";
 import { TICKET_STATUS_CONFIG, TICKET_CATEGORY_LABELS, ROUTES } from "@/lib/constants";
 import type { Ticket, TicketStatus, Product } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +36,9 @@ import { Pagination, clampPage } from "@/components/ui/pagination";
 import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
 import { UnseenDot } from "@/components/ui/unseen-dot";
 import { idQuery, pinnedFirst, ticketPin } from "@/lib/pins";
+import { STAFF_ROLES } from "@/lib/roles";
+import { ErrorAlert } from "@/components/ui/error-alert";
+import { firstError, validateTicket } from "@/lib/validation";
 
 const TICKETS_QUERY = `
   query GetTickets($submittedById: ID) {
@@ -82,8 +85,9 @@ export function TicketList() {
     equipmentId: searchParams.get("equipo") ?? "",
   })); // Settear formulario con variables: title, desc, category, equipmentId
   const [saving, setSaving] = useState(false);
+  const [createError, setCreateError] = useState("");
 
-  const isSolicitante = !hasRole("root_admin", "admin", "tecnico");
+  const isSolicitante = !hasRole(...STAFF_ROLES);
 
   const { data, isLoading, error, refetch } = useAsync<{ tickets: Ticket[] }>(
     () => gql(TICKETS_QUERY, { submittedById: isSolicitante ? user?.id : undefined }),
@@ -95,7 +99,6 @@ export function TicketList() {
   const products = productsData?.products ?? [];
 
   const selectedProduct = products.find((p) => p.id === form.equipmentId) ?? null;
-
 
   const term = search.trim().toLowerCase();
   const idTerm = idQuery(term, "tkt");
@@ -124,7 +127,10 @@ export function TicketList() {
   const visible = tickets.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE);
 
   const handleCreate = async () => {
-    if (!form.title.trim() || !form.description.trim()) return;
+    // Mismas reglas que la API: el error se ve antes de enviar
+    const invalid = firstError(validateTicket(form));
+    setCreateError(invalid ?? "");
+    if (invalid) return;
     setSaving(true);
     try {
       await gql(CREATE_TICKET_MUTATION, {
@@ -138,6 +144,8 @@ export function TicketList() {
       setCreateOpen(false);
       setForm({ title: "", description: "", category: "hardware", equipmentId: "" });
       refetch();
+    } catch (err) {
+      setCreateError(errorMessage(err, "No se pudo crear el ticket"));
     } finally {
       setSaving(false);
     }
@@ -165,7 +173,7 @@ export function TicketList() {
             <Plus className="h-3.5 w-3.5" />
             Nuevo ticket
           </Button>
-          {hasRole("root_admin", "admin", "tecnico") && (
+          {hasRole(...STAFF_ROLES) && (
             <Button variant="secondary" size="sm" asChild className="relative">
               <Link to={`${ROUTES.TICKETS}/ool`}>
                 <AlertCircle className="h-3.5 w-3.5" />
@@ -218,11 +226,7 @@ export function TicketList() {
         </p>
       )}
 
-      {error && (
-        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
-          Error: {error}
-        </div>
-      )}
+      {error && <ErrorAlert>Error: {error}</ErrorAlert>}
 
       {showSkeleton ? (
         <TableSkeleton rows={8} cols={5} />
@@ -303,7 +307,12 @@ export function TicketList() {
         </div>
       )}
 
-      <Pagination page={current} pageSize={PAGE_SIZE} total={tickets.length} onPageChange={setPage} />
+      <Pagination
+        page={current}
+        pageSize={PAGE_SIZE}
+        total={tickets.length}
+        onPageChange={setPage}
+      />
 
       <AnimatePresence>
         {createOpen && (
@@ -381,6 +390,7 @@ export function TicketList() {
                   )}
                 </div>
               </div>
+              <ErrorAlert>{createError}</ErrorAlert>
               <DialogFooter>
                 <Button variant="secondary" onClick={() => setCreateOpen(false)}>
                   Cancelar

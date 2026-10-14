@@ -7,6 +7,7 @@ import { downloadCsv } from "@/lib/csv";
 import {
   DASHBOARD_PERIODS,
   DASHBOARD_PERIOD_LABELS,
+  STATUS_COLOR_VAR,
   TICKET_STATUS_CONFIG,
   type DashboardPeriod,
 } from "@/lib/constants";
@@ -15,7 +16,7 @@ import { LuxPieChart } from "@/components/charts/PieChart";
 import { LuxBarChart } from "@/components/charts/BarChart";
 import { CardSkeleton, ChartSkeleton } from "@/components/skeletons/CardSkeleton";
 import { Button } from "@/components/ui/button";
-import { isStaff } from "@/lib/roles";
+import { isStaff, ADMIN_ROLES } from "@/lib/roles";
 import { MetricCard } from "./MetricCard";
 import { WorkQueue } from "./WorkQueue";
 import { RequesterHome } from "./RequesterHome";
@@ -34,13 +35,6 @@ const DASHBOARD_QUERY = `
  }
  }
 `;
-
-const TICKET_COLORS: Record<TicketStatus, string> = {
-  pending: "rgb(255,159,10)",
-  in_progress: "rgb(0,122,255)",
-  in_resolution: "rgb(255,159,10)",
-  resolved: "rgb(52,199,89)",
-}; // Seteo de colores de tickets
 
 // Vista dividida por rol: el personal del area ve el tablero del sistema y su
 // carga de trabajo; el usuario final, su inicio.
@@ -63,7 +57,7 @@ function StaffDashboard() {
     stats?.ticketsByStatus.map((t) => ({
       name: TICKET_STATUS_CONFIG[t.status as TicketStatus].label,
       value: t.count,
-      color: TICKET_COLORS[t.status as TicketStatus],
+      color: STATUS_COLOR_VAR[TICKET_STATUS_CONFIG[t.status as TicketStatus].color],
     })) ?? []; // Informacion de la grafica Pie
 
   const barData =
@@ -100,9 +94,7 @@ function StaffDashboard() {
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Buenos días, {user?.name.split(" ")[0]}
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Resumen del sistema · ITI CETP
-          </p>
+          <p className="text-sm text-muted-foreground mt-0.5">Resumen del sistema · ITI CETP</p>
         </div>
         <div className="flex gap-2">
           <OptionSelect
@@ -110,9 +102,12 @@ function StaffDashboard() {
             size="sm"
             value={period}
             onValueChange={(v) => setPeriod(v as DashboardPeriod)}
-            options={DASHBOARD_PERIODS.map((p) => ({ value: p, label: DASHBOARD_PERIOD_LABELS[p] }))}
+            options={DASHBOARD_PERIODS.map((p) => ({
+              value: p,
+              label: DASHBOARD_PERIOD_LABELS[p],
+            }))}
           />
-          {hasRole("root_admin", "admin") && (
+          {hasRole(...ADMIN_ROLES) && (
             <Button variant="secondary" size="sm" onClick={handleExport} disabled={!stats}>
               <Download className="h-3.5 w-3.5" />
               Exportar CSV

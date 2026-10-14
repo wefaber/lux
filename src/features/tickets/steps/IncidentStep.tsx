@@ -2,20 +2,10 @@ import type { Ticket } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { TICKET_STATUS_CONFIG, TICKET_CATEGORY_LABELS } from "@/lib/constants";
 import { formatDateTime } from "@/lib/utils";
+import { DetailRow } from "@/components/ui/detail-row";
 
 interface IncidentStepProps {
   ticket: Ticket;
-}
-
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
-        {label}
-      </span>
-      <span className="text-sm text-foreground">{value ?? "—"}</span>
-    </div>
-  );
 }
 
 export function IncidentStep({ ticket }: IncidentStepProps) {
@@ -25,12 +15,15 @@ export function IncidentStep({ ticket }: IncidentStepProps) {
       <div>
         <h2 className="text-base font-semibold text-foreground mb-4">Información del incidente</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Row label="ID" value={<span className="font-mono text-xs">{ticket.id}</span>} />
-          <Row label="Estado" value={<Badge color={statusConf.color}>{statusConf.label}</Badge>} />
-          <Row label="Categoría" value={TICKET_CATEGORY_LABELS[ticket.category]} />
-          <Row label="Solicitante" value={ticket.submittedBy.name} />
-          <Row label="Asignado a" value={ticket.assignedTo?.name ?? "Sin asignar"} />
-          <Row label="Fecha de apertura" value={formatDateTime(ticket.createdAt)} />
+          <DetailRow label="ID" value={<span className="font-mono text-xs">{ticket.id}</span>} />
+          <DetailRow
+            label="Estado"
+            value={<Badge color={statusConf.color}>{statusConf.label}</Badge>}
+          />
+          <DetailRow label="Categoría" value={TICKET_CATEGORY_LABELS[ticket.category]} />
+          <DetailRow label="Solicitante" value={ticket.submittedBy.name} />
+          <DetailRow label="Asignado a" value={ticket.assignedTo?.name ?? "Sin asignar"} />
+          <DetailRow label="Fecha de apertura" value={formatDateTime(ticket.createdAt)} />
         </div>
       </div>
       <div>

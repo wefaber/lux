@@ -14,6 +14,23 @@ import type {
   ReservationStatus,
 } from "./types";
 
+/** Colores de badge que usan las configuraciones de estados, roles, etc. */
+export type StatusColor = "success" | "warning" | "info" | "destructive" | "muted";
+export interface StatusConfig {
+  label: string;
+  color: StatusColor;
+}
+
+// Color de cada tono como variable CSS del tema (sigue el modo oscuro y el alto
+// contraste): para graficos, que no usan las clases de Tailwind
+export const STATUS_COLOR_VAR: Record<StatusColor, string> = {
+  success: "var(--success)",
+  warning: "var(--warning)",
+  info: "var(--info)",
+  destructive: "var(--destructive)",
+  muted: "var(--muted-foreground)",
+};
+
 export const AUTH_STORAGE_KEY = "lux_auth"; // Clave de localStorage compartida entre useAuth y gql()
 
 export const ROUTES = {
@@ -39,10 +56,7 @@ export const ROUTES = {
   SERVER_ERROR: "/500",
 } as const; // Rutas de la aplicacion, constantes y de solo lectura
 
-export const TICKET_STATUS_CONFIG: Record<
-  TicketStatus,
-  { label: string; color: "success" | "warning" | "info" | "destructive" | "muted" }
-> = {
+export const TICKET_STATUS_CONFIG: Record<TicketStatus, StatusConfig> = {
   pending: { label: "Pendiente", color: "warning" },
   in_progress: { label: "En progreso", color: "info" },
   in_resolution: { label: "En resolución", color: "warning" },
@@ -62,20 +76,21 @@ export const TICKET_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
   resolved: ["in_progress"],
 };
 
-export const EQUIPMENT_STATUS_CONFIG: Record<
-  EquipmentStatus,
-  { label: string; color: "success" | "warning" | "info" | "destructive" | "muted" }
-> = {
+export const EQUIPMENT_STATUS_CONFIG: Record<EquipmentStatus, StatusConfig> = {
   available: { label: "Disponible", color: "success" },
   in_use: { label: "En uso", color: "info" },
   in_repair: { label: "En reparación", color: "warning" },
   retired: { label: "Dado de baja", color: "destructive" },
 }; // Configuracion de estados de equipos, con etiquetas y colores para UI
 
-export const LOAN_STATUS_CONFIG: Record<
-  LoanStatus,
-  { label: string; color: "success" | "warning" | "info" | "destructive" | "muted" }
-> = {
+// Con que estado se da de alta un equipo: "en uso" lo pone un prestamo y
+// "dado de baja" la baja logica
+export const INITIAL_EQUIPMENT_STATUSES: EquipmentStatus[] = ["available", "in_repair"];
+
+// Equipos que no se pueden reservar ni elegir para una solicitud nueva
+export const UNRESERVABLE_EQUIPMENT_STATUSES: EquipmentStatus[] = ["in_repair", "retired"];
+
+export const LOAN_STATUS_CONFIG: Record<LoanStatus, StatusConfig> = {
   pending: { label: "Pendiente", color: "warning" },
   approved: { label: "Aprobado", color: "success" },
   rejected: { label: "Rechazado", color: "destructive" },
@@ -84,16 +99,33 @@ export const LOAN_STATUS_CONFIG: Record<
   returned: { label: "Devuelto", color: "muted" },
 }; // Configuracion de estados de prestamos
 
-export const SERVICE_STATUS_CONFIG: Record<
-  ServiceStatus,
-  { label: string; color: "success" | "warning" | "info" | "destructive" | "muted" }
-> = {
+// Entregados y todavia sin devolver: son los que se pueden devolver
+export const RETURNABLE_LOAN_STATUSES: LoanStatus[] = ["active", "overdue"];
+
+export const SERVICE_STATUS_CONFIG: Record<ServiceStatus, StatusConfig> = {
   pending: { label: "Pendiente", color: "warning" },
   approved: { label: "Aprobado", color: "success" },
   in_progress: { label: "En progreso", color: "info" },
   completed: { label: "Completado", color: "success" },
   rejected: { label: "Rechazado", color: "destructive" },
 }; // Configuracion de estado de servicios
+
+// Ciclo de vida de una solicitud: completada y rechazada la cierran
+export const SERVICE_TRANSITIONS: Record<ServiceStatus, ServiceStatus[]> = {
+  pending: ["approved", "in_progress", "completed", "rejected"],
+  approved: ["in_progress", "completed", "rejected"],
+  in_progress: ["completed", "rejected"],
+  completed: [],
+  rejected: [],
+};
+
+// Derivado de SERVICE_TRANSITIONS: cerrada es la que ya no pasa a ningun otro estado
+export const CLOSED_SERVICE_STATUSES = (Object.keys(SERVICE_TRANSITIONS) as ServiceStatus[]).filter(
+  (s) => SERVICE_TRANSITIONS[s].length === 0,
+);
+
+// Estados de una solicitud que exigen texto de resolucion (o motivo del rechazo)
+export const SERVICE_STATUSES_WITH_RESOLUTION: ServiceStatus[] = ["completed", "rejected"];
 
 export const DASHBOARD_PERIODS = ["7d", "30d", "90d"] as const;
 export type DashboardPeriod = (typeof DASHBOARD_PERIODS)[number];
@@ -133,10 +165,7 @@ export const LOCATION_KIND_LETTER: Record<LocationKind, string> = {
   other: "O",
 };
 
-export const RESERVATION_STATUS_CONFIG: Record<
-  ReservationStatus,
-  { label: string; color: "success" | "warning" | "info" | "destructive" | "muted" }
-> = {
+export const RESERVATION_STATUS_CONFIG: Record<ReservationStatus, StatusConfig> = {
   pending: { label: "Pendiente", color: "warning" },
   approved: { label: "Aprobada", color: "success" },
   rejected: { label: "Rechazada", color: "destructive" },
@@ -144,6 +173,9 @@ export const RESERVATION_STATUS_CONFIG: Record<
   completed: { label: "Finalizada", color: "muted" },
   cancelled: { label: "Cancelada", color: "muted" },
 }; // Configuracion de estados de reservas
+
+// Las que todavia no empezaron ni se cerraron: se pueden modificar o cancelar
+export const CHANGEABLE_RESERVATION_STATUSES: ReservationStatus[] = ["pending", "approved"];
 
 export const RESERVATION_RESOURCE_LABELS: Record<ReservationResource, string> = {
   equipment: "Equipo",
@@ -184,12 +216,21 @@ export const INTERVENTION_TYPE_LABELS: Record<InterventionType, string> = {
   other: "Otra",
 }; // Labels de tipos de intervencion
 
-export const ROLE_LABELS: Record<UserRole, string> = {
-  root_admin: "Super Admin",
-  admin: "Administrador",
-  tecnico: "Técnico",
-  solicitante: "Solicitante",
-}; // Labels de roles
+export const ROLE_CONFIG: Record<UserRole, StatusConfig> = {
+  root_admin: { label: "Super Admin", color: "destructive" },
+  admin: { label: "Administrador", color: "warning" },
+  tecnico: { label: "Técnico", color: "info" },
+  solicitante: { label: "Solicitante", color: "muted" },
+}; // Etiqueta y color de cada rol
+
+export const ROLE_LABELS = Object.fromEntries(
+  Object.entries(ROLE_CONFIG).map(([role, { label }]) => [role, label]),
+) as Record<UserRole, string>; // Derivado de ROLE_CONFIG: un solo lugar para los nombres
+
+export const USER_STATUS_CONFIG: Record<"active" | "inactive", StatusConfig> = {
+  active: { label: "Activo", color: "success" },
+  inactive: { label: "Inactivo", color: "destructive" },
+}; // Estado de la cuenta de un usuario
 
 export const KIND_MACHINE_CODE: Record<string, string> = {
   AIO: "PC",
@@ -237,5 +278,5 @@ export const PAGE_TRANSITION = {
   initial: { opacity: 0, y: 10 },
   animate: { opacity: 1, y: 0 },
   exit: { opacity: 0, y: -10 },
-  transition: { type: "spring" as const, stiffness: 300, damping: 30 },
+  transition: SPRING_TRANSITION,
 };

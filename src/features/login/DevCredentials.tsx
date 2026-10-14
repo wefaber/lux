@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { FlaskConical, PenLine, X } from "lucide-react";
-import { Badge, type BadgeColor } from "@/components/ui/badge";
-import { ROLE_LABELS, SPRING_TRANSITION } from "@/lib/constants";
+import { Badge } from "@/components/ui/badge";
+import { ROLE_CONFIG, SPRING_TRANSITION, USER_STATUS_CONFIG } from "@/lib/constants";
+import { USER_ROLES } from "@/lib/roles";
 import { mockPasswords, mockUsers } from "@/mocks/data/users";
 import type { UserRole } from "@/lib/types";
 
@@ -14,15 +15,6 @@ interface MockCredential {
   role: UserRole;
   isActive: boolean;
 } // Usuario de prueba con su contraseña resuelta desde el mock
-
-const ROLE_ORDER: UserRole[] = ["root_admin", "admin", "tecnico", "solicitante"];
-
-const ROLE_BADGE: Record<UserRole, BadgeColor> = {
-  root_admin: "destructive",
-  admin: "info",
-  tecnico: "warning",
-  solicitante: "success",
-}; // Color de badge por rol
 
 // Los cambios hechos con los mocks se guardan en el navegador (mocks/persist):
 // esto los borra y vuelve a los datos de ejemplo. Import dinamico para no
@@ -37,7 +29,7 @@ async function resetMockData() {
 // Se resuelve dentro del componente: en el modulo se evaluaria siempre y los
 // mocks quedarian dentro del bundle de produccion.
 function groupByRole(showAll: boolean) {
-  return ROLE_ORDER.map((role) => {
+  return USER_ROLES.map((role) => {
     const users: MockCredential[] = mockUsers
       .filter((u) => u.role === role)
       .map((u) => ({
@@ -72,7 +64,7 @@ function CredentialRow({ credential, onFill, onLogin }: CredentialRowProps) {
           <span className="truncate text-xs font-semibold text-foreground">{name}</span>
           {!isActive && (
             <Badge color="muted" className="shrink-0 px-1.5 py-0 text-[10px]">
-              Inactivo
+              {USER_STATUS_CONFIG.inactive.label}
             </Badge>
           )}
         </span>
@@ -124,7 +116,9 @@ export function DevCredentials({ onFill, onLogin }: DevCredentialsProps) {
             <div className="flex items-start justify-between gap-2">
               <div>
                 <p className="text-sm font-semibold text-foreground">Credenciales de prueba</p>
-                <p className="text-[11px] text-muted-foreground">Datos de prueba · credenciales públicas</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Datos de prueba · credenciales públicas
+                </p>
               </div>
               <button
                 type="button"
@@ -140,7 +134,7 @@ export function DevCredentials({ onFill, onLogin }: DevCredentialsProps) {
               {groups.map(({ role, users, total }) => (
                 <section key={role} className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <Badge color={ROLE_BADGE[role]}>{ROLE_LABELS[role]}</Badge>
+                    <Badge color={ROLE_CONFIG[role].color}>{ROLE_CONFIG[role].label}</Badge>
                     <span className="text-[11px] text-muted-foreground">
                       {showAll ? `${total} usuarios` : `1 de ${total}`}
                     </span>

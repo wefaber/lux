@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { Outlet, NavLink, Link, useNavigate } from "react-router-dom";
 import { Users, Shield, ActivitySquare, ArrowLeft, Zap, BarChart3 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, initials } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
 import { ThemeSwitcher } from "@/components/accessibility/ThemeSwitcher";
 import { useAuth } from "@/hooks/useAuth";
@@ -15,15 +15,6 @@ const adminNav = [
   { icon: ActivitySquare, label: "Registros de Actividad", to: ROUTES.ADMIN_LOGS },
   { icon: BarChart3, label: "Reportes", to: ROUTES.ADMIN_REPORTS },
 ];
-
-function initials(name: string): string {
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase();
-} // Iniciales del nombre
 
 export function AdminLayout() {
   const { user } = useAuth();
@@ -103,7 +94,9 @@ export function AdminLayout() {
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
-            <h1 className="text-sm font-semibold text-foreground truncate">Panel de Administración</h1>
+            <h1 className="text-sm font-semibold text-foreground truncate">
+              Panel de Administración
+            </h1>
           </div>
           <ThemeSwitcher />
         </header>
