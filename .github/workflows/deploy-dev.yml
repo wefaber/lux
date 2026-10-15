@@ -1,0 +1,63 @@
+name: Deploy dev preview
+
+# Cada push a dev actualiza https://dev.eternum.lat sin downtime: el script
+# clona esa rama en el slot idle, buildea, corre migraciones, levanta la API de
+# ese slot, espera /ready y recien ahi mueve el symlink y el upstream. Si la
+# verificacion publica falla, vuelve solo al slot anterior y el run queda en
+# rojo. El slot viejo nunca se apaga, asi que el rollback es un switch.
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+# Un deploy a la vez sobre el preview: si entra otro push mientras corre, se
+# cancela el anterior en vez de que dos runs se peleen los slots.
+concurrency:
+  group: deploy-lux-dev
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    timeout-minutes: 20
+    env:
+      SITE: https://dev.eternum.lat
+    steps:
+      - name: Estado antes del deploy
+        run: /home/hermes/deploy/lux-dev.sh --status || true
+
+      # El modo (mocks vs Postgres real) lo decide el propio script: si la rama
+      # trae api/, despliega la API y sirve datos reales; si no, publica el SPA
+      # con MSW y el banner del sitio aclara que los datos son simulados.
+      - name: Deploy blue/green
+        run: /home/hermes/deploy/lux-dev.sh
+
+      # El script ya verifica contra la URL publica; esto cierra el circulo del
+      # lado del workflow: lo que sirve dev.eternum.lat tiene que ser el commit
+      # de ESTE push, no el anterior.
+      - name: Verificar que el preview sirve este commit
+        env:
+          SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          corto="${SHA:0:7}"
+          publicado=$(curl -4 -s -m 30 "$SITE/BUILD_INFO" | awk '{print $1}')
+          echo "build publicado: ${publicado:-<sin respuesta>} | esperado: $corto"
+          if [ "$publicado" != "$corto" ]; then
+            echo "::error::$SITE no sirve el commit $corto: responde '${publicado:-nada}'."
+            exit 1
+          fi
+          slot=$(readlink -f /var/www/lux-dev.eternum.lat/current | xargs basename)
+          upstream=$(grep -o 'server 127.0.0.1:[0-9]*' /etc/nginx/conf.d/lux-dev-upstream.conf | awk '{print $2}')
+          {
+            echo "### Preview actualizado"
+            echo ""
+            echo "| dato | valor |"
+            echo "|---|---|"
+            echo "| URL | $SITE |"
+            echo "| commit | \`$corto\` ($ACTOR) |"
+            echo "| slot | $slot |"
+            echo "| API | $upstream |"
+            echo "| BUILD_INFO | $publicado |"
+          } >> "$GITHUB_STEP_SUMMARY"
