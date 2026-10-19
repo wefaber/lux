@@ -25,9 +25,11 @@ jobs:
         run: |
           find scripts ops -name '*.sh' -print0 | xargs -0 -n1 bash -n
           find scripts ops -name '*.sh' -print0 | xargs -0 shellcheck -x -S style
+      # Los scripts de administracion exigen root (lib/comun.sh); las pruebas
+      # usan stubs, asi que correr como root no toca el runner.
       - name: Pruebas bats
         working-directory: scripts/tests
-        run: bats bats/*.bats
+        run: sudo env "PATH=$PATH" bats bats/*.bats
 
   compose:
     runs-on: ubuntu-latest
