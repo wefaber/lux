@@ -218,7 +218,6 @@ export const adminCases: TestCase[] = [
     precondition: "Sesión de solicitante.",
     steps: ["Crear una incidencia", "Buscarla en el registro de auditoría como raíz"],
     expected: "Existe un registro con entidad, identificador, acción, usuario y momento.",
-    knownGap: "Ninguna mutación escribe en activity_logs; el registro solo muestra datos de ejemplo",
     api: async (t) => {
       const id = await t.newTicket();
       const d = await (await t.as("root_admin")).ok<{ activityLogs: { entityId: string }[] }>(LOGS, {});

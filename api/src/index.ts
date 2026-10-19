@@ -1,13 +1,12 @@
 import { Elysia } from "elysia";
 import { GraphQLError, NoSchemaIntrospectionCustomRule } from "graphql";
 import { createSchema, createYoga, type Plugin } from "graphql-yoga";
-import { bearerFrom, verifyToken } from "./auth";
+import { createContext } from "./context";
 import { pool } from "./db/client";
 import { loadEnv, serverHost, serverPort } from "./env";
 import { classifyUnexpected, ERROR_STATUS } from "./errors";
 import { resolvers } from "./graphql/resolvers";
 import { typeDefs } from "./graphql/schema";
-import { loadState } from "./state";
 
 loadEnv();
 
@@ -73,13 +72,7 @@ const yoga = createYoga({
   },
   // El frontend manda el JWT en `Authorization: Bearer`; el token identifica al
   // usuario y de aca sale `caller` para las reglas de permisos.
-  context: async ({ request }) => {
-    const token = bearerFrom(request.headers.get("authorization"));
-    const payload = token ? await verifyToken(token) : null;
-    const state = await loadState();
-    const found = payload ? (state.usersById.get(payload.sub) ?? null) : null;
-    return { state, caller: found && found.isActive ? found : null };
-  },
+  context: ({ request, ip }: { request: Request; ip: string }) => createContext(request, ip),
 });
 
 // Tablas que tienen que existir para que /ready de 200: si faltan, no se aplicaron
@@ -129,7 +122,9 @@ const app = new Elysia()
     if (!ok) set.status = 503;
     return { status: ok ? "ready" : "not-ready", ok };
   })
-  .all("/graphql", ({ request }) => yoga.fetch(request));
+  .all("/graphql", ({ request, server }) =>
+    yoga.fetch(request, { ip: server?.requestIP(request)?.address ?? "unknown" }),
+  );
 
 app.listen({ hostname: serverHost(), port: serverPort() });
 

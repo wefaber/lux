@@ -10,20 +10,33 @@ export interface TokenPayload {
   role: string;
 }
 
+/** Token ya verificado: ademas del usuario trae su id (`jti`) y vencimiento (`exp`, segundos). */
+export interface VerifiedToken extends TokenPayload {
+  jti: string;
+  exp: number;
+}
+
 export async function signToken(payload: TokenPayload): Promise<string> {
   return new SignJWT({ role: payload.role })
     .setProtectedHeader({ alg: ALG })
     .setSubject(payload.sub)
     .setIssuedAt()
+    .setJti(crypto.randomUUID())
     .setExpirationTime("12h")
     .sign(key());
 }
 
-export async function verifyToken(token: string): Promise<TokenPayload | null> {
+export async function verifyToken(token: string): Promise<VerifiedToken | null> {
   try {
     const { payload } = await jwtVerify(token, key(), { algorithms: [ALG] });
-    if (typeof payload.sub !== "string") return null;
-    return { sub: payload.sub, role: typeof payload.role === "string" ? payload.role : "" };
+    if (typeof payload.sub !== "string" || typeof payload.jti !== "string") return null;
+    if (typeof payload.exp !== "number") return null;
+    return {
+      sub: payload.sub,
+      role: typeof payload.role === "string" ? payload.role : "",
+      jti: payload.jti,
+      exp: payload.exp,
+    };
   } catch {
     return null;
   }

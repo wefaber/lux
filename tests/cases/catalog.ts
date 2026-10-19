@@ -33,5 +33,5 @@ export const CATALOG: CuInfo[] = [
   { id: "CU-27", name: "Expirar sesión", actor: "Reloj", rf: ["RF-AUTH-003"], status: "parcial", note: "El token vence a las 12 h fijas, no por inactividad" },
   { id: "CU-V", name: "Verificar disponibilidad", actor: "(incluido)", rf: ["RF-PRES-002", "RF-MANT-003"], status: "implementado" },
   { id: "CU-N", name: "Notificar acuse", actor: "(incluido)", rf: ["RF-TKT-001", "RF-SERV-002"], status: "implementado" },
-  { id: "CU-R", name: "Registrar en auditoría", actor: "(incluido)", rf: ["RF-TRZ-001", "RF-INV-006"], status: "no implementado", note: "Ninguna mutación escribe en activity_logs" },
+  { id: "CU-R", name: "Registrar en auditoría", actor: "(incluido)", rf: ["RF-TRZ-001", "RF-INV-006"], status: "implementado", note: "Toda mutación inserta una fila en activity_logs dentro de su transacción" },
 ];

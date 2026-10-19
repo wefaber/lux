@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, gte, lte } from "drizzle-orm";
 import type { InterventionFields, LocationFields } from "@/lib/validation";
 import {
   locationCode,
@@ -40,6 +40,7 @@ import type {
 } from "@/lib/types";
 import { ASSIGNABLE_ROLES, canEditUser, canToggleUserActive } from "@/lib/roles";
 import { signToken } from "../auth";
+import type { Ctx } from "../context";
 import {
   conflict,
   FORBIDDEN_MESSAGE,
@@ -52,11 +53,9 @@ import {
 import { db } from "../db/client";
 import * as t from "../db/schema";
 import { toUser, type State } from "../state";
+import { withState, withTransaction, type AuditSpec, type Resolver } from "./wrap";
 
-export interface Ctx {
-  state: State;
-  caller: User | null;
-}
+export type { Ctx };
 
 const STAFF_ROLES: UserRole[] = ["root_admin", "admin", "tecnico"];
 const ELEVATED_ROLES: UserRole[] = ["root_admin", "admin"];
@@ -440,6 +439,9 @@ const PERIOD_BUCKETS: Record<DashboardPeriod, { days: number; bucketDays: number
 
 const nowIso = () => new Date().toISOString();
 
+// Tope de filas de una consulta del registro de actividad.
+const ACTIVITY_LOG_LIMIT = 1000;
+
 // ── Queries ──────────────────────────────────────────────────────────────────
 
 const Query = {
@@ -711,18 +713,26 @@ const Query = {
     return reports;
   },
 
-  activityLogs: (
+  // Lee directo de la tabla (parametrizado, mas nuevos primero, tope de filas):
+  // el log crece con cada mutacion y no entra en la foto que se carga por request.
+  activityLogs: async (
     _p: unknown,
     args: { userId?: string; operation?: string; startDate?: string; endDate?: string },
     ctx: Ctx,
   ) => {
     requireRole(ctx, ELEVATED_ROLES);
-    let logs = [...ctx.state.activityLogs];
-    if (args.userId) logs = logs.filter((l) => l.userId === args.userId);
-    if (args.operation) logs = logs.filter((l) => l.operation === args.operation);
-    if (args.startDate) logs = logs.filter((l) => l.timestamp >= args.startDate!);
-    if (args.endDate) logs = logs.filter((l) => l.timestamp <= args.endDate!);
-    return logs;
+    const filters = [
+      args.userId ? eq(t.activityLogs.userId, args.userId) : undefined,
+      args.operation ? eq(t.activityLogs.operation, args.operation) : undefined,
+      args.startDate ? gte(t.activityLogs.timestamp, args.startDate) : undefined,
+      args.endDate ? lte(t.activityLogs.timestamp, args.endDate) : undefined,
+    ].filter((f) => f !== undefined);
+    return db
+      .select()
+      .from(t.activityLogs)
+      .where(and(...filters))
+      .orderBy(desc(t.activityLogs.timestamp))
+      .limit(ACTIVITY_LOG_LIMIT);
   },
 
   locations: (_p: unknown, _a: unknown, ctx: Ctx) => {
@@ -2132,4 +2142,68 @@ const Mutation = {
   },
 };
 
-export const resolvers = { Query, Mutation };
+// Que entidad y que dato deja cada mutacion en `activity_logs`. Al estar tipado
+// por `keyof typeof Mutation`, agregar una mutacion sin su fila de auditoria no
+// compila.
+const reason = (args: { reason?: string }) => (args.reason ? `Motivo: ${args.reason.trim()}` : null);
+
+const AUDIT: Record<keyof typeof Mutation, AuditSpec> = {
+  createUser: { entity: "User" },
+  updateUser: { entity: "User" },
+  deleteUser: { entity: "User", details: () => "Baja lógica (is_active = false)" },
+  createProduct: { entity: "Product" },
+  updateProduct: { entity: "Product" },
+  softDeleteProduct: { entity: "Product", details: () => "Baja lógica (deleted_at)" },
+  createComponent: { entity: "Component" },
+  updateComponent: { entity: "Component" },
+  softDeleteComponent: { entity: "Component", details: () => "Baja lógica (deleted_at)" },
+  createTicket: { entity: "Ticket" },
+  updateTicket: { entity: "Ticket" },
+  assignTicket: { entity: "Ticket", details: (a) => `Asignado a ${a.technicianId}` },
+  claimTicket: { entity: "Ticket" },
+  completeTicket: { entity: "Ticket", details: (a) => `Corregido: ${a.input.corrected ? "sí" : "no"}` },
+  changeTicketStatus: { entity: "Ticket", details: (a) => `Estado: ${a.status}` },
+  createLoan: { entity: "Loan", details: (a) => `Equipo ${a.input.equipmentId}` },
+  approveLoan: { entity: "Loan" },
+  rejectLoan: { entity: "Loan", details: reason },
+  deliverLoan: { entity: "Loan" },
+  returnLoan: { entity: "Loan", details: (a) => (a.damaged ? "Devuelto con daños" : "Devuelto sin daños") },
+  createServiceRequest: { entity: "ServiceRequest" },
+  updateServiceRequest: { entity: "ServiceRequest" },
+  claimServiceRequest: { entity: "ServiceRequest" },
+  assignServiceRequest: { entity: "ServiceRequest", details: (a) => `Asignado a ${a.technicianId}` },
+  changePassword: { entity: "User", id: (_a, _r, ctx) => ctx.caller?.id ?? "-", details: () => null },
+  createLocation: { entity: "Location" },
+  updateLocation: { entity: "Location" },
+  softDeleteLocation: { entity: "Location", details: () => "Baja lógica (deleted_at)" },
+  createIntervention: { entity: "Intervention" },
+  updateIntervention: { entity: "Intervention" },
+  createComment: { entity: "Comment", details: (a) => `En ${a.input.entityType} ${a.input.entityId}` },
+  createReservation: { entity: "Reservation" },
+  approveReservation: { entity: "Reservation" },
+  rejectReservation: { entity: "Reservation", details: reason },
+  updateReservation: { entity: "Reservation" },
+  cancelReservation: { entity: "Reservation" },
+  acknowledgeNotice: { entity: "Notice" },
+  markPendingSeen: { entity: "PendingSeen", id: (a) => a.section, details: () => null },
+};
+
+// `login` y `me` no necesitan la foto de la base; `activityLogs` consulta la
+// tabla directo. Las demas queries cargan el estado una vez por request.
+const STATELESS_QUERIES = new Set<keyof typeof Query>(["login", "me", "activityLogs"]);
+
+function entries<T extends object>(source: T): Array<[keyof T & string, Resolver]> {
+  return Object.entries(source) as Array<[keyof T & string, Resolver]>;
+}
+
+export const resolvers = {
+  Query: Object.fromEntries(
+    entries(Query).map(([name, fn]) => [
+      name,
+      STATELESS_QUERIES.has(name) ? fn : withState(fn),
+    ]),
+  ),
+  Mutation: Object.fromEntries(
+    entries(Mutation).map(([name, fn]) => [name, withTransaction(name, fn, AUDIT[name])]),
+  ),
+};
