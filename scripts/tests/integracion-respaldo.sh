@@ -57,7 +57,8 @@ echo "[127.0.0.1]:$PUERTO $(cut -d' ' -f1,2 "$T/hostkey.pub")" > "$T/known_hosts
 # --- Servidor: directorios y authorized_keys con las funciones reales ----------------
 export SGRSI_LOG="$T/servidor.log" SGRSI_LOCK_DIR="$T/lock" SGRSI_SIN_CONFIRMACION=true
 export SGRSI_RESP_BASE="$T/srv" SGRSI_RESP_HOME="$T/home" SGRSI_RESP_USUARIO=root SGRSI_RESP_GRUPO=root
-export SGRSI_PROD_IP=127.0.0.1 SGRSI_RESP_ESTABLE_SEGUNDOS=0 SGRSI_RRSYNC="$(command -v rrsync)"
+SGRSI_RRSYNC="$(command -v rrsync)"
+export SGRSI_PROD_IP=127.0.0.1 SGRSI_RESP_ESTABLE_SEGUNDOS=0 SGRSI_RRSYNC
 mkdir -p "$T/srv"/{incoming,almacen,rechazados}
 chmod 700 "$T/srv"/incoming
 

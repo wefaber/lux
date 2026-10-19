@@ -27,8 +27,10 @@ readonly SGRSI_COMUN_CARGADO=1
 # que en un clon de desarrollo.
 SGRSI_RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly SGRSI_RAIZ
+export SGRSI_RAIZ
 
 # Codigos de salida compartidos (convencion sysexits.h donde aplica).
+# shellcheck disable=SC2034  # parte de la convencion; lo usan los modulos
 readonly SGRSI_EX_USO=2        # uso incorrecto del comando
 readonly SGRSI_EX_TEMP=75      # fallo temporal: reintentar mas tarde (destino remoto caido)
 readonly SGRSI_EX_CONFIG=78    # configuracion ausente o invalida

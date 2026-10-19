@@ -105,6 +105,7 @@ rr_puerto_abierto() {
 rr_rsync() {
     local llave="$1"
     shift
+    # shellcheck disable=SC2054  # las comas de --chmod son parte del valor
     local -a opciones=(-rt --partial --partial-dir=.rsync-partial --timeout=60
         --chmod=Du=rwx,Dg=,Do=,Fu=rw,Fg=,Fo=
         -e "$(rr_ssh "$llave")")
@@ -189,7 +190,8 @@ rr_verificar_destino() {
     fi
     if [[ -n "$diferencias" ]]; then
         log ERROR "Verificacion por checksum: la corrida $id difiere en $host:"
-        echo "$diferencias" | sed 's/^/    /' >&2
+        # shellcheck disable=SC2001  # prefijo por linea
+        sed 's/^/    /' <<<"$diferencias" >&2
         return 1
     fi
     log INFO "Corrida $id verificada por checksum en $host (sin diferencias)."

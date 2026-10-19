@@ -94,7 +94,7 @@ afirmar_no_contiene() {
     fi
 }
 
-# shellcheck disable=SC2317  # se invoca desde el trap EXIT
+# shellcheck disable=SC2317,SC2329  # se invoca desde el trap EXIT
 limpiar() {
     userdel --remove "$U1" &>/dev/null || true
     userdel --remove "$U2" &>/dev/null || true

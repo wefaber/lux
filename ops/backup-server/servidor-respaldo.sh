@@ -358,6 +358,7 @@ probar_restauracion() {
     trap "podman stop -t 2 '$nombre' >/dev/null 2>&1 || true" RETURN
 
     local intento
+    # shellcheck disable=SC2034  # solo cuenta los intentos
     for intento in $(seq 1 30); do
         podman exec "$nombre" pg_isready -U postgres -d lux_restauracion >/dev/null 2>&1 && break
         sleep 1

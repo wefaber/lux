@@ -6,6 +6,7 @@
 # en $STUB_LOG. Lo que una prueba de "dry-run" afirma es, justamente, que el
 # registro quede vacio.
 
+# shellcheck disable=SC2034  # las usan los archivos .bats que cargan este helper
 SCRIPTS_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 RAIZ_DIR="$(dirname "$SCRIPTS_DIR")"
 ADMIN="$SCRIPTS_DIR/admin.sh"

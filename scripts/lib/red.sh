@@ -308,6 +308,7 @@ red_recargar() {
     ${SGRSI_SLEEP:-sleep} 5
 
     local intento
+    # shellcheck disable=SC2034  # solo cuenta los intentos
     for intento in 1 2 3 4; do
         if red_ping "$SGRSI_RED_GATEWAY"; then
             log INFO "Gateway $SGRSI_RED_GATEWAY alcanzable con la nueva configuracion."

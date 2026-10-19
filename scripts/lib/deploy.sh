@@ -30,7 +30,7 @@ Subcomandos:
   ps                     Contenedores del stack
   estado                 ps + salud de cada contenedor + respuesta de /ready
   logs [servicio] [n]    Ultimas n lineas (db, api, web; sin servicio: todos)
-  escalar <n>            Ajusta las replicas de la API (1 a 4)
+  escalar <n>            Ajusta las replicas de la API (1 a 4; queda en LUX_API_REPLICAS del env)
   rollback               Vuelve a las imagenes etiquetadas "previous"
   seed-demo              Carga los datos de ejemplo (BORRA las tablas; pide confirmacion)
   unidad                 Instala la unidad systemd de usuario que levanta el stack al arrancar
@@ -249,9 +249,28 @@ deploy_logs() {
     deploy_compose logs --tail "$lineas" ${servicio:+"$servicio"}
 }
 
+# deploy_fijar_variable <archivo> <VAR> <valor>
+# Deja VAR=valor en el archivo de entorno (reemplaza la linea si existe). Se
+# escribe en el archivo y no solo en el entorno del proceso para que el valor
+# sobreviva a un reinicio del servidor y no dependa de como cada version de
+# compose prioriza entorno y --env-file.
+deploy_fijar_variable() {
+    local archivo="$1" var="$2" valor="$3"
+    if es_dry_run; then
+        log INFO "[dry-run] fijar $var=$valor en $archivo"
+        return 0
+    fi
+    if grep -q "^${var}=" "$archivo"; then
+        sed -i "s/^${var}=.*/${var}=${valor}/" "$archivo"
+    else
+        printf '%s=%s\n' "$var" "$valor" >> "$archivo"
+    fi
+}
+
 # deploy_escalar <n>
-# Replicas de la API. El contenedor web resuelve `api` por DNS en cada pedido
-# (resolver dinamico en default.conf.template), de modo que reparte entre ellas.
+# Replicas de la API por LUX_API_REPLICAS (deploy.replicas del compose). El
+# contenedor web resuelve `api` por DNS en cada pedido (resolver dinamico en
+# default.conf.template), de modo que reparte entre ellas.
 deploy_escalar() {
     local n="${1:-}"
     validar_no_vacio "$n" "replicas" || return 1
@@ -260,8 +279,9 @@ deploy_escalar() {
         return 1
     fi
     deploy_preflight || return $?
-    ejecutar deploy_compose up -d --no-recreate --scale "api=$n"
-    log INFO "API escalada a $n replica(s)."
+    deploy_fijar_variable "$SGRSI_STACK_ENV" LUX_API_REPLICAS "$n" || return 1
+    ejecutar deploy_compose up -d
+    log INFO "API escalada a $n replica(s) (LUX_API_REPLICAS=$n queda en $SGRSI_STACK_ENV)."
 }
 
 deploy_seed_demo() {

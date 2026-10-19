@@ -1,0 +1,3 @@
+# Shellcheck para scripts/ y ops/: sigue los `source` relativos al archivo.
+external-sources=true
+source-path=SCRIPTDIR

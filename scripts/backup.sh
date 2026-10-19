@@ -244,6 +244,11 @@ escribir_sumas() {
 # intentan igual (un servidor con el dump bien y la configuracion mal igual
 # merece su dump), y el resultado final es error si fallo cualquiera.
 respaldar() {
+    if es_dry_run; then
+        log INFO "[dry-run] Se respaldaria: dump de '$DB_NAME' (modo $(db_modo_efectivo)), configuracion ($RUTAS_ARCHIVOS),"
+        log INFO "[dry-run] secretos $([[ -n "$CLAVE_ARCHIVO" ]] && echo 'cifrados con gpg' || echo 'NO (sin SGRSI_BACKUP_CLAVE_ARCHIVO)') y sumas SHA-256, en $BACKUP_DIR."
+        return 0
+    fi
     adquirir_lock backup || exit $?
     requerir_herramienta tar coreutils || exit 1
     preparar_directorios || exit 1
@@ -275,6 +280,10 @@ limpiar_antiguos() {
     borrar="$(ids_existentes | rotacion_ids_a_borrar "$hoy" "$RETENCION_DIARIOS" "$RETENCION_SEMANAS")"
     while IFS= read -r id; do
         [[ -z "$id" ]] && continue
+        if es_dry_run; then
+            log INFO "[dry-run] Rotacion: se eliminaria la corrida $id"
+            continue
+        fi
         rm -f -- "$BACKUP_DIR/lux_${id}."* "$BACKUP_DIR/archivos_${id}."* "$BACKUP_DIR/secretos_${id}."*
         eliminados=$((eliminados + 1))
     done <<<"$borrar"
@@ -370,6 +379,11 @@ restaurar() {
         log INFO "Suma SHA-256 verificada antes de restaurar."
     fi
 
+    if es_dry_run; then
+        log INFO "[dry-run] Se restauraria '$archivo' sobre la base '$DB_NAME' (modo $(db_modo_efectivo)). Las comprobaciones previas pasaron."
+        return 0
+    fi
+
     confirmar "Restaurar '$archivo' sobre la base '$DB_NAME', sobreescribiendo su contenido actual" || {
         log INFO "Restauracion cancelada."
         return 0
@@ -405,6 +419,10 @@ restaurar_archivos() {
         log ERROR "No se restaura sobre '/'. Indicar un directorio de prueba."
         return 1
     fi
+    if es_dry_run; then
+        log INFO "[dry-run] Se extraeria '$archivo' en '$destino'."
+        return 0
+    fi
     mkdir -p "$destino"
 
     if [[ "$archivo" == *.gpg ]]; then
@@ -438,6 +456,11 @@ verificar() {
     if [[ ! -f "$archivo" ]]; then
         log ERROR "El archivo '$archivo' no existe."
         return 1
+    fi
+
+    if es_dry_run; then
+        log INFO "[dry-run] Se restauraria '$archivo' en una base descartable y se contarian tablas y filas."
+        return 0
     fi
 
     local base_prueba="lux_verificacion_$$"

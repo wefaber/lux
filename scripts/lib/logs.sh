@@ -11,6 +11,8 @@
 SGRSI_LOGROTATE_DESTINO="${SGRSI_LOGROTATE_DESTINO:-/etc/logrotate.d/sgrsi}"
 SGRSI_COMPOSE_ARCHIVO="${SGRSI_COMPOSE_ARCHIVO:-$SGRSI_RAIZ/ops/compose.yaml}"
 SGRSI_UFW_LOG="${SGRSI_UFW_LOG:-/var/log/ufw.log}"
+SGRSI_LOGROTATE_USUARIO="${SGRSI_LOGROTATE_USUARIO:-sgrsi}"
+SGRSI_LOGROTATE_GRUPO="${SGRSI_LOGROTATE_GRUPO:-adm}"
 
 logs_descripcion() { echo "Consulta de logs (sistema, contenedores, SSH, UFW) y logrotate"; }
 
@@ -113,7 +115,7 @@ logs_ssh_fallidos() {
 }
 
 logs_logrotate_contenido() {
-    cat <<'FIN_LOGROTATE'
+    cat <<FIN_LOGROTATE
 # Instalado por lux/scripts/lib/logs.sh (admin.sh logs logrotate).
 /var/log/sgrsi/*.log {
     weekly
@@ -122,8 +124,8 @@ logs_logrotate_contenido() {
     delaycompress
     missingok
     notifempty
-    su sgrsi adm
-    create 0660 sgrsi adm
+    su $SGRSI_LOGROTATE_USUARIO $SGRSI_LOGROTATE_GRUPO
+    create 0660 $SGRSI_LOGROTATE_USUARIO $SGRSI_LOGROTATE_GRUPO
 }
 FIN_LOGROTATE
 }
@@ -143,8 +145,10 @@ logs_logrotate() {
     fi
 
     if command -v logrotate >/dev/null 2>&1; then
-        if ! logrotate -d "$nuevo" >/dev/null 2>&1; then
-            log ERROR "logrotate rechazo la configuracion generada. No se instala."
+        local salida
+        if ! salida="$(logrotate -d "$nuevo" 2>&1)" || grep -q '^error:' <<<"$salida"; then
+            log ERROR "logrotate rechazo la configuracion generada. No se instala. Detalle:"
+            grep '^error:' <<<"$salida" >&2 || true
             return 1
         fi
     else
