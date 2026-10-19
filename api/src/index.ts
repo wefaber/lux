@@ -1,8 +1,10 @@
 import { Elysia } from "elysia";
-import { createSchema, createYoga } from "graphql-yoga";
+import { GraphQLError, NoSchemaIntrospectionCustomRule } from "graphql";
+import { createSchema, createYoga, type Plugin } from "graphql-yoga";
 import { bearerFrom, verifyToken } from "./auth";
 import { pool } from "./db/client";
 import { loadEnv, serverHost, serverPort } from "./env";
+import { classifyUnexpected, ERROR_STATUS } from "./errors";
 import { resolvers } from "./graphql/resolvers";
 import { typeDefs } from "./graphql/schema";
 import { loadState } from "./state";
@@ -11,10 +13,64 @@ loadEnv();
 
 const schema = createSchema({ typeDefs, resolvers });
 
+// En produccion no se sirve GraphiQL ni se permite introspeccion: la superficie
+// que ve un atacante es solo la de las operaciones que el cliente ya conoce.
+const isProduction = process.env.NODE_ENV === "production";
+
+// Los errores de graphql-js que no salen de un resolver (query mal formada,
+// variable con tipo equivocado) no traen un codigo del catalogo: se completan
+// con BAD_REQUEST (el codigo original de graphql-js queda en `reason`) para que todo error de la API tenga `code` y `status`.
+function addMissingCodes(result: unknown): void {
+  const results = Array.isArray(result) ? result : [result];
+  for (const entry of results) {
+    const errors = (entry as { errors?: Array<{ extensions?: Record<string, unknown> }> } | null)
+      ?.errors;
+    for (const error of errors ?? []) {
+      const current = error.extensions?.code;
+      if (typeof current === "string" && current in ERROR_STATUS) continue;
+      error.extensions = {
+        ...error.extensions,
+        ...(current ? { reason: current } : {}),
+        code: "BAD_REQUEST",
+        status: ERROR_STATUS.BAD_REQUEST,
+      };
+    }
+  }
+}
+
+// Un GraphQLError lanzado a proposito por un resolver (cadena de originalError
+// compuesta solo por GraphQLError) es un error del catalogo y sale tal cual.
+function isCatalogError(error: unknown): boolean {
+  if (!(error instanceof GraphQLError)) return false;
+  return error.originalError ? isCatalogError(error.originalError) : true;
+}
+
+const errorCodes: Plugin = {
+  onResultProcess({ result }) {
+    addMissingCodes(result);
+  },
+};
+
+const hardening: Plugin = {
+  onValidate({ addValidationRule }) {
+    if (isProduction) addValidationRule(NoSchemaIntrospectionCustomRule);
+  },
+};
+
 const yoga = createYoga({
   schema,
   graphqlEndpoint: "/graphql",
-  graphiql: true,
+  graphiql: !isProduction,
+  plugins: [errorCodes, hardening],
+  // Un error que no es del catalogo (bug, caida de la base) no devuelve su texto
+  // al cliente: se loguea completo en el servidor y sale como INTERNAL_ERROR.
+  maskedErrors: {
+    maskError(error) {
+      if (isCatalogError(error)) return error as Error;
+      // Yoga ya loguea el error original; aca solo se decide que ve el cliente.
+      return classifyUnexpected((error as { originalError?: unknown }).originalError ?? error);
+    },
+  },
   // El frontend manda el JWT en `Authorization: Bearer`; el token identifica al
   // usuario y de aca sale `caller` para las reglas de permisos.
   context: async ({ request }) => {
@@ -45,7 +101,7 @@ const REQUIRED_TABLES = [
   "activity_logs",
 ];
 
-async function readiness(): Promise<{ ok: boolean; missing?: string[]; error?: string }> {
+async function readiness(): Promise<boolean> {
   try {
     await pool.query("select 1");
     const result = await pool.query<{ table_name: string }>(
@@ -53,18 +109,25 @@ async function readiness(): Promise<{ ok: boolean; missing?: string[]; error?: s
     );
     const present = new Set(result.rows.map((r) => r.table_name));
     const missing = REQUIRED_TABLES.filter((name) => !present.has(name));
-    return missing.length > 0 ? { ok: false, missing } : { ok: true };
+    if (missing.length > 0) {
+      console.error(`[ready] faltan tablas (migraciones sin aplicar): ${missing.join(", ")}`);
+      return false;
+    }
+    return true;
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    console.error("[ready] la base no responde:", error);
+    return false;
   }
 }
 
 const app = new Elysia()
   .get("/health", () => ({ status: "ok" }))
   .get("/ready", async ({ set }) => {
-    const result = await readiness();
-    if (!result.ok) set.status = 503;
-    return { status: result.ok ? "ready" : "not-ready", ...result };
+    // El detalle (tablas faltantes, texto de la base) queda en el log del servidor:
+    // /ready no requiere autenticacion y no debe describir la infraestructura.
+    const ok = await readiness();
+    if (!ok) set.status = 503;
+    return { status: ok ? "ready" : "not-ready", ok };
   })
   .all("/graphql", ({ request }) => yoga.fetch(request));
 

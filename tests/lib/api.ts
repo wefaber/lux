@@ -6,9 +6,14 @@ import type { Role } from "../cases/types";
 // seed del propio repo (api/src/db/fixtures/data/users.ts); en un entorno que no
 // use ese seed se pisan con QA_DNI_<ROL> y QA_PASSWORD_<ROL>.
 
+export interface GqlError {
+  message: string;
+  extensions?: { code?: string; status?: number; [key: string]: unknown };
+}
+
 export interface GqlResult<T = Record<string, unknown>> {
   data: T | null;
-  errors: { message: string }[];
+  errors: GqlError[];
 }
 
 export class AssertionError extends Error {}
@@ -77,6 +82,26 @@ export class Client {
       throw new AssertionError(`error distinto del esperado: "${msg}"`);
     }
     return msg;
+  }
+
+  // Exige que falle con un código del catálogo de errores (extensions.code) y el
+  // status HTTP equivalente que lo acompaña.
+  async failsWith(
+    query: string,
+    variables: Record<string, unknown> | undefined,
+    code: string,
+    status: number,
+  ): Promise<GqlError> {
+    const r = await this.gql(query, variables);
+    const error = r.errors[0];
+    if (!error) throw new AssertionError("se esperaba un error y la operación se ejecutó");
+    const got = error.extensions;
+    if (got?.code !== code || got?.status !== status) {
+      throw new AssertionError(
+        `se esperaba ${code}/${status} y la API devolvió ${got?.code}/${got?.status} ("${error.message}")`,
+      );
+    }
+    return error;
   }
 }
 
