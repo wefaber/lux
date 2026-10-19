@@ -48,8 +48,13 @@ import {
   invalid,
   invalidCredentials,
   notFound,
+  tooManyAttempts,
   unauthenticated,
 } from "../errors";
+import { writeAudit } from "../audit";
+import { loginIpMaxAttempts, loginLockMinutes, loginMaxAttempts } from "../env";
+import { LoginGuard } from "../login-guard";
+import { revokeToken } from "../sessions";
 import { db } from "../db/client";
 import * as t from "../db/schema";
 import { toUser, type State } from "../state";
@@ -467,18 +472,60 @@ const PERIOD_BUCKETS: Record<DashboardPeriod, { days: number; bucketDays: number
 
 const nowIso = () => new Date().toISOString();
 
+const loginGuard = new LoginGuard({
+  maxAttempts: loginMaxAttempts(),
+  ipMaxAttempts: loginIpMaxAttempts(),
+  lockMs: loginLockMinutes() * 60 * 1000,
+});
+
+// Tope de largo de la contrasena que se acepta verificar (evita usar argon2 como DoS).
+const MAX_PASSWORD_LENGTH = 512;
+
+let placeholder: Promise<string> | undefined;
+function placeholderHash(): Promise<string> {
+  placeholder ??= Bun.password.hash(crypto.randomUUID(), { algorithm: "argon2id" });
+  return placeholder;
+}
+
 // Tope de filas de una consulta del registro de actividad.
 const ACTIVITY_LOG_LIMIT = 1000;
 
 // ── Queries ──────────────────────────────────────────────────────────────────
 
 const Query = {
-  login: async (_p: unknown, args: { dni: string; password: string }) => {
+  login: async (_p: unknown, args: { dni: string; password: string }, ctx: Ctx) => {
+    const lock = loginGuard.check(args.dni, ctx.ip);
+    if (lock.locked) {
+      const minutes = Math.ceil(lock.retryAfterSeconds / 60);
+      throw tooManyAttempts(
+        `Demasiados intentos fallidos. Probá de nuevo en ${minutes} ${minutes === 1 ? "minuto" : "minutos"}`,
+        lock.retryAfterSeconds,
+      );
+    }
     const [row] = await db.select().from(t.users).where(eq(t.users.dni, args.dni)).limit(1);
-    if (!row || !row.isActive) throw invalidCredentials();
-    const ok = await Bun.password.verify(args.password, row.passwordHash);
-    if (!ok) throw invalidCredentials();
+    // Se verifica siempre contra algun hash (el real o uno de relleno) para que el
+    // tiempo de respuesta no delate si el documento existe.
+    const active = row?.isActive === true;
+    const hash = active ? row.passwordHash : await placeholderHash();
+    const passwordOk = args.password.length <= MAX_PASSWORD_LENGTH && (await Bun.password.verify(args.password, hash));
+    if (!active || !passwordOk) {
+      const { dniLocked, ipLocked } = loginGuard.recordFailure(args.dni, ctx.ip);
+      const who = { userId: row?.id ?? "anonymous", userName: row?.name ?? "Anónimo" };
+      await writeAudit({ ...who, operation: "LOGIN_FAILED", entity: "Session", entityId: row?.id ?? "-", details: `IP ${ctx.ip}` });
+      if (dniLocked || ipLocked) {
+        await writeAudit({
+          ...who,
+          operation: "ACCOUNT_LOCKED",
+          entity: "Session",
+          entityId: row?.id ?? "-",
+          details: `Bloqueo por ${dniLocked ? "documento" : "IP"} desde ${ctx.ip}`,
+        });
+      }
+      throw invalidCredentials();
+    }
+    loginGuard.recordSuccess(args.dni);
     const user = toUser(row);
+    await writeAudit({ userId: user.id, userName: user.name, operation: "LOGIN", entity: "Session", entityId: user.id, details: `IP ${ctx.ip}` });
     const token = await signToken({ sub: user.id, role: user.role });
     return { ...user, token };
   },
@@ -1777,6 +1824,12 @@ const Mutation = {
     return true;
   },
 
+  logout: async (_p: unknown, _a: unknown, ctx: Ctx) => {
+    const caller = requireAuth(ctx);
+    if (ctx.token) await revokeToken(ctx.token, caller.id);
+    return true;
+  },
+
   changePassword: async (
     _p: unknown,
     args: { currentPassword: string; newPassword: string },
@@ -2315,6 +2368,7 @@ const AUDIT: Record<keyof typeof Mutation, AuditSpec> = {
   softDeleteServiceRequest: { entity: "ServiceRequest", details: () => "Baja lógica (deleted_at)" },
   softDeleteIntervention: { entity: "Intervention", details: () => "Baja lógica (deleted_at)" },
   softDeleteComment: { entity: "Comment", details: () => "Baja lógica (deleted_at)" },
+  logout: { entity: "Session", id: (_a, _r, ctx) => ctx.caller?.id ?? "-", details: () => null },
   changePassword: { entity: "User", id: (_a, _r, ctx) => ctx.caller?.id ?? "-", details: () => null },
   createLocation: { entity: "Location" },
   updateLocation: { entity: "Location" },

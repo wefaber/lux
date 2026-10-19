@@ -15,6 +15,13 @@
       "when": 1792389878320,
       "tag": "0001_soft_delete_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792390127977,
+      "tag": "0002_revoked_tokens",
+      "breakpoints": true
     }
   ]
 }

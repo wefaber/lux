@@ -233,6 +233,15 @@ export const pendingSeen = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.section] })],
 );
 
+// Tokens cerrados con logout antes de vencer. Se consulta por `jti` en cada
+// request; las filas vencidas se limpian en cada logout.
+export const revokedTokens = pgTable("revoked_tokens", {
+  jti: text("jti").primaryKey(),
+  userId: text("user_id").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  revokedAt: text("revoked_at").notNull(),
+});
+
 export const activityLogs = pgTable("activity_logs", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull(),

@@ -4,6 +4,7 @@ import { createSchema, createYoga, type Plugin } from "graphql-yoga";
 import { createContext } from "./context";
 import { pool } from "./db/client";
 import { loadEnv, serverHost, serverPort } from "./env";
+import { clientIp } from "./net";
 import { classifyUnexpected, ERROR_STATUS } from "./errors";
 import { resolvers } from "./graphql/resolvers";
 import { typeDefs } from "./graphql/schema";
@@ -92,6 +93,7 @@ const REQUIRED_TABLES = [
   "notices",
   "pending_seen",
   "activity_logs",
+  "revoked_tokens",
 ];
 
 async function readiness(): Promise<boolean> {
@@ -123,7 +125,7 @@ const app = new Elysia()
     return { status: ok ? "ready" : "not-ready", ok };
   })
   .all("/graphql", ({ request, server }) =>
-    yoga.fetch(request, { ip: server?.requestIP(request)?.address ?? "unknown" }),
+    yoga.fetch(request, { ip: clientIp(request, server) }),
   );
 
 app.listen({ hostname: serverHost(), port: serverPort() });

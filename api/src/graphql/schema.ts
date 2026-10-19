@@ -64,6 +64,7 @@ export const typeDefs = /* GraphQL */ `
     softDeleteServiceRequest(id: ID!): Boolean!
     softDeleteIntervention(id: ID!): Boolean!
     softDeleteComment(id: ID!): Boolean!
+    logout: Boolean!
     changePassword(currentPassword: String!, newPassword: String!): Boolean!
     createLocation(input: LocationInput!): Location!
     updateLocation(id: ID!, input: LocationUpdateInput!): Location!

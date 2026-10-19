@@ -2,6 +2,7 @@ import { loadEnv } from "../env";
 import { pool, db } from "./client";
 import {
   activityLogs,
+  revokedTokens,
   comments,
   components,
   interventions,
@@ -70,6 +71,7 @@ async function seed(): Promise<void> {
   await db.delete(products);
   await db.delete(locations);
   await db.delete(activityLogs);
+  await db.delete(revokedTokens);
   await db.delete(users);
 
   await db.insert(users).values(await hashUsers());

@@ -3,6 +3,10 @@ import { authSecret } from "./env";
 
 // HS256 con el AUTH_SECRET de la VPS. El token va como `Authorization: Bearer`.
 const ALG = "HS256";
+
+/** Duracion absoluta de la sesion (Autenticacion.md de E2: 8 h). */
+export const TOKEN_TTL = "8h";
+export const TOKEN_TTL_SECONDS = 8 * 60 * 60;
 const key = () => new TextEncoder().encode(authSecret());
 
 export interface TokenPayload {
@@ -22,7 +26,7 @@ export async function signToken(payload: TokenPayload): Promise<string> {
     .setSubject(payload.sub)
     .setIssuedAt()
     .setJti(crypto.randomUUID())
-    .setExpirationTime("12h")
+    .setExpirationTime(TOKEN_TTL)
     .sign(key());
 }
 

@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { bearerFrom, verifyToken, type VerifiedToken } from "./auth";
 import { db } from "./db/client";
 import * as t from "./db/schema";
+import { isRevoked } from "./sessions";
 import { toUser, type State } from "./state";
 import type { User } from "@/lib/types";
 
@@ -20,7 +21,8 @@ export interface Ctx {
 
 export async function createContext(request: Request, ip: string): Promise<Ctx> {
   const raw = bearerFrom(request.headers.get("authorization"));
-  const token = raw ? await verifyToken(raw) : null;
+  let token = raw ? await verifyToken(raw) : null;
+  if (token && (await isRevoked(token.jti))) token = null;
   let caller: User | null = null;
   if (token) {
     const [row] = await db.select().from(t.users).where(eq(t.users.id, token.sub)).limit(1);
