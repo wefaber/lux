@@ -67,7 +67,12 @@ config_con_hostkey() {
 }
 
 @test "aplicar sin llaves de acceso se rechaza (R5)" {
-    run "$ADMIN" ssh aplicar
+    # getent simulado sin miembros: el resultado no depende de las cuentas del
+    # equipo donde corre la prueba (un runner puede tener llaves en 'sudo')
+    mkdir -p "$TMP/bin"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$TMP/bin/getent"
+    chmod +x "$TMP/bin/getent"
+    PATH="$TMP/bin:$PATH" run "$ADMIN" ssh aplicar
     [ "$status" -eq 1 ]
     [[ "$output" == *"llave publica instalada"* ]]
     [ ! -e "$SGRSI_SSH_DROPIN" ]

@@ -29,7 +29,10 @@ jobs:
       # usan stubs, asi que correr como root no toca el runner.
       - name: Pruebas bats
         working-directory: scripts/tests
-        run: sudo env "PATH=$PATH" bats bats/*.bats
+        run: |
+          # sshd -t como root exige el directorio de separacion de privilegios
+          sudo mkdir -p /run/sshd
+          sudo env "PATH=$PATH" bats bats/*.bats
 
   compose:
     runs-on: ubuntu-latest
