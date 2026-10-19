@@ -146,4 +146,48 @@ export const securityCases: TestCase[] = [
       await tecA.failsWith(`mutation($id: ID!, $t: ID!) { assignServiceRequest(id: $id, technicianId: $t) { id } }`, { id: service, t: a.id }, "FORBIDDEN", 403);
     },
   },
+  {
+    id: "CP-SEG-04",
+    cu: "RNF",
+    title: "Cambiar la contraseña cierra las sesiones anteriores",
+    rf: [],
+    kind: "negativo",
+    actor: "solicitante",
+    priority: "alta",
+    precondition: "Usuario descartable con dos sesiones abiertas.",
+    steps: [
+      "Abrir dos sesiones con la contraseña vigente",
+      "Cambiar la contraseña desde una de ellas",
+      "Usar las dos sesiones viejas y volver a iniciar sesión con la contraseña nueva",
+      "El administrador restablece la contraseña por updateUser",
+    ],
+    expected: "Los dos tokens viejos devuelven me = null; la contraseña nueva abre una sesión válida; el restablecimiento del administrador también corta las sesiones.",
+    api: async (t) => {
+      const user = await t.newUser("solicitante");
+      const one = await t.login(user.dni, user.password);
+      const two = await t.login(user.dni, user.password);
+      check((await one.ok<{ me: { id: string } | null }>(ME)).me?.id === user.id, "la sesión inicial no funciona");
+
+      const next = `Nueva-${t.runId}-Clave`;
+      await one.ok(`mutation($c: String!, $n: String!) { changePassword(currentPassword: $c, newPassword: $n) }`, { c: user.password, n: next });
+      check((await one.ok<{ me: unknown }>(ME)).me === null, "la sesión que cambió la contraseña sigue válida");
+      check((await two.ok<{ me: unknown }>(ME)).me === null, "otra sesión abierta sigue válida tras el cambio");
+
+      await t.anon().failsWith(
+        `query($d: String!, $p: String!) { login(dni: $d, password: $p) { token } }`,
+        { d: user.dni, p: user.password },
+        "INVALID_CREDENTIALS",
+        401,
+      );
+      const fresh = await t.login(user.dni, next);
+      check((await fresh.ok<{ me: { id: string } | null }>(ME)).me?.id === user.id, "la sesión con la contraseña nueva no funciona");
+
+      const admin = await t.as("admin");
+      await admin.ok(`mutation($id: ID!, $i: UserInput!) { updateUser(id: $id, input: $i) { id } }`, {
+        id: user.id,
+        i: { name: "Usuario Prueba", dni: user.dni, email: `qa${user.dni}@iti.edu.uy`, role: "solicitante", password: `Reset-${t.runId}-Clave` },
+      });
+      check((await fresh.ok<{ me: unknown }>(ME)).me === null, "el restablecimiento del administrador no cortó la sesión");
+    },
+  },
 ];

@@ -29,6 +29,13 @@
       "when": 1792390517590,
       "tag": "0003_integrity_fk_check",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792391901647,
+      "tag": "0004_token_version",
+      "breakpoints": true
     }
   ]
 }

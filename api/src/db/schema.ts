@@ -43,6 +43,8 @@ export const users = pgTable("users", {
   role: text("role").notNull(),
   isActive: boolean("is_active").notNull().default(true),
   passwordHash: text("password_hash").notNull(),
+  // Sube cuando cambia la contrasena: los tokens firmados con otra version dejan de valer
+  tokenVersion: integer("token_version").notNull().default(0),
   createdAt,
   updatedAt,
 }, (t) => [check("users_role_check", oneOf(t.role, USER_ROLES))]);

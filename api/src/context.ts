@@ -26,7 +26,8 @@ export async function createContext(request: Request, ip: string): Promise<Ctx> 
   let caller: User | null = null;
   if (token) {
     const [row] = await db.select().from(t.users).where(eq(t.users.id, token.sub)).limit(1);
-    caller = row?.isActive ? toUser(row) : null;
+    // Un cambio de contrasena sube token_version y deja sin efecto las sesiones anteriores
+    caller = row?.isActive && row.tokenVersion === token.ver ? toUser(row) : null;
   }
   return { state: undefined as unknown as State, caller, ip, token: caller ? token : null };
 }

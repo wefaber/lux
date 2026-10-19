@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import type { InterventionFields, LocationFields } from "@/lib/validation";
 import {
   locationCode,
@@ -555,7 +555,7 @@ const Query = {
     loginGuard.recordSuccess(args.dni);
     const user = toUser(row);
     await writeAudit({ userId: user.id, userName: user.name, operation: "LOGIN", entity: "Session", entityId: user.id, details: `IP ${ctx.ip}` });
-    const token = await signToken({ sub: user.id, role: user.role });
+    const token = await signToken({ sub: user.id, role: user.role, ver: row.tokenVersion });
     return { ...user, token };
   },
 
@@ -984,7 +984,11 @@ const Mutation = {
       : undefined;
     await db
       .update(t.users)
-      .set({ ...next, ...(passwordHash ? { passwordHash } : {}) })
+      .set({
+        ...next,
+        // Una contrasena nueva (reset por un administrador) tambien corta las sesiones abiertas
+        ...(passwordHash ? { passwordHash, tokenVersion: sql`${t.users.tokenVersion} + 1` } : {}),
+      })
       .where(eq(t.users.id, user.id));
     Object.assign(user, rest, { updatedAt: next.updatedAt });
     return user;
@@ -1892,7 +1896,9 @@ const Mutation = {
     const passwordHash = await Bun.password.hash(args.newPassword, { algorithm: "argon2id" });
     await db
       .update(t.users)
-      .set({ passwordHash, updatedAt: nowIso() })
+      // Subir la version invalida todas las sesiones abiertas, la actual incluida:
+      // hay que volver a iniciar sesion con la contrasena nueva
+      .set({ passwordHash, tokenVersion: sql`${t.users.tokenVersion} + 1`, updatedAt: nowIso() })
       .where(eq(t.users.id, caller.id));
     return true;
   },

@@ -12,16 +12,19 @@ const key = () => new TextEncoder().encode(authSecret());
 export interface TokenPayload {
   sub: string;
   role: string;
+  /** Version de credenciales del usuario al emitirse (`users.token_version`). */
+  ver?: number;
 }
 
 /** Token ya verificado: ademas del usuario trae su id (`jti`) y vencimiento (`exp`, segundos). */
 export interface VerifiedToken extends TokenPayload {
+  ver: number;
   jti: string;
   exp: number;
 }
 
 export async function signToken(payload: TokenPayload): Promise<string> {
-  return new SignJWT({ role: payload.role })
+  return new SignJWT({ role: payload.role, ver: payload.ver ?? 0 })
     .setProtectedHeader({ alg: ALG })
     .setSubject(payload.sub)
     .setIssuedAt()
@@ -38,6 +41,7 @@ export async function verifyToken(token: string): Promise<VerifiedToken | null> 
     return {
       sub: payload.sub,
       role: typeof payload.role === "string" ? payload.role : "",
+      ver: typeof payload.ver === "number" ? payload.ver : 0,
       jti: payload.jti,
       exp: payload.exp,
     };
