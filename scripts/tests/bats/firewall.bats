@@ -146,3 +146,11 @@ FIN
     [ "$status" -ne 0 ]
     [[ "$output" == *"[FALLA] firewall activo"* ]]
 }
+
+@test "aplicar-base --dry-run anticipa la decision sobre el 22 segun lo que escucha sshd" {
+    STUB_SSHD_PUERTOS="22" run "$ADMIN" --dry-run firewall aplicar-base
+    [[ "$output" == *"NO se cerraria el 22"* ]]
+    [[ "$output" != *"ufw deny 22/tcp"* ]]
+    STUB_SSHD_PUERTOS="52205" run "$ADMIN" --dry-run firewall aplicar-base
+    [[ "$output" == *"[dry-run] ufw deny 22/tcp"* ]]
+}

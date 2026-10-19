@@ -103,11 +103,10 @@ firewall_aplicar_base() {
     # 3) Cerrar el 22 solo si sshd ya no depende de el.
     local escuchando
     escuchando="$(firewall_puertos_sshd)"
-    if es_dry_run; then
-        log INFO "[dry-run] Se cerraria el 22/tcp solo si sshd escucha en $SGRSI_SSH_PUERTO y no en el 22 (hoy: ${escuchando:-desconocido})."
+    if [[ " $escuchando " == *" $SGRSI_SSH_PUERTO "* && " $escuchando " != *" 22 "* ]]; then
         ejecutar ufw deny 22/tcp comment 'SSH por defecto cerrado'
-    elif [[ " $escuchando " == *" $SGRSI_SSH_PUERTO "* && " $escuchando " != *" 22 "* ]]; then
-        ejecutar ufw deny 22/tcp comment 'SSH por defecto cerrado'
+    elif es_dry_run; then
+        log WARN "[dry-run] sshd escucha en: ${escuchando:-desconocido}. NO se cerraria el 22 (hasta que sshd deje de escuchar en el)."
     else
         log WARN "sshd escucha en: ${escuchando:-desconocido}. NO se cierra el 22 para no perder el acceso."
         log WARN "Aplicar primero 'admin.sh ssh aplicar', probar una sesion nueva en el $SGRSI_SSH_PUERTO y repetir aplicar-base."
