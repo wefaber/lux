@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
-# admin.sh — Script de administracion del servidor SGRSI (Lux), primera
-# version. Punto de entrada unico que despacha a modulos pequenos y
-# reutilizables en lib/, cada uno responsable de un area especifica.
+# admin.sh: Script de administracion del servidor SGRSI (Lux), version final
+# (E3). Punto de entrada unico que despacha a modulos pequenos y reutilizables
+# en lib/, cada uno responsable de un area: usuarios, grupos, ssh, red, db,
+# firewall, logs, deploy y respaldo.
 #
-# Version modular: cada area (usuarios, grupos, ssh, y las que se agreguen en
-# E3 — redes, base de datos, firewall, logs) vive en su propio archivo de
-# lib/, invocable de forma independiente ademas de a traves de este
-# despachador. Esto facilita mantenimiento, depuracion y escalabilidad: un
-# modulo se prueba y se corrige sin tocar los demas.
+# Escalabilidad: los modulos se DESCUBREN. Cualquier lib/<nombre>.sh que defina
+# la funcion <nombre>_main queda disponible como `admin.sh <nombre>`, sin editar
+# este archivo. Agregar un modulo no toca a los existentes; y si un modulo
+# falla al cargarse, el resto sigue funcionando (se informa y se omite).
 #
 # Uso:
-#   ./admin.sh <modulo> <subcomando> [argumentos]
+#   ./admin.sh [--dry-run] [--config ARCHIVO] <modulo> <subcomando> [argumentos]
 #   ./admin.sh ayuda
 #
-# Issue: wefaber/eternum#78
-# Documentado en: 05-ADMIN-SO/E2/Scripts-Bash-V1.md
+#   --dry-run, -n     Muestra lo que haria sin modificar el sistema.
+#   --config ARCHIVO  Archivo de configuracion (por defecto /etc/sgrsi/sgrsi.conf).
+#
+# Issues: wefaber/eternum#78 (base) y #109 (version final)
+# Documentado en: 05-ADMIN-SO/E3/Script-Final.md
 
 set -euo pipefail
 
@@ -23,40 +26,83 @@ readonly SGRSI_DIR
 
 # shellcheck source=lib/comun.sh
 source "$SGRSI_DIR/lib/comun.sh"
-# shellcheck source=lib/usuarios.sh
-source "$SGRSI_DIR/lib/usuarios.sh"
-# shellcheck source=lib/grupos.sh
-source "$SGRSI_DIR/lib/grupos.sh"
-# shellcheck source=lib/ssh.sh
-source "$SGRSI_DIR/lib/ssh.sh"
+
+# Bibliotecas que no son modulos (no definen <nombre>_main).
+readonly LIBS_NO_MODULO=" comun rotacion "
+
+MODULOS_CARGADOS=()
+
+# cargar_modulos
+# Carga cada lib/*.sh y registra los que exponen <nombre>_main. Un modulo con
+# errores de sintaxis o de carga se omite con aviso: no tumba al resto.
+cargar_modulos() {
+    local archivo nombre
+    for archivo in "$SGRSI_DIR"/lib/*.sh; do
+        nombre="$(basename "$archivo" .sh)"
+        [[ "$LIBS_NO_MODULO" == *" $nombre "* ]] && continue
+        # shellcheck disable=SC1090
+        if ! (source "$archivo") 2>/dev/null; then
+            log WARN "El modulo '$nombre' no se pudo cargar y se omite (revisar con: bash -n $archivo)."
+            continue
+        fi
+        # shellcheck disable=SC1090
+        source "$archivo"
+        if declare -F "${nombre}_main" >/dev/null; then
+            MODULOS_CARGADOS+=("$nombre")
+        fi
+    done
+}
 
 ayuda_general() {
-    cat <<FIN_AYUDA
-admin.sh — Script de administracion del servidor SGRSI (primera version)
+    echo "admin.sh: Script de administracion del servidor SGRSI (version final)"
+    echo
+    echo "Uso: $0 [--dry-run] [--config ARCHIVO] <modulo> [subcomando] [argumentos]"
+    echo
+    echo "Modulos disponibles:"
+    local m descripcion
+    for m in "${MODULOS_CARGADOS[@]}"; do
+        descripcion=""
+        if declare -F "${m}_descripcion" >/dev/null; then
+            descripcion="$("${m}_descripcion")"
+        fi
+        printf '  %-11s %s\n' "$m" "$descripcion"
+    done
+    cat <<'FIN_AYUDA'
 
-Uso: $0 <modulo> [subcomando] [argumentos]
-
-Modulos disponibles:
-  usuarios    Alta, baja, bloqueo y consulta de cuentas del sistema
-  grupos      Alta, baja y gestion de miembros de grupo
-  ssh         Endurecimiento del servicio SSH y gestion de llaves publicas
+Opciones globales:
+  --dry-run, -n       No modifica el sistema: muestra cada comando que ejecutaria
+  --config ARCHIVO    Configuracion (por defecto /etc/sgrsi/sgrsi.conf; sin secretos)
 
 Ejemplos:
-  $0 usuarios alta tecnico1 "Tecnico de coordinacion"
-  $0 grupos agregar tecnico1 sgrsi-tecnicos
-  $0 ssh llave-agregar tecnico1 /tmp/tecnico1.pub
-  $0 usuarios listar
-  $0 <modulo> ayuda        Muestra la ayuda especifica del modulo
+  admin.sh usuarios alta tecnico1 "Tecnico de coordinacion"
+  admin.sh --dry-run firewall aplicar-base
+  admin.sh red verificar
+  admin.sh db estado
+  admin.sh deploy up
+  admin.sh respaldo remoto sincronizar
+  admin.sh <modulo> ayuda      Ayuda especifica del modulo
 
-El respaldo de la base de datos vive en un script aparte (backup.sh) porque
-se invoca tambien desde cron, sin intervencion humana.
-
-Los modulos de redes, base de datos, firewall y logs se agregan en la
-version final del script (tercera entrega, issue #109).
+Codigos de salida: 0 ok, 1 error, 2 uso incorrecto, 75 fallo temporal (destino
+remoto caido), 78 configuracion invalida.
 FIN_AYUDA
 }
 
 main() {
+    # Opciones globales, antes del modulo.
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --dry-run|-n) export SGRSI_DRY_RUN=1; shift ;;
+            --config)
+                [[ -n "${2:-}" ]] || { echo "Falta el archivo despues de --config" >&2; exit "$SGRSI_EX_USO"; }
+                export SGRSI_CONF="$2"; shift 2 ;;
+            *) break ;;
+        esac
+    done
+
+    cargar_config || exit $?
+    instalar_trap_errores
+    cargar_modulos
+
     local modulo="${1:-}"
 
     if [[ -z "$modulo" || "$modulo" == "ayuda" || "$modulo" == "-h" || "$modulo" == "--help" ]]; then
@@ -66,16 +112,20 @@ main() {
 
     shift
 
-    case "$modulo" in
-        usuarios) usuarios_main "$@" ;;
-        grupos)   grupos_main "$@" ;;
-        ssh)      ssh_main "$@" ;;
-        *)
-            log ERROR "Modulo desconocido: '$modulo'"
-            ayuda_general
-            exit 1
-            ;;
-    esac
+    local m
+    for m in "${MODULOS_CARGADOS[@]}"; do
+        if [[ "$m" == "$modulo" ]]; then
+            if es_dry_run; then
+                log INFO "[dry-run] Modo ensayo: no se modificara el sistema."
+            fi
+            "${m}_main" "$@"
+            return
+        fi
+    done
+
+    log ERROR "Modulo desconocido: '$modulo'"
+    ayuda_general
+    exit 1
 }
 
 main "$@"
