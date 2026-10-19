@@ -17,7 +17,7 @@
 // Uso (desde la raíz del repo):
 //   bun run build && bunx vite preview --host 127.0.0.1 --port 4124 --strictPort &
 //   bun scripts/a11y-audit.ts --base http://127.0.0.1:4124 --out /tmp/a11y-out
-// Opciones: --modes base,dark,...  --roles anon,solicitante,...  --chromium <ruta>
+// Opciones: --modes base,dark,...  --roles anon,solicitante,...  --lang es|en  --chromium <ruta>
 // Variables: AXE_CORE_DIR (carpeta con node_modules/axe-core). Si falta, se instala en
 //   $TMPDIR/lux-axe (no toca package.json del repo). Para dejarlo fijo en el repo:
 //   bun add -d axe-core.
@@ -35,6 +35,7 @@ const arg = (name: string, fallback?: string) => {
 
 const BASE = (arg("base", "http://127.0.0.1:4124") as string).replace(/\/$/, "");
 const OUT = arg("out", join(tmpdir(), "lux-a11y-out")) as string;
+const LANG = (arg("lang", "es") as string) === "en" ? "en" : "es";
 const CHROMIUM = arg("chromium", process.env.PW_CHROMIUM ?? "/opt/pw-browsers/chromium") as string;
 
 type Mode = "base" | "dark" | "hc" | "hc-dark" | "font-xl" | "dyslexic";
@@ -392,19 +393,20 @@ async function newContext(browser: Browser, opts: { mode: Mode; auth?: string; r
   const ctx = await browser.newContext({
     viewport: { width: opts.width ?? 1280, height: opts.height ?? 800 },
     reducedMotion: opts.reducedMotion ? "reduce" : "no-preference",
-    locale: "es-UY",
+    locale: LANG === "en" ? "en-US" : "es-UY",
     serviceWorkers: "allow",
   });
   await ctx.addInitScript(
-    ({ theme, auth }) => {
+    ({ theme, auth, lang }) => {
       try {
+        localStorage.setItem("lux_lang", lang);
         localStorage.setItem("lux_theme", JSON.stringify(theme));
         if (auth) localStorage.setItem("lux_auth", auth);
       } catch {
         /* ignore */
       }
     },
-    { theme: THEME[opts.mode], auth: opts.auth ?? null },
+    { theme: THEME[opts.mode], auth: opts.auth ?? null, lang: LANG },
   );
   return ctx;
 }
@@ -504,5 +506,5 @@ const browser = await chromium.launch({ executablePath: CHROMIUM, args: ["--no-s
 const started = new Date().toISOString();
 const all = (await Promise.all(ROLES.map((r) => auditRole(browser, r)))).flat();
 await browser.close();
-writeFileSync(join(OUT, "a11y-results.json"), JSON.stringify({ base: BASE, axe: AXE_VERSION, startedAt: started, finishedAt: new Date().toISOString(), modes: MODES, roles: ROLES, results: all }, null, 2));
+writeFileSync(join(OUT, "a11y-results.json"), JSON.stringify({ base: BASE, axe: AXE_VERSION, startedAt: started, finishedAt: new Date().toISOString(), lang: LANG, modes: MODES, roles: ROLES, results: all }, null, 2));
 console.log(`\nListo: ${all.length} corridas. Resultado: ${join(OUT, "a11y-results.json")}`);

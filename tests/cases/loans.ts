@@ -296,13 +296,15 @@ export const loanCases: TestCase[] = [
     cu: "CU-26",
     title: "Préstamo vencido sin devolución",
     rf: ["RF-PRES-006"],
-    rn: ["RN-22", "RN-23"],
+    // RN-23 (idempotencia): la segunda evaluación no cambia el resultado. RN-22 (atribución al
+    // sistema en la auditoría) no se comprueba acá: la cubre CP-26-03.
+    rn: ["RN-23"],
     kind: "positivo",
     actor: "reloj",
     priority: "alta",
     precondition: "Préstamo activo cuya fecha pactada ya pasó.",
-    steps: ["Consultar el préstamo"],
-    expected: "El préstamo figura 'vencido'.",
+    steps: ["Consultar el préstamo", "Consultar el préstamo por segunda vez"],
+    expected: "El préstamo figura 'vencido' y sigue vencido en la segunda evaluación.",
     api: async (t) => {
       const { loanId } = await newLoan(t, -3, -1);
       await (await t.as("admin")).ok(APPROVE, { id: loanId });
@@ -311,6 +313,37 @@ export const loanCases: TestCase[] = [
       await tec.ok(`query { loans { id } }`);
       const d = await tec.ok<{ loan: L }>(LOAN, { id: loanId });
       check(d.loan.status === "overdue", `estado: ${d.loan.status}`);
+      await tec.ok(`query { loans { id } }`);
+      const again = await tec.ok<{ loan: L }>(LOAN, { id: loanId });
+      check(again.loan.status === "overdue", `estado tras la segunda evaluación: ${again.loan.status}`);
+    },
+  },
+  {
+    id: "CP-26-03",
+    cu: "CU-26",
+    title: "El vencimiento queda en auditoría atribuido al sistema",
+    rf: ["RF-PRES-006", "RF-TRZ-001"],
+    rn: ["RN-22"],
+    kind: "positivo",
+    actor: "reloj",
+    priority: "media",
+    precondition: "Préstamo activo cuya fecha pactada ya pasó.",
+    steps: ["Consultar el préstamo para que se evalúe el vencimiento", "Consultar la auditoría como raíz"],
+    expected: "Existe una fila de auditoría sobre el préstamo, con una operación de vencimiento y sin usuario humano.",
+    knownGap: "RN-22 sin implementar: syncOverdueLoans cambia el estado y avisa, pero no escribe en activity_logs",
+    api: async (t) => {
+      const { loanId } = await newLoan(t, -3, -1);
+      await (await t.as("admin")).ok(APPROVE, { id: loanId });
+      const tec = await t.as("tecnico");
+      await tec.ok(DELIVER, { id: loanId });
+      await tec.ok(`query { loans { id } }`);
+      const root = await t.as("root_admin");
+      const d = await root.ok<{ activityLogs: { entityId: string; operation: string; userId: string | null }[] }>(
+        `query QaLogsAll { activityLogs { entityId operation userId } }`,
+      );
+      const row = d.activityLogs.find((l) => l.entityId === loanId && /OVERDUE|EXPIRE/i.test(l.operation));
+      check(row, "el vencimiento no quedó en auditoría");
+      check(!row.userId, `el vencimiento figura a nombre de ${row.userId}`);
     },
   },
   {
