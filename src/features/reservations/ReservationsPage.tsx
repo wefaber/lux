@@ -13,7 +13,9 @@ import {
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotices } from "@/hooks/useNotices";
-import { gql, formatDateTime, cn, errorMessage } from "@/lib/utils";
+import { useI18n } from "@/hooks/useI18n";
+import { gql, formatDate, formatDateTime, cn, errorMessage } from "@/lib/utils";
+import { getLocale } from "@/i18n";
 import { RESERVATION_STATUS_CONFIG, CHANGEABLE_RESERVATION_STATUSES } from "@/lib/constants";
 import { isStaff } from "@/lib/roles";
 import type { Reservation, ReservationStatus } from "@/lib/types";
@@ -64,6 +66,7 @@ const PAGE_SIZE = 10;
 const FINISHED_STATUSES = new Set<ReservationStatus>(["completed", "rejected", "cancelled"]);
 
 export function ReservationsPage() {
+  const { t } = useI18n();
   const { user } = useAuth();
   const { noticeFor } = useNotices();
   const staff = isStaff(user?.role);
@@ -122,7 +125,7 @@ export function ReservationsPage() {
       await gql(APPROVE_MUTATION, { id });
       refetch();
     } catch (err) {
-      setActionError(errorMessage(err, "No se pudo aprobar la reserva"));
+      setActionError(errorMessage(err, t("reservations.approveFailed")));
     } finally {
       setBusyId(null);
     }
@@ -143,22 +146,29 @@ export function ReservationsPage() {
 
   // Columnas compactas para que la tabla entre entera en escritorio: el ID va
   // debajo del recurso y desde/hasta comparten una columna de horario
-  const columns = ["Recurso", ...(staff ? ["Solicitante"] : []), "Horario", "Motivo", "Estado", ""];
+  const columns = [
+    t("reservations.col.resource"),
+    ...(staff ? [t("label.requester")] : []),
+    t("reservations.col.schedule"),
+    t("label.reason"),
+    t("label.status"),
+    "",
+  ];
 
   return (
     <div className="space-y-6 max-w-full">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Reservas</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {t("reservations.title")}
+          </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {staff
-              ? "Solicitudes de reserva de equipos y espacios"
-              : "Tus reservas de equipos y espacios"}
+            {staff ? t("reservations.subtitle.staff") : t("reservations.subtitle.own")}
           </p>
         </div>
         <Button size="sm" onClick={() => setEditing("new")}>
           <Plus className="h-3.5 w-3.5" />
-          Nueva reserva
+          {t("reservations.new")}
         </Button>
       </div>
 
@@ -167,8 +177,8 @@ export function ReservationsPage() {
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute z-10 left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por recurso, motivo o ID (rsv-003)..."
-              aria-label="Buscar reservas por recurso, motivo o ID"
+              placeholder={t("reservations.search")}
+              aria-label={t("reservations.searchLabel")}
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -179,14 +189,14 @@ export function ReservationsPage() {
           </div>
           <StatusFilter
             section="reservation"
-            aria-label="Filtrar por estado"
+            aria-label={t("overview.filterStatus")}
             value={statusFilter}
             onValueChange={(v) => {
               setStatusFilter(v as ReservationStatus | "");
               setPage(0);
             }}
             options={[
-              { value: "", label: "Todos los estados" },
+              { value: "", label: t("common.allStatuses") },
               ...STATUSES.map((s) => ({ value: s, label: RESERVATION_STATUS_CONFIG[s].label })),
             ]}
           />
@@ -194,27 +204,27 @@ export function ReservationsPage() {
 
         {hiddenFinished > 0 && (
           <p className="text-xs text-muted-foreground">
-            {hiddenFinished === 1
-              ? "1 reserva terminada, rechazada o cancelada no se muestra."
-              : `${hiddenFinished} reservas terminadas, rechazadas o canceladas no se muestran.`}{" "}
-            Para verlas, filtrá por estado o buscalas por su ID.
+            {t("reservations.hiddenFinished", { count: hiddenFinished })}{" "}
+            {t("reservations.hiddenFinishedHelp")}
           </p>
         )}
       </div>
 
-      {(error || actionError) && <ErrorAlert>{actionError || `Error: ${error}`}</ErrorAlert>}
+      {(error || actionError) && (
+        <ErrorAlert>{actionError || t("common.error", { error: error ?? "" })}</ErrorAlert>
+      )}
 
       {isLoading && !data ? (
         <TableSkeleton rows={6} cols={columns.length} />
       ) : listed.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground text-sm">
           {term
-            ? "Ninguna reserva coincide con la búsqueda"
+            ? t("reservations.emptySearch")
             : statusFilter
-              ? "No hay reservas con ese estado"
+              ? t("reservations.emptyStatus")
               : hiddenFinished > 0
-                ? "No hay reservas en curso"
-                : "Todavía no hay reservas"}
+                ? t("reservations.emptyOpen")
+                : t("reservations.empty")}
         </div>
       ) : (
         <div
@@ -287,7 +297,7 @@ export function ReservationsPage() {
                           r.cancelledBy &&
                           notice?.kind !== "cancelled" && (
                             <p className="text-xs text-muted-foreground mt-1 max-w-48 whitespace-normal">
-                              Cancelada por {r.cancelledBy.name}
+                              {t("reservations.cancelledBy", { name: r.cancelledBy.name })}
                             </p>
                           )}
                         {notice && <NoticeLine notice={notice} />}
@@ -299,14 +309,14 @@ export function ReservationsPage() {
                           {staff && r.status === "pending" && (
                             <>
                               <IconAction
-                                label="Aprobar"
+                                label={t("reservations.action.approve")}
                                 icon={CheckCircle}
                                 variant="success"
                                 disabled={busy}
                                 onClick={() => approve(r.id)}
                               />
                               <IconAction
-                                label="Rechazar"
+                                label={t("reservations.action.reject")}
                                 icon={XCircle}
                                 variant="destructive"
                                 disabled={busy}
@@ -316,7 +326,7 @@ export function ReservationsPage() {
                           )}
                           {staff && CHANGEABLE_RESERVATION_STATUSES.includes(r.status) && (
                             <IconAction
-                              label="Modificar"
+                              label={t("reservations.action.modify")}
                               icon={CalendarClock}
                               disabled={busy}
                               onClick={() => setEditing(r)}
@@ -324,7 +334,7 @@ export function ReservationsPage() {
                           )}
                           {canCancel(r) && (
                             <IconAction
-                              label="Cancelar"
+                              label={t("reservations.action.cancel")}
                               icon={Ban}
                               variant="destructive"
                               disabled={busy}
@@ -410,11 +420,12 @@ function IconAction({ label, icon: Icon, variant = "ghost", disabled, onClick }:
 }
 
 function day(d: Date): string {
-  return d.toLocaleDateString("es-UY", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return formatDate(d);
 }
 
+// Horas siempre en 24 h, en cualquiera de los dos idiomas
 function time(d: Date): string {
-  return d.toLocaleTimeString("es-UY", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return d.toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 // Mismo dia: la fecha y debajo el rango de horas. Varios dias: inicio y fin.
@@ -448,6 +459,7 @@ interface ActionDialogProps {
 }
 
 function RejectReservationDialog({ reservation, onDone, onCancel }: ActionDialogProps) {
+  const { t } = useI18n();
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -467,7 +479,7 @@ function RejectReservationDialog({ reservation, onDone, onCancel }: ActionDialog
       setReason("");
       onDone();
     } catch (err) {
-      setError(errorMessage(err, "No se pudo rechazar la reserva"));
+      setError(errorMessage(err, t("reservations.reject.failed")));
     } finally {
       setSaving(false);
     }
@@ -477,29 +489,32 @@ function RejectReservationDialog({ reservation, onDone, onCancel }: ActionDialog
     <Dialog open={reservation !== null} onOpenChange={(open) => !open && close()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Rechazar reserva</DialogTitle>
+          <DialogTitle>{t("reservations.reject.title")}</DialogTitle>
           <DialogDescription>
-            {reservation && `${resourceName(reservation)} para ${reservation.user.name}.`} El
-            solicitante verá el motivo.
+            {reservation &&
+              t("reservations.reject.description", {
+                resource: resourceName(reservation),
+                user: reservation.user.name,
+              })}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-1.5">
-          <Label htmlFor="rsv-reason">Motivo del rechazo</Label>
+          <Label htmlFor="rsv-reason">{t("reservations.reject.reason")}</Label>
           <Textarea
             id="rsv-reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="Ej: El laboratorio está reservado para exámenes"
+            placeholder={t("reservations.reject.placeholder")}
             className="h-20"
           />
         </div>
         <ErrorAlert>{error}</ErrorAlert>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={close}>
-            Volver
+            {t("common.back")}
           </Button>
           <Button variant="destructive" onClick={handleReject} disabled={saving || !reason.trim()}>
-            {saving ? "Rechazando..." : "Rechazar"}
+            {saving ? t("reservations.reject.submitting") : t("reservations.reject.submit")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -508,6 +523,7 @@ function RejectReservationDialog({ reservation, onDone, onCancel }: ActionDialog
 }
 
 function CancelReservationDialog({ reservation, onDone, onCancel }: ActionDialogProps) {
+  const { t } = useI18n();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -524,7 +540,7 @@ function CancelReservationDialog({ reservation, onDone, onCancel }: ActionDialog
       await gql(CANCEL_MUTATION, { id: reservation.id });
       onDone();
     } catch (err) {
-      setError(errorMessage(err, "No se pudo cancelar la reserva"));
+      setError(errorMessage(err, t("reservations.cancel.failed")));
     } finally {
       setSaving(false);
     }
@@ -534,19 +550,22 @@ function CancelReservationDialog({ reservation, onDone, onCancel }: ActionDialog
     <Dialog open={reservation !== null} onOpenChange={(open) => !open && close()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Cancelar reserva</DialogTitle>
+          <DialogTitle>{t("reservations.cancel.title")}</DialogTitle>
           <DialogDescription>
             {reservation &&
-              `${resourceName(reservation)}, ${formatDateTime(reservation.startsAt)}. El horario queda libre para otros.`}
+              t("reservations.cancel.description", {
+                resource: resourceName(reservation),
+                date: formatDateTime(reservation.startsAt),
+              })}
           </DialogDescription>
         </DialogHeader>
         <ErrorAlert>{error}</ErrorAlert>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={close}>
-            Volver
+            {t("common.back")}
           </Button>
           <Button variant="destructive" onClick={handleCancel} disabled={saving}>
-            {saving ? "Cancelando..." : "Cancelar reserva"}
+            {saving ? t("reservations.cancel.submitting") : t("reservations.cancel.submit")}
           </Button>
         </DialogFooter>
       </DialogContent>

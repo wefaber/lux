@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Plus, Pencil, Trash2, MapPin } from "lucide-react";
 import { useLocations } from "@/hooks/useLocations";
+import { useI18n } from "@/hooks/useI18n";
 import { gql, formatDate, cn, errorMessage } from "@/lib/utils";
 import {
   locationCode,
@@ -37,6 +38,7 @@ const DELETE_LOCATION_MUTATION = `
 
 // ABM de ubicaciones para el staff. Antes eran cuatro strings fijos en el codigo
 export function LocationsPage() {
+  const { t } = useI18n();
   const { locations, isLoading, error, refetch } = useLocations();
   // null = cerrado, "new" = alta, Location = edicion
   const [editing, setEditing] = useState<Location | "new" | null>(null);
@@ -52,25 +54,24 @@ export function LocationsPage() {
     <div className="space-y-6 max-w-full">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Ubicaciones</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Laboratorios, salones y oficinas. El código (L1 = Laboratorio 1) arranca el ID de sus
-            equipos: L1-PC3.
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {t("locations.title")}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("locations.subtitle")}</p>
         </div>
         <Button size="sm" onClick={() => setEditing("new")}>
           <Plus className="h-3.5 w-3.5" />
-          Nueva ubicación
+          {t("locations.new")}
         </Button>
       </div>
 
-      {error && <ErrorAlert>Error: {error}</ErrorAlert>}
+      {error && <ErrorAlert>{t("common.error", { error })}</ErrorAlert>}
 
       {isLoading && locations.length === 0 ? (
         <TableSkeleton rows={4} cols={5} />
       ) : locations.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground text-sm">
-          No hay ubicaciones registradas
+          {t("locations.empty")}
         </div>
       ) : (
         <div
@@ -82,7 +83,14 @@ export function LocationsPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border">
-                {["Código", "Nombre", "Tipo", "Equipos", "Actualizada", ""].map((h) => (
+                {[
+                  t("locations.col.code"),
+                  t("label.name"),
+                  t("label.type"),
+                  t("locations.col.equipment"),
+                  t("locations.col.updated"),
+                  "",
+                ].map((h) => (
                   <th
                     key={h}
                     className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
@@ -118,21 +126,17 @@ export function LocationsPage() {
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="sm" onClick={() => setEditing(l)}>
                         <Pencil className="h-3.5 w-3.5" />
-                        Editar
+                        {t("common.edit")}
                       </Button>
                       <Button
                         variant="destructive"
                         size="sm"
                         onClick={() => setDeleting(l)}
                         disabled={l.productCount > 0}
-                        title={
-                          l.productCount > 0
-                            ? "Tiene equipos: movelos a otra ubicación para poder eliminarla"
-                            : undefined
-                        }
+                        title={l.productCount > 0 ? t("locations.deleteBlocked") : undefined}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                        Eliminar
+                        {t("common.delete")}
                       </Button>
                     </div>
                   </td>
@@ -177,6 +181,7 @@ interface LocationFormProps {
 }
 
 function LocationForm({ location, existing, onDone, onCancel }: LocationFormProps) {
+  const { t } = useI18n();
   // Proximo numero libre del tipo: con Laboratorio 1 y 2 registrados, propone el 3
   const nextNumber = (kind: string) =>
     Math.max(0, ...existing.filter((l) => l.kind === kind).map((l) => l.number)) + 1;
@@ -218,7 +223,7 @@ function LocationForm({ location, existing, onDone, onCancel }: LocationFormProp
         : gql(CREATE_LOCATION_MUTATION, { input }));
       onDone();
     } catch (err) {
-      setError(errorMessage(err, "Error al guardar la ubicación"));
+      setError(errorMessage(err, t("locations.form.failed")));
     } finally {
       setSaving(false);
     }
@@ -230,15 +235,13 @@ function LocationForm({ location, existing, onDone, onCancel }: LocationFormProp
   return (
     <form onSubmit={handleSubmit} noValidate>
       <DialogHeader>
-        <DialogTitle>{location ? "Editar ubicación" : "Nueva ubicación"}</DialogTitle>
-        <DialogDescription>
-          Su código (L1, A2...) arranca el ID de los equipos que tiene.
-        </DialogDescription>
+        <DialogTitle>{location ? t("locations.form.titleEdit") : t("locations.new")}</DialogTitle>
+        <DialogDescription>{t("locations.form.description")}</DialogDescription>
       </DialogHeader>
       <div className="space-y-4">
         <div className="grid grid-cols-[1fr_6rem] gap-3">
           <div className="space-y-1.5">
-            <Label htmlFor="loc-kind">Tipo</Label>
+            <Label htmlFor="loc-kind">{t("label.type")}</Label>
             <OptionSelect
               id="loc-kind"
               className="w-full"
@@ -264,7 +267,7 @@ function LocationForm({ location, existing, onDone, onCancel }: LocationFormProp
             {fieldError("kind")}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="loc-number">Número</Label>
+            <Label htmlFor="loc-number">{t("locations.form.number")}</Label>
             <Input
               id="loc-number"
               type="number"
@@ -279,16 +282,19 @@ function LocationForm({ location, existing, onDone, onCancel }: LocationFormProp
         {fieldError("number")}
         <p className="text-xs text-muted-foreground">
           {codeLocked
-            ? `Código ${location?.code}: no se puede cambiar, ${location?.productCount} equipo(s) lo usan en su ID de máquina.`
+            ? t("locations.form.codeLocked", {
+                code: location?.code ?? "",
+                count: location?.productCount ?? 0,
+              })
             : code
-              ? `Código: ${code}. Sus equipos se nombran ${code}-PC1, ${code}-PRY1…`
-              : "El código sale del tipo y el número (L1 = Laboratorio 1)."}
+              ? t("locations.form.codeHint", { code })
+              : t("locations.form.codeEmpty")}
         </p>
         <div className="space-y-1.5">
-          <Label htmlFor="loc-name">Nombre</Label>
+          <Label htmlFor="loc-name">{t("label.name")}</Label>
           <Input
             id="loc-name"
-            placeholder="Ej: Laboratorio 3"
+            placeholder={t("locations.form.namePlaceholder")}
             value={form.name}
             onChange={(e) => {
               setNameTouched(true);
@@ -302,10 +308,14 @@ function LocationForm({ location, existing, onDone, onCancel }: LocationFormProp
       </div>
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onCancel}>
-          Cancelar
+          {t("common.cancel")}
         </Button>
         <Button type="submit" disabled={saving}>
-          {saving ? "Guardando..." : location ? "Guardar cambios" : "Crear ubicación"}
+          {saving
+            ? t("common.saving")
+            : location
+              ? t("locations.form.saveChanges")
+              : t("locations.form.submit")}
         </Button>
       </DialogFooter>
     </form>
@@ -319,6 +329,7 @@ interface DeleteLocationDialogProps {
 }
 
 function DeleteLocationDialog({ location, onDone, onCancel }: DeleteLocationDialogProps) {
+  const { t } = useI18n();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -335,7 +346,7 @@ function DeleteLocationDialog({ location, onDone, onCancel }: DeleteLocationDial
       await gql(DELETE_LOCATION_MUTATION, { id: location.id });
       onDone();
     } catch (err) {
-      setError(errorMessage(err, "Error al eliminar la ubicación"));
+      setError(errorMessage(err, t("locations.delete.failed")));
     } finally {
       setSaving(false);
     }
@@ -345,18 +356,19 @@ function DeleteLocationDialog({ location, onDone, onCancel }: DeleteLocationDial
     <Dialog open={location !== null} onOpenChange={(open) => !open && close()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Eliminar ubicación</DialogTitle>
+          <DialogTitle>{t("locations.delete.title")}</DialogTitle>
           <DialogDescription>
-            {location?.name} ({location?.code}) deja de figurar en filtros y formularios.
+            {location &&
+              t("locations.delete.description", { name: location.name, code: location.code })}
           </DialogDescription>
         </DialogHeader>
         <ErrorAlert>{error}</ErrorAlert>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={close}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button variant="destructive" onClick={handleConfirm} disabled={saving}>
-            {saving ? "Eliminando..." : "Eliminar"}
+            {saving ? t("locations.delete.submitting") : t("common.delete")}
           </Button>
         </DialogFooter>
       </DialogContent>

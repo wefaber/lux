@@ -2,6 +2,8 @@ import { app } from "./app";
 import { core } from "./core";
 import { domain } from "./domain";
 import { errors } from "./errors";
+import { locations } from "./locations";
+import { reservations } from "./reservations";
 import { services } from "./services";
 import { loans } from "./loans";
 import { inventory } from "./inventory";
@@ -17,6 +19,8 @@ export const es = {
   ...app,
   ...domain,
   ...errors,
+  ...locations,
+  ...reservations,
   ...services,
   ...loans,
   ...inventory,
@@ -33,9 +37,13 @@ export const esParts = [
   app,
   domain,
   errors,
+  services,
+  loans,
   inventory,
   tickets,
   dashboard,
   profile,
   validation,
+  reservations,
+  locations,
 ] as const;

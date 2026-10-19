@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useAsync } from "@/hooks/useSkeleton";
+import { useI18n } from "@/hooks/useI18n";
 import { useLocations } from "@/hooks/useLocations";
 import { gql, toDateTimeInput, fromDateTimeInput, errorMessage } from "@/lib/utils";
 import { RESERVATION_RESOURCE_LABELS, UNRESERVABLE_EQUIPMENT_STATUSES } from "@/lib/constants";
@@ -40,6 +41,7 @@ interface ReservationFormProps {
 // Pedir una reserva (cualquier rol) o modificarla (staff). Al modificar, el
 // recurso queda fijo: cambian las fechas y el motivo
 export function ReservationForm({ reservation, onDone, onCancel }: ReservationFormProps) {
+  const { t } = useI18n();
   const isEdit = reservation !== null;
   const { data: productsData } = useAsync<{ products: Product[] }>(
     () => (isEdit ? Promise.resolve({ products: [] }) : gql(PRODUCTS_QUERY)),
@@ -85,7 +87,9 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
     const resourceId = resourceType === "equipment" ? equipmentId : locationId;
     if (!isEdit && !resourceId) {
       errors.resource =
-        resourceType === "equipment" ? "Elegí el equipo a reservar" : "Elegí el espacio a reservar";
+        resourceType === "equipment"
+          ? t("reservations.form.pickEquipment")
+          : t("reservations.form.pickSpace");
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
@@ -103,7 +107,7 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
           }));
       onDone();
     } catch (err) {
-      setError(errorMessage(err, "Error al guardar la reserva"));
+      setError(errorMessage(err, t("reservations.form.failed")));
     } finally {
       setSaving(false);
     }
@@ -115,11 +119,11 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
   return (
     <form onSubmit={handleSubmit} noValidate>
       <DialogHeader>
-        <DialogTitle>{isEdit ? "Modificar reserva" : "Nueva reserva"}</DialogTitle>
+        <DialogTitle>
+          {isEdit ? t("reservations.form.titleEdit") : t("reservations.new")}
+        </DialogTitle>
         <DialogDescription>
-          {isEdit
-            ? "Cambiá las fechas o el motivo; el equipo o espacio queda igual."
-            : "Elegí el equipo o el espacio y el horario en que lo vas a usar."}
+          {isEdit ? t("reservations.form.descriptionEdit") : t("reservations.form.description")}
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-4">
@@ -131,29 +135,35 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
         ) : (
           <>
             <div className="space-y-1.5">
-              <Label>Qué querés reservar</Label>
-              <div className="flex gap-2" role="radiogroup" aria-label="Qué querés reservar">
-                {(Object.keys(RESERVATION_RESOURCE_LABELS) as ReservationResource[]).map((t) => (
+              <Label>{t("reservations.form.what")}</Label>
+              <div
+                className="flex gap-2"
+                role="radiogroup"
+                aria-label={t("reservations.form.what")}
+              >
+                {(Object.keys(RESERVATION_RESOURCE_LABELS) as ReservationResource[]).map((kind) => (
                   <Button
-                    key={t}
+                    key={kind}
                     type="button"
                     size="sm"
                     role="radio"
-                    aria-checked={resourceType === t}
-                    variant={resourceType === t ? "default" : "secondary"}
+                    aria-checked={resourceType === kind}
+                    variant={resourceType === kind ? "default" : "secondary"}
                     onClick={() => {
-                      setResourceType(t);
+                      setResourceType(kind);
                       setFieldErrors((e) => ({ ...e, resource: undefined }));
                     }}
                   >
-                    {RESERVATION_RESOURCE_LABELS[t]}
+                    {RESERVATION_RESOURCE_LABELS[kind]}
                   </Button>
                 ))}
               </div>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="rsv-resource">
-                {resourceType === "equipment" ? "Equipo" : "Espacio"}
+                {resourceType === "equipment"
+                  ? t("reservations.form.equipment")
+                  : t("reservations.form.space")}
               </Label>
               {resourceType === "equipment" ? (
                 // Mismo buscador que el equipo de un ticket: por ID, marca, modelo o ubicacion
@@ -183,7 +193,7 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
         )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor="rsv-start">Desde</Label>
+            <Label htmlFor="rsv-start">{t("reservations.form.from")}</Label>
             <Input
               id="rsv-start"
               type="datetime-local"
@@ -194,7 +204,7 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
             {fieldError("startsAt")}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="rsv-end">Hasta</Label>
+            <Label htmlFor="rsv-end">{t("reservations.form.to")}</Label>
             <Input
               id="rsv-end"
               type="datetime-local"
@@ -206,10 +216,10 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="rsv-purpose">Motivo</Label>
+          <Label htmlFor="rsv-purpose">{t("reservations.form.purpose")}</Label>
           <Textarea
             id="rsv-purpose"
-            placeholder="Ej: Clase práctica de redes de 3er año"
+            placeholder={t("reservations.form.purposePlaceholder")}
             value={form.purpose}
             onChange={(e) => update("purpose", e.target.value)}
             maxLength={300}
@@ -221,10 +231,14 @@ export function ReservationForm({ reservation, onDone, onCancel }: ReservationFo
       </div>
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onCancel}>
-          Cancelar
+          {t("common.cancel")}
         </Button>
         <Button type="submit" disabled={saving}>
-          {saving ? "Guardando..." : isEdit ? "Guardar cambios" : "Pedir reserva"}
+          {saving
+            ? t("common.saving")
+            : isEdit
+              ? t("reservations.form.saveChanges")
+              : t("reservations.form.submit")}
         </Button>
       </DialogFooter>
     </form>
