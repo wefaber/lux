@@ -54,6 +54,7 @@ import {
 import { writeAudit } from "../audit";
 import { loginIpMaxAttempts, loginLockMinutes, loginMaxAttempts } from "../env";
 import { LoginGuard } from "../login-guard";
+import { userFieldResolvers } from "./privacy";
 import { revokeToken } from "../sessions";
 import { db } from "../db/client";
 import * as t from "../db/schema";
@@ -2425,6 +2426,7 @@ function entries<T extends object>(source: T): Array<[keyof T & string, Resolver
 }
 
 export const resolvers = {
+  User: userFieldResolvers,
   Query: Object.fromEntries(
     entries(Query).map(([name, fn]) => [
       name,

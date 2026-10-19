@@ -157,8 +157,9 @@ export const typeDefs = /* GraphQL */ `
   type User {
     id: ID!
     name: String!
-    dni: String!
-    email: String!
+    # dni y email son null cuando quien consulta no tiene relacion con la persona
+    dni: String
+    email: String
     role: String!
     isActive: Boolean!
     createdAt: String!
