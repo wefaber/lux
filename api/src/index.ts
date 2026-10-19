@@ -1,73 +1,22 @@
 import { Elysia } from "elysia";
-import { NoSchemaIntrospectionCustomRule } from "graphql";
-import { createSchema, createYoga, type Plugin } from "graphql-yoga";
+import { createSchema } from "graphql-yoga";
 import { createContext } from "./context";
 import { pool } from "./db/client";
 import { restPlugin } from "./rest/plugin";
 import { loadEnv, serverHost, serverPort } from "./env";
 import { clientIp } from "./net";
-import { classifyUnexpected, ERROR_STATUS, isCatalogError } from "./errors";
 import { resolvers } from "./graphql/resolvers";
+import { createGraphqlServer } from "./graphql/server";
 import { typeDefs } from "./graphql/schema";
 
 loadEnv();
 
 const schema = createSchema({ typeDefs, resolvers });
 
-// En produccion no se sirve GraphiQL ni se permite introspeccion: la superficie
-// que ve un atacante es solo la de las operaciones que el cliente ya conoce.
-const isProduction = process.env.NODE_ENV === "production";
-
-// Los errores de graphql-js que no salen de un resolver (query mal formada,
-// variable con tipo equivocado) no traen un codigo del catalogo: se completan
-// con BAD_REQUEST (el codigo original de graphql-js queda en `reason`) para que todo error de la API tenga `code` y `status`.
-function addMissingCodes(result: unknown): void {
-  const results = Array.isArray(result) ? result : [result];
-  for (const entry of results) {
-    const errors = (entry as { errors?: Array<{ extensions?: Record<string, unknown> }> } | null)
-      ?.errors;
-    for (const error of errors ?? []) {
-      const current = error.extensions?.code;
-      if (typeof current === "string" && current in ERROR_STATUS) continue;
-      error.extensions = {
-        ...error.extensions,
-        ...(current ? { reason: current } : {}),
-        code: "BAD_REQUEST",
-        status: ERROR_STATUS.BAD_REQUEST,
-      };
-    }
-  }
-}
-
-const errorCodes: Plugin = {
-  onResultProcess({ result }) {
-    addMissingCodes(result);
-  },
-};
-
-const hardening: Plugin = {
-  onValidate({ addValidationRule }) {
-    if (isProduction) addValidationRule(NoSchemaIntrospectionCustomRule);
-  },
-};
-
-const yoga = createYoga({
+const yoga = createGraphqlServer({
   schema,
-  graphqlEndpoint: "/graphql",
-  graphiql: !isProduction,
-  plugins: [errorCodes, hardening],
-  // Un error que no es del catalogo (bug, caida de la base) no devuelve su texto
-  // al cliente: se loguea completo en el servidor y sale como INTERNAL_ERROR.
-  maskedErrors: {
-    maskError(error) {
-      if (isCatalogError(error)) return error as Error;
-      // Yoga ya loguea el error original; aca solo se decide que ve el cliente.
-      return classifyUnexpected((error as { originalError?: unknown }).originalError ?? error);
-    },
-  },
-  // El frontend manda el JWT en `Authorization: Bearer`; el token identifica al
-  // usuario y de aca sale `caller` para las reglas de permisos.
-  context: ({ request, ip }: { request: Request; ip: string }) => createContext(request, ip),
+  production: process.env.NODE_ENV === "production",
+  createContext,
 });
 
 // Tablas que tienen que existir para que /ready de 200: si faltan, no se aplicaron
