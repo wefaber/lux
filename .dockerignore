@@ -1,0 +1,17 @@
+# Contexto de build de los contenedores (ver ops/compose.yaml). Tambien lo
+# respeta podman build.
+.git
+.github
+.claude
+.agents
+node_modules
+api/node_modules
+dist
+tests/out
+docs
+*.log
+.env
+.env.*
+!.env.example
+!.env.production
+ops/env

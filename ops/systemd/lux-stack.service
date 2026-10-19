@@ -1,0 +1,26 @@
+# Unidad systemd de USUARIO para el stack de Lux (Podman rootless).
+# Se instala con: sudo /opt/sgrsi/lux/scripts/admin.sh deploy unidad
+# y se activa como el usuario del stack ("sgrsi"):
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now lux-stack.service podman-restart.service
+#
+# `loginctl enable-linger sgrsi` (lo hace "deploy unidad") permite que arranque
+# con el servidor sin que nadie abra sesion. podman-restart.service reinicia los
+# contenedores con restart=always/unless-stopped que estaban corriendo.
+
+[Unit]
+Description=Stack de contenedores de Lux (Podman rootless)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=SGRSI_LOG=%h/lux-stack.log
+ExecStart=/opt/sgrsi/lux/scripts/admin.sh deploy up --sin-build
+ExecStop=/opt/sgrsi/lux/scripts/admin.sh deploy down
+TimeoutStartSec=300
+TimeoutStopSec=120
+
+[Install]
+WantedBy=default.target
