@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run-tests.sh — Suite de pruebas funcionales de los scripts de
+# run-tests.sh: Suite de pruebas funcionales de los scripts de
 # administracion del SGRSI. Ejecuta cada modulo contra el sistema real
 # (useradd, groupadd, sshd, pg_dump) usando entidades con prefijo propio que
 # se eliminan al terminar.
@@ -52,7 +52,7 @@ afirmar_exito() {
     if salida="$("$@" 2>&1)"; then
         ok "$desc"
     else
-        falla "$desc" "codigo $? — $salida"
+        falla "$desc" "codigo $?: $salida"
     fi
 }
 
@@ -64,7 +64,7 @@ afirmar_falla() {
     local desc="$1"; shift
     local salida
     if salida="$("$@" 2>&1)"; then
-        falla "$desc" "termino con exito y se esperaba un error — $salida"
+        falla "$desc" "termino con exito y se esperaba un error: $salida"
     else
         ok "$desc"
     fi
@@ -114,7 +114,7 @@ if [[ "$(id -u)" -ne 0 ]]; then
     exit 1
 fi
 
-echo "Suite de pruebas — scripts de administracion SGRSI"
+echo "Suite de pruebas: scripts de administracion SGRSI"
 echo "Scripts: $SCRIPTS_DIR"
 echo "Log de prueba: $SGRSI_LOG"
 
@@ -127,14 +127,14 @@ limpiar_previo() {
 limpiar_previo
 mkdir -p "$TMP"
 
-seccion "Despachador (admin.sh) — issue #78"
+seccion "Despachador (admin.sh): issue #78"
 afirmar_exito     "sin argumentos muestra la ayuda general"        "$ADMIN"
 afirmar_contiene  "la ayuda lista los modulos disponibles"         "Modulos disponibles" "$ADMIN"
 afirmar_contiene  "la ayuda incluye el modulo ssh"                 "ssh " "$ADMIN" ayuda
 afirmar_falla     "un modulo inexistente termina con error"        "$ADMIN" moduloquenoexiste
 afirmar_contiene  "un modulo inexistente muestra la ayuda"         "Modulos disponibles" "$ADMIN" moduloquenoexiste
 
-seccion "Modulo usuarios — issue #78"
+seccion "Modulo usuarios: issue #78"
 afirmar_contiene  "usuarios ayuda lista los subcomandos"           "Subcomandos" "$ADMIN" usuarios ayuda
 afirmar_falla     "subcomando desconocido termina con error"       "$ADMIN" usuarios noexiste
 # Regresion: antes de la correccion, la falta de argumento producia el error
@@ -169,7 +169,7 @@ afirmar_no_contiene "la cuenta ya no figura bloqueada"             " L " passwd 
 afirmar_falla     "bloquear una cuenta inexistente falla"          "$ADMIN" usuarios bloquear sgrsitest-inexistente
 afirmar_falla     "desbloquear una cuenta inexistente falla"       "$ADMIN" usuarios desbloquear sgrsitest-inexistente
 
-seccion "Modulo grupos — issue #78"
+seccion "Modulo grupos: issue #78"
 afirmar_contiene  "grupos ayuda lista los subcomandos"             "Subcomandos" "$ADMIN" grupos ayuda
 afirmar_falla     "subcomando desconocido termina con error"       "$ADMIN" grupos noexiste
 afirmar_exito     "alta crea el grupo"                             "$ADMIN" grupos alta "$G1"
@@ -188,7 +188,7 @@ afirmar_contiene  "listar incluye el grupo creado"                 "$G1" "$ADMIN
 afirmar_exito     "baja elimina el grupo"                          "$ADMIN" grupos baja "$G1"
 afirmar_falla     "el grupo ya no existe"                          getent group "$G1"
 
-seccion "Invocacion independiente de los modulos — issue #78"
+seccion "Invocacion independiente de los modulos: issue #78"
 # El criterio de aceptacion pide que cada modulo se pueda usar sin pasar por
 # el despachador; se comprueba sourceandolo en un shell aparte.
 afirmar_contiene  "usuarios.sh funciona sourceado sin admin.sh"    "$U1" \
@@ -209,7 +209,7 @@ afirmar_falla     "log rechaza un nivel desconocido"               \
 afirmar_falla     "confirmar sin terminal no se cuelga y rechaza"  \
     bash -c "unset SGRSI_SIN_CONFIRMACION; source '$SCRIPTS_DIR/lib/comun.sh'; confirmar 'seguro' < /dev/null"
 
-seccion "Modulo ssh — issue #75"
+seccion "Modulo ssh: issue #75"
 afirmar_contiene  "ssh ayuda lista los subcomandos"                "Subcomandos" "$ADMIN" ssh ayuda
 afirmar_falla     "subcomando desconocido termina con error"       "$ADMIN" ssh noexiste
 afirmar_contiene  "config deshabilita la autenticacion por clave"  "PasswordAuthentication no" "$ADMIN" ssh config
@@ -256,7 +256,7 @@ else
     salta "gestion de llaves publicas" "ssh-keygen no instalado"
 fi
 
-seccion "Respaldo (backup.sh) — issue #77"
+seccion "Respaldo (backup.sh): issue #77"
 export SGRSI_BACKUP_DIR="$TMP/backups"
 afirmar_exito     "sin argumentos muestra la ayuda"                "$BACKUP"
 afirmar_contiene  "la ayuda lista las acciones"                    "instalar-cron" "$BACKUP" ayuda
@@ -269,7 +269,7 @@ echo "no soy un gzip" > "$TMP/falso.sql.gz"
 afirmar_falla     "restaurar un archivo corrupto es rechazado"     "$BACKUP" restaurar "$TMP/falso.sql.gz"
 afirmar_falla     "verificar sin respaldos disponibles falla"      "$BACKUP" verificar
 
-seccion "Rutina de cron — issue #77"
+seccion "Rutina de cron: issue #77"
 afirmar_exito     "el fragmento de cron esta versionado"           test -f "$SCRIPTS_DIR/cron/sgrsi-backup"
 afirmar_contiene  "programa el respaldo diario a las 03:00"        "0 3 * * *" cat "$SCRIPTS_DIR/cron/sgrsi-backup"
 afirmar_contiene  "programa la verificacion semanal"               "0 4 * * 0" cat "$SCRIPTS_DIR/cron/sgrsi-backup"
@@ -279,7 +279,7 @@ afirmar_contiene  "registra la salida en el log de cron"           "/var/log/sgr
 afirmar_exito     "las lineas de cron tienen el campo de usuario"  \
     bash -c "awk '\$1 ~ /^[0-9*]/ && NF < 7 { exit 1 }' '$SCRIPTS_DIR/cron/sgrsi-backup'"
 
-seccion "Ciclo completo de respaldo contra PostgreSQL — issue #77"
+seccion "Ciclo completo de respaldo contra PostgreSQL: issue #77"
 # Estas pruebas necesitan un PostgreSQL accesible con permisos para crear
 # bases. Si no lo hay, se saltan: la suite tiene que seguir sirviendo en una
 # maquina de desarrollo sin motor instalado.

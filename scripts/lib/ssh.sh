@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ssh.sh — Modulo de configuracion del servicio SSH del servidor SGRSI.
+# ssh.sh: Modulo de configuracion del servicio SSH del servidor SGRSI.
 # Aplica el endurecimiento documentado (llave publica obligatoria, sin
 # contrasena, puerto no estandar, acceso restringido por grupo) y administra
 # las llaves publicas del equipo.
@@ -15,19 +15,27 @@
 SGRSI_SSH_DROPIN="${SGRSI_SSH_DROPIN:-/etc/ssh/sshd_config.d/99-sgrsi.conf}"
 SGRSI_SSH_PUERTO="${SGRSI_SSH_PUERTO:-52205}"
 SGRSI_SSH_GRUPO="${SGRSI_SSH_GRUPO:-sgrsi-tecnicos}"
+# Directivas adicionales (multilinea) que se agregan al final del fragmento. Las
+# usa el servidor de respaldo para su bloque Match del usuario de rsync.
+SGRSI_SSH_CONFIG_EXTRA="${SGRSI_SSH_CONFIG_EXTRA:-}"
+SGRSI_SSH_SOCKET_DROPIN="${SGRSI_SSH_SOCKET_DROPIN:-/etc/systemd/system/ssh.socket.d/sgrsi.conf}"
+
+ssh_descripcion() { echo "Endurecimiento de sshd y gestion de llaves publicas"; }
 
 ssh_ayuda() {
     cat <<'FIN_AYUDA'
 Uso: admin.sh ssh <subcomando> [argumentos]
 
 Subcomandos:
-  aplicar                           Instala el endurecimiento de sshd y recarga el servicio
+  aplicar [--forzar]                Instala el endurecimiento de sshd y recarga el servicio.
+                                    Comprueba antes que haya llaves y que UFW deje pasar el puerto
   verificar                         Comprueba la configuracion efectiva del servicio
   llave-agregar <usuario> <archivo> Instala una llave publica en la cuenta indicada
   llaves [usuario]                  Lista las llaves publicas instaladas
   config                            Muestra la configuracion que aplicaria, sin escribirla
 
-Variables de entorno: SGRSI_SSH_DROPIN, SGRSI_SSH_PUERTO, SGRSI_SSH_GRUPO.
+Variables de entorno: SGRSI_SSH_DROPIN, SGRSI_SSH_PUERTO, SGRSI_SSH_GRUPO,
+SGRSI_SSH_CONFIG_EXTRA. Con --dry-run valida el fragmento con sshd -t pero no lo instala.
 FIN_AYUDA
 }
 
@@ -58,20 +66,82 @@ AllowGroups $SGRSI_SSH_GRUPO sudo
 
 # Endurecimiento adicional
 MaxAuthTries 3
+LoginGraceTime 30
+MaxSessions 4
 ClientAliveInterval 300
 ClientAliveCountMax 2
 X11Forwarding no
+AllowTcpForwarding no
+AllowAgentForwarding no
+PermitEmptyPasswords no
+# VERBOSE registra la huella de la llave usada en cada acceso (auditoria)
+LogLevel VERBOSE
 FIN_CONFIG
+    if [[ -n "$SGRSI_SSH_CONFIG_EXTRA" ]]; then
+        printf '\n# --- Bloque adicional del entorno ---\n%s\n' "$SGRSI_SSH_CONFIG_EXTRA"
+    fi
+}
+
+# ssh_hay_llave_para_acceso
+# Antes de aplicar PasswordAuthentication no hay que estar seguro de que alguien
+# puede entrar con llave: alguna cuenta de los grupos permitidos con al menos una
+# llave en authorized_keys. Si no, el endurecimiento deja el servidor sin acceso.
+ssh_hay_llave_para_acceso() {
+    local grupo usuario home miembros
+    for grupo in "$SGRSI_SSH_GRUPO" sudo; do
+        miembros="$(getent group "$grupo" 2>/dev/null | cut -d: -f4 | tr ',' ' ')"
+        for usuario in $miembros; do
+            home="$(getent passwd "$usuario" | cut -d: -f6)"
+            if [[ -s "$home/.ssh/authorized_keys" ]]; then
+                return 0
+            fi
+        done
+    done
+    return 1
+}
+
+# ssh_ufw_permite_puerto: si UFW esta activo, el puerto de SSH tiene que estar
+# permitido; si UFW no esta instalado o inactivo no hay nada que bloquee.
+ssh_ufw_permite_puerto() {
+    command -v ufw >/dev/null 2>&1 || return 0
+    local estado
+    estado="$(ufw status 2>/dev/null || true)"
+    grep -q '^Status: active' <<<"$estado" || return 0
+    grep -Eq "^${SGRSI_SSH_PUERTO}/tcp +(ALLOW|LIMIT)" <<<"$estado"
+}
+
+# ssh_socket_activo: en algunas instalaciones sshd arranca por socket activation
+# (ssh.socket) y el Port del sshd_config se ignora hasta ajustar la unidad.
+ssh_socket_activo() {
+    systemctl is-active --quiet ssh.socket 2>/dev/null
+}
+
+ssh_ajustar_socket() {
+    if ! ssh_socket_activo; then
+        return 0
+    fi
+    log WARN "ssh.socket esta activo: el puerto se define en la unidad, no en sshd_config. Se agrega un drop-in."
+    ejecutar install -d -m 755 "$(dirname "$SGRSI_SSH_SOCKET_DROPIN")"
+    if es_dry_run; then
+        log INFO "[dry-run] Se escribiria $SGRSI_SSH_SOCKET_DROPIN con ListenStream=$SGRSI_SSH_PUERTO"
+    else
+        printf '[Socket]\nListenStream=\nListenStream=%s\n' "$SGRSI_SSH_PUERTO" > "$SGRSI_SSH_SOCKET_DROPIN"
+    fi
+    ejecutar systemctl daemon-reload
+    ejecutar systemctl restart ssh.socket
 }
 
 ssh_aplicar() {
+    local forzar=""
+    [[ "${1:-}" == "--forzar" ]] && forzar="--forzar"
+
     requerir_root
 
     local destino="$SGRSI_SSH_DROPIN"
     local dir_destino
     dir_destino="$(dirname "$destino")"
 
-    if [[ ! -d "$dir_destino" ]]; then
+    if [[ ! -d "$dir_destino" ]] && ! es_dry_run; then
         log ERROR "No existe '$dir_destino'. Confirmar que openssh-server esta instalado y que sshd_config incluye el directorio de fragmentos."
         return 1
     fi
@@ -84,21 +154,57 @@ ssh_aplicar() {
         confirmar "Aplicar igualmente la configuracion" || { log INFO "Operacion cancelada."; return 0; }
     fi
 
+    # Salvaguardas contra el bloqueo (R5 de la auditoria de E2).
+    if ! es_dry_run && [[ -z "$forzar" ]]; then
+        if ! ssh_hay_llave_para_acceso; then
+            log ERROR "Ninguna cuenta de '$SGRSI_SSH_GRUPO' ni de 'sudo' tiene una llave publica instalada. Con PasswordAuthentication no se perderia el acceso."
+            log ERROR "Instalar una primero: admin.sh ssh llave-agregar <usuario> <archivo.pub>  (o repetir con --forzar si hay consola de la VM)."
+            return 1
+        fi
+        if ! ssh_ufw_permite_puerto; then
+            log ERROR "UFW esta activo y no permite $SGRSI_SSH_PUERTO/tcp. Abrirlo antes: admin.sh firewall permitir $SGRSI_SSH_PUERTO"
+            return 1
+        fi
+    fi
+
+    local nuevo
+    nuevo="$(mktemp)"
+    # shellcheck disable=SC2064
+    trap "rm -f '$nuevo'" RETURN
+    ssh_config > "$nuevo"
+
+    # Validar ANTES de instalar: una configuracion invalida que se recarga
+    # deja el servicio caido y el servidor inaccesible. `sshd -t -f` sobre el
+    # fragmento solo (es una configuracion completa valida) no modifica nada.
+    local salida_test
+    if command -v sshd >/dev/null 2>&1; then
+        if ! salida_test="$(sshd -t -f "$nuevo" 2>&1)"; then
+            log ERROR "La configuracion generada no valida. sshd -t informa: $salida_test"
+            return 1
+        fi
+        log INFO "Fragmento validado con sshd -t."
+    else
+        log WARN "sshd no esta instalado: no se pudo validar el fragmento."
+    fi
+
+    if es_dry_run; then
+        log INFO "[dry-run] Se instalaria $destino con:"
+        sed 's/^/    | /' "$nuevo" >&2
+        ssh_ajustar_socket
+        return 0
+    fi
+
     local respaldo=""
     if [[ -f "$destino" ]]; then
         respaldo="${destino}.bak-$(date '+%Y%m%d_%H%M%S')"
         cp -p "$destino" "$respaldo"
         log INFO "Configuracion anterior respaldada en $respaldo"
     fi
+    install -m 644 "$nuevo" "$destino"
 
-    ssh_config > "$destino"
-    chmod 644 "$destino"
-
-    # Validar antes de recargar: una configuracion invalida que se recarga
-    # deja el servicio caido y el servidor inaccesible.
-    local salida_test
+    # Segunda validacion, ahora con el sshd_config real y todos los includes.
     if ! salida_test="$(sshd -t 2>&1)"; then
-        log ERROR "La configuracion generada no valida. sshd -t informa: $salida_test"
+        log ERROR "La configuracion completa no valida. sshd -t informa: $salida_test"
         if [[ -n "$respaldo" ]]; then
             mv "$respaldo" "$destino"
             log WARN "Se restauro la configuracion anterior."
@@ -110,9 +216,10 @@ ssh_aplicar() {
     fi
 
     log INFO "Configuracion escrita en $destino y validada con sshd -t."
-    log WARN "Antes de recargar: confirmar que al menos una llave publica esta instalada, o se pierde el acceso remoto."
+    log WARN "Mantener ABIERTA esta sesion y probar una sesion nueva en el puerto $SGRSI_SSH_PUERTO antes de cerrarla."
 
     if confirmar "Recargar el servicio sshd ahora"; then
+        ssh_ajustar_socket
         if systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null; then
             log INFO "Servicio sshd recargado. Escucha ahora en el puerto $SGRSI_SSH_PUERTO."
         else
@@ -144,7 +251,11 @@ ssh_verificar() {
         "pubkeyauthentication yes" \
         "permitrootlogin no" \
         "maxauthtries 3" \
-        "x11forwarding no"; do
+        "x11forwarding no" \
+        "logingracetime 30" \
+        "allowtcpforwarding no" \
+        "permitemptypasswords no" \
+        "loglevel VERBOSE"; do
         if grep -qix -- "$esperado" <<<"$efectiva"; then
             echo "  [ok]    $esperado"
         else
@@ -250,7 +361,7 @@ ssh_main() {
     shift || true
 
     case "$subcomando" in
-        aplicar)        ssh_aplicar ;;
+        aplicar)        ssh_aplicar "$@" ;;
         verificar)      ssh_verificar ;;
         llave-agregar)  ssh_llave_agregar "$@" ;;
         llaves)         ssh_llaves "$@" ;;
