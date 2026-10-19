@@ -57,6 +57,12 @@ import { LoginGuard } from "../login-guard";
 import { revokeToken } from "../sessions";
 import { db } from "../db/client";
 import * as t from "../db/schema";
+import {
+  EQUIPMENT_STATUSES,
+  SERVICE_STATUSES,
+  SERVICE_TYPES,
+  TICKET_CATEGORIES,
+} from "../db/enums";
 import { toUser, type State } from "../state";
 import { withState, withTransaction, type AuditSpec, type Resolver } from "./wrap";
 
@@ -354,6 +360,17 @@ function invalidLoanTransition(loan: Loan, action: string): string {
 
 function firstError(errors: Record<string, string | undefined>): string | null {
   return Object.values(errors)[0] ?? null;
+}
+
+// Valor de un campo de lista cerrada (estado, categoria, tipo): la base lo exige
+// con un CHECK, aca se responde con un mensaje claro antes de llegar a ella.
+function assertOneOf(value: string, allowed: readonly string[], message: string): void {
+  if (!allowed.includes(value)) throw invalid(message);
+}
+
+// Una referencia a un equipo tiene que apuntar a uno que exista (FK de la base).
+function assertProductExists(state: State, id: string | null | undefined, message: string): void {
+  if (id && !state.productsById.has(id)) throw invalid(message);
 }
 
 // Primero las reglas de formato (422); si pasan, las que chocan con el estado
@@ -1004,6 +1021,7 @@ const Mutation = {
       serialNumber: input.serialNumber.trim().toUpperCase(),
       partNumber: input.partNumber.trim().toUpperCase(),
     };
+    assertOneOf(input.status, EQUIPMENT_STATUSES, "Estado de equipo inválido");
     assertRules(firstError(validateProduct(fields)), () => duplicateProductError(ctx.state, fields));
     if (!location) throw invalid("Ubicación inválida");
     const product: Product = {
@@ -1166,6 +1184,7 @@ const Mutation = {
     };
     const error = firstError(validateComponent(fields));
     if (error) throw invalid(error);
+    assertProductExists(ctx.state, fields.productId, "El equipo al que pertenece el componente no existe");
     const component = {
       id: nextId(ctx.state, "comp-", ctx.state.components),
       type: "component" as const,
@@ -1176,7 +1195,7 @@ const Mutation = {
       partNumber: fields.partNumber,
       isFactory: fields.isFactory,
       isWorking: fields.isWorking,
-      productId: fields.productId ?? null,
+      productId: fields.productId || null,
       createdAt: nowIso(),
       updatedAt: nowIso(),
       deletedAt: null,
@@ -1268,6 +1287,8 @@ const Mutation = {
   ) => {
     const caller = requireAuth(ctx);
     const { input } = args;
+    assertOneOf(input.category, TICKET_CATEGORIES, "Categoría de incidencia inválida");
+    assertProductExists(ctx.state, input.equipmentId, "El equipo no existe");
     const equipment = input.equipmentId
       ? (ctx.state.products.find((p) => p.id === input.equipmentId) ?? null)
       : null;
@@ -1279,7 +1300,7 @@ const Mutation = {
       status: "pending",
       submittedBy: caller,
       assignedTo: null,
-      equipmentId: input.equipmentId ?? null,
+      equipmentId: input.equipmentId || null,
       equipment,
       diagnosis: null,
       corrected: null,
@@ -1323,11 +1344,15 @@ const Mutation = {
       category: string;
       equipmentId: string;
     }>;
+    if (input.category !== undefined) {
+      assertOneOf(input.category, TICKET_CATEGORIES, "Categoría de incidencia inválida");
+    }
+    if (input.equipmentId) assertProductExists(ctx.state, input.equipmentId, "El equipo no existe");
     if (input.title !== undefined) ticket.title = input.title;
     if (input.description !== undefined) ticket.description = input.description;
     if (input.category !== undefined) ticket.category = input.category as Ticket["category"];
     if (input.equipmentId !== undefined) {
-      ticket.equipmentId = input.equipmentId;
+      ticket.equipmentId = input.equipmentId || null;
       ticket.equipment = ctx.state.products.find((p) => p.id === input.equipmentId) ?? null;
     }
     ticket.updatedAt = nowIso();
@@ -1629,6 +1654,8 @@ const Mutation = {
   ) => {
     const caller = requireAuth(ctx);
     const { input } = args;
+    assertOneOf(input.type, SERVICE_TYPES, "Tipo de solicitud inválido");
+    assertProductExists(ctx.state, input.equipmentId, "El equipo no existe");
     const service: ServiceRequest = {
       id: nextId(ctx.state, "svc-", ctx.state.services, 3),
       type: input.type as ServiceRequest["type"],
@@ -1638,7 +1665,7 @@ const Mutation = {
       description: input.description,
       labNumber: input.labNumber ?? null,
       softwareName: input.softwareName ?? null,
-      equipmentId: input.equipmentId ?? null,
+      equipmentId: input.equipmentId || null,
       resolutionText: null,
       createdAt: nowIso(),
       updatedAt: nowIso(),
@@ -1672,6 +1699,7 @@ const Mutation = {
     if (!service) throw notFound("Solicitud no encontrada");
     const { input } = args;
     const previousStatus = service.status;
+    if (input.status) assertOneOf(input.status, SERVICE_STATUSES, "Estado de solicitud inválido");
     if (input.status) service.status = input.status as ServiceRequest["status"];
     if (!service.assignedTo && (input.status === "in_progress" || input.status === "completed")) {
       await handOver(ctx.state, "service_request", service.id, service.requestedBy, null, caller, caller);

@@ -208,4 +208,42 @@ export const apiCases: TestCase[] = [
       check(new Set(ids).size === ids.length, `identificadores repetidos: ${ids.join(", ")}`);
     },
   },
+  {
+    id: "CP-RNF-14",
+    cu: "RNF",
+    title: "Referencias y valores de lista cerrada se validan (FK y CHECK en la base)",
+    rf: [],
+    kind: "negativo",
+    actor: "solicitante",
+    priority: "media",
+    precondition: "Sesiones de solicitante y técnico.",
+    steps: [
+      "Crear una incidencia con un equipo inexistente",
+      "Crear una incidencia con una categoría inválida",
+      "Crear un componente de un equipo inexistente",
+      "Crear una solicitud de servicio de un tipo inválido",
+    ],
+    expected: "VALIDATION_ERROR/422 en los cuatro casos, con un mensaje propio (no el de la restricción de la base).",
+    api: async (t) => {
+      const sol = await t.as("solicitante");
+      const tec = await t.as("tecnico");
+      const ticket = `mutation($input: TicketInput!) { createTicket(input: $input) { id } }`;
+      const base = { title: t.tag("Referencia"), description: "Incidencia para probar la validación de referencias.", category: "other" };
+      const e1 = await sol.failsWith(ticket, { input: { ...base, equipmentId: "prod-no-existe" } }, "VALIDATION_ERROR", 422);
+      check(!/constraint|violates|foreign/i.test(e1.message), `el mensaje filtra la restricción: ${e1.message}`);
+      await sol.failsWith(ticket, { input: { ...base, category: "magia" } }, "VALIDATION_ERROR", 422);
+      await tec.failsWith(
+        `mutation($input: ComponentInput!) { createComponent(input: $input) { id } }`,
+        { input: { name: "Disco", model: "M1", manufacturer: "Acme", serialNumber: "SN123456", partNumber: "PN123456", isFactory: true, isWorking: true, productId: "prod-no-existe" } },
+        "VALIDATION_ERROR",
+        422,
+      );
+      await sol.failsWith(
+        `mutation($input: ServiceRequestInput!) { createServiceRequest(input: $input) { id } }`,
+        { input: { type: "hechizo", description: "Tipo que no existe en la lista cerrada." } },
+        "VALIDATION_ERROR",
+        422,
+      );
+    },
+  },
 ];

@@ -20,11 +20,10 @@ describe.skipIf(!hasDatabase)("runInTransaction (PostgreSQL)", () => {
   });
 
   afterAll(async () => {
-    const { db, pool } = await import("./client");
+    const { db } = await import("./client");
     const { locations } = await import("./schema");
     await db.delete(locations).where(eq(locations.id, commitId));
     await db.delete(locations).where(eq(locations.id, rollbackId));
-    await pool.end();
   });
 
   test("si el trabajo lanza, no queda ninguna de las escrituras", async () => {

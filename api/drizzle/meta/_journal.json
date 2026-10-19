@@ -22,6 +22,13 @@
       "when": 1792390127977,
       "tag": "0002_revoked_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792390517590,
+      "tag": "0003_integrity_fk_check",
+      "breakpoints": true
     }
   ]
 }
