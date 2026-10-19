@@ -1,21 +1,36 @@
-# /etc/cron.d/sgrsi-backup — Rutina de respaldo de la base de datos del SGRSI.
+# /etc/cron.d/sgrsi-backup: Rutinas de respaldo del SGRSI.
 #
 # Se instala con: sudo ./backup.sh instalar-cron
-# Issue: wefaber/eternum#77 · Documentado en 05-ADMIN-SO/E2/RutinasBackup.md
+# Issues: wefaber/eternum#77 y #109. Documentado en 05-ADMIN-SO/E3/ServidorRespaldo.md
 #
 # Se versiona el archivo en el repositorio en vez de editar el crontab del
 # usuario a mano, para que la programacion del respaldo quede bajo control de
 # versiones y se revise igual que el resto del codigo.
+#
+# Todas las rutinas corren como el usuario de servicio "sgrsi", la misma cuenta
+# que ejecuta los contenedores rootless. Las credenciales NO estan aca: salen
+# de /etc/sgrsi/sgrsi.conf (sin secretos) y de DB_PASSWORD_FILE (modo 600).
 
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 MAILTO=""
+SGRSI_CONF=/etc/sgrsi/sgrsi.conf
 
 # min hora dia mes dia-semana  usuario  comando
-# Respaldo diario a las 03:00, cuando la carga del sistema es minima.
+# Respaldo diario a las 03:00, cuando la carga del sistema es minima. Incluye
+# la rotacion (7 dias + 4 semanas) si el respaldo termino bien.
 0 3 * * *   sgrsi   /opt/sgrsi/lux/scripts/backup.sh respaldar >> /var/log/sgrsi/backup-cron.log 2>&1
 
+# Envio al servidor de respaldo a las 03:30, despues del respaldo. Si el destino
+# no responde sale con codigo 75 y la corrida queda pendiente para la proxima.
+30 3 * * *  sgrsi   /opt/sgrsi/lux/scripts/admin.sh respaldo remoto sincronizar >> /var/log/sgrsi/backup-cron.log 2>&1
+
 # Verificacion de integridad semanal (domingos 04:00): restaura el ultimo
-# dump contra una base descartable. Un respaldo que nunca se restauro no es
-# un respaldo comprobado.
+# dump contra una base descartable y comprueba filas. Un respaldo que nunca se
+# restauro no es un respaldo comprobado.
 0 4 * * 0   sgrsi   /opt/sgrsi/lux/scripts/backup.sh verificar >> /var/log/sgrsi/backup-cron.log 2>&1
+
+# Control diario de sumas SHA-256 de lo almacenado localmente (05:00) y aviso de
+# antiguedad: falla (y deja ERROR en el log) si el ultimo respaldo supera 26 h.
+0 5 * * *   sgrsi   /opt/sgrsi/lux/scripts/backup.sh comprobar todas >> /var/log/sgrsi/backup-cron.log 2>&1
+5 5 * * *   sgrsi   /opt/sgrsi/lux/scripts/backup.sh estado >> /var/log/sgrsi/backup-cron.log 2>&1

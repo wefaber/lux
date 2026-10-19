@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# grupos.sh — Modulo de gestion de grupos del sistema operativo. Cubre alta,
+# grupos.sh: Modulo de gestion de grupos del sistema operativo. Cubre alta,
 # baja y administracion de miembros de grupo, invocado por admin.sh.
 #
 # Issue: wefaber/eternum#78
 # Documentado en: 05-ADMIN-SO/E2/Scripts-Bash-V1.md
 
 # Requiere que comun.sh ya este cargado por quien invoca este modulo.
+
+grupos_descripcion() { echo "Alta, baja y gestion de miembros de grupo"; }
 
 grupos_ayuda() {
     cat <<'EOF'
@@ -24,6 +26,7 @@ EOF
 grupos_alta() {
     local grupo="${1:-}"
     validar_no_vacio "$grupo" "grupo" || return 1
+    validar_nombre "$grupo" "grupo" || return 1
     requerir_root
 
     if existe_grupo "$grupo"; then
@@ -31,8 +34,8 @@ grupos_alta() {
         return 1
     fi
 
-    groupadd "$grupo"
-    log INFO "Grupo '$grupo' creado."
+    ejecutar groupadd "$grupo"
+    hecho "Grupo '$grupo' creado."
 }
 
 grupos_baja() {
@@ -52,8 +55,8 @@ grupos_baja() {
         confirmar "Eliminar el grupo de todas formas" || { log INFO "Operacion cancelada."; return 0; }
     fi
 
-    groupdel "$grupo"
-    log INFO "Grupo '$grupo' eliminado."
+    ejecutar groupdel "$grupo"
+    hecho "Grupo '$grupo' eliminado."
 }
 
 grupos_agregar() {
@@ -72,8 +75,8 @@ grupos_agregar() {
         return 1
     fi
 
-    usermod --append --groups "$grupo" "$usuario"
-    log INFO "Usuario '$usuario' agregado al grupo '$grupo'."
+    ejecutar usermod --append --groups "$grupo" "$usuario"
+    hecho "Usuario '$usuario' agregado al grupo '$grupo'."
 }
 
 grupos_quitar() {
@@ -100,8 +103,8 @@ grupos_quitar() {
         return 1
     fi
 
-    gpasswd --delete "$usuario" "$grupo"
-    log INFO "Usuario '$usuario' removido del grupo '$grupo'."
+    ejecutar gpasswd --delete "$usuario" "$grupo"
+    hecho "Usuario '$usuario' removido del grupo '$grupo'."
 }
 
 grupos_miembros() {

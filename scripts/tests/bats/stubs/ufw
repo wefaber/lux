@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Stub de ufw: registra y, para "status", devuelve el contenido de $STUB_UFW_STATUS.
+echo "ufw $*" >> "${STUB_LOG:-/dev/null}"
+if [[ "${1:-}" == "status" ]]; then
+    [[ -n "${STUB_UFW_STATUS:-}" && -f "$STUB_UFW_STATUS" ]] && cat "$STUB_UFW_STATUS"
+fi
+exit "${STUB_UFW_RC:-0}"

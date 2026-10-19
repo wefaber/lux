@@ -1,97 +1,92 @@
 # Scripts de administración del servidor SGRSI
 
-Scripts de administración del servidor Debian que hospeda el SGRSI (Lux),
-correspondientes a la segunda entrega de Administración de Sistemas Operativos.
+Scripts de administración del servidor Debian 13 que hospeda el SGRSI (Lux).
+La segunda entrega dejó la base (usuarios, grupos, SSH, respaldo local); la
+tercera suma red, base de datos, firewall, logs, despliegue de contenedores y
+respaldo remoto. La composición de contenedores y el servidor de respaldo
+viven en `ops/` (ver `ops/compose.yaml` y `ops/backup-server/`).
 
-| Issue | Criterio de rúbrica | Archivos |
+| Entrega | Tema | Archivos |
 |---|---|---|
-| [#75](https://github.com/wefaber/eternum/issues/75) | Configuración del servicio SSH | `lib/ssh.sh` |
-| [#77](https://github.com/wefaber/eternum/issues/77) | Rutinas de backup y scripts | `backup.sh`, `cron/sgrsi-backup` |
-| [#78](https://github.com/wefaber/eternum/issues/78) | Script de administración modular | `admin.sh`, `lib/*.sh` |
+| E2 | SSH, respaldo local, script modular | `lib/ssh.sh`, `backup.sh`, `admin.sh` |
+| E3 | Red, DB, UFW, logs, despliegue, respaldo remoto | `lib/red.sh`, `lib/db.sh`, `lib/firewall.sh`, `lib/logs.sh`, `lib/deploy.sh`, `lib/respaldo.sh`, `lib/rotacion.sh` |
 
 ## Estructura
 
 ```
 scripts/
-├── admin.sh              Despachador. Punto de entrada único.
-├── backup.sh             Respaldo de PostgreSQL. Se invoca también desde cron.
-├── cron/
-│   └── sgrsi-backup      Fragmento para /etc/cron.d, versionado.
+├── admin.sh              Despachador. Descubre solos los módulos de lib/.
+├── backup.sh             Respaldo (dump + configuración + secretos cifrados + SHA-256). También desde cron.
+├── conf/sgrsi.conf.example   Ejemplo de /etc/sgrsi/sgrsi.conf (sin secretos).
+├── cron/sgrsi-backup     Fragmento para /etc/cron.d, versionado.
 ├── lib/
-│   ├── comun.sh          Logging, requerir_root, confirmar, validaciones.
-│   ├── usuarios.sh       Ciclo de vida de las cuentas del sistema.
-│   ├── grupos.sh         Grupos y membresías.
-│   └── ssh.sh            Endurecimiento de sshd y llaves públicas.
+│   ├── comun.sh          Logging, --dry-run, validaciones, reintentos, locks, secretos, podman.
+│   ├── rotacion.sh       Política 7 diarios + 4 semanales (función pura, testeable).
+│   ├── usuarios.sh  grupos.sh  ssh.sh
+│   ├── red.sh  firewall.sh  db.sh  logs.sh  deploy.sh  respaldo.sh
 └── tests/
-    └── run-tests.sh      Suite funcional. Requiere root y Linux.
+    ├── bats/             Pruebas con stubs en PATH (no tocan el sistema). 172 casos.
+    ├── integracion-respaldo.sh   Cliente y servidor de respaldo contra un sshd efímero.
+    └── run-tests.sh      Suite de E2: crea usuarios reales; requiere root y una máquina descartable.
 ```
 
-`backup.sh` no pasa por el despachador porque corre desde cron sin
-intervención humana; los módulos de `lib/` solo tienen sentido en uso
-interactivo o administrado.
+Un módulo nuevo es un archivo `lib/<nombre>.sh` que define `<nombre>_main`,
+`<nombre>_descripcion` y `<nombre>_ayuda`: `admin.sh` lo descubre sin editarse,
+y si un módulo no carga (error de sintaxis) lo informa y sigue con los demás.
 
 ## Uso
 
 ```bash
-./admin.sh                                   # ayuda general
-./admin.sh usuarios ayuda                    # ayuda del módulo
+./admin.sh                                   # ayuda general y lista de módulos
+./admin.sh --dry-run ufw aplicar-base        # muestra lo que haría, no modifica nada
 sudo ./admin.sh usuarios alta tecnico1 "Técnico de coordinación"
-sudo ./admin.sh grupos alta sgrsi-tecnicos
-sudo ./admin.sh grupos agregar tecnico1 sgrsi-tecnicos
 sudo ./admin.sh ssh llave-agregar tecnico1 /tmp/tecnico1.pub
 sudo ./admin.sh ssh aplicar
-sudo ./admin.sh ssh verificar
-
-sudo ./backup.sh respaldar
-sudo ./backup.sh verificar
-sudo ./backup.sh restaurar /var/backups/sgrsi/lux_20260823_030000.sql.gz
-sudo ./backup.sh instalar-cron
+sudo ./admin.sh firewall aplicar-base
+sudo ./admin.sh red config                   # IP fija que se aplicaría
+sudo ./admin.sh deploy up                    # build + up + espera /ready (rollback si no responde)
+sudo ./admin.sh respaldo local respaldar
+sudo ./admin.sh respaldo remoto sincronizar
 ```
 
-Cada módulo se puede usar sin el despachador, siempre que `comun.sh` esté
-cargado:
+Opciones globales: `--dry-run` (nada se modifica) y `--config <archivo>`.
+Códigos de salida: 0 correcto, 1 error, 2 uso, 75 fallo temporal (destino de
+respaldo caído, reintentar), 78 configuración ausente o inválida.
 
-```bash
-source lib/comun.sh
-source lib/usuarios.sh
-usuarios_main listar
-```
+## Configuración
 
-## Variables de entorno
+Los valores por defecto están en cada módulo; se sobreescriben con
+`/etc/sgrsi/sgrsi.conf` (ver `conf/sgrsi.conf.example`) o con variables de
+entorno. **Las claves nunca van en el repositorio ni en el `.conf`**: se
+entregan por `*_FILE` (archivo de modo 600) o por entorno (`DB_PASSWORD`,
+`DB_PASSWORD_FILE`, `DB_ROLE_PASSWORD(_FILE)`, `SGRSI_BACKUP_CLAVE_ARCHIVO`).
 
-| Variable | Por defecto | Uso |
-|---|---|---|
-| `SGRSI_LOG` | `/var/log/sgrsi/admin.log` | Destino del log de operaciones |
-| `SGRSI_SIN_CONFIRMACION` | `false` | `true` salta las confirmaciones interactivas |
-| `SGRSI_BACKUP_DIR` | `/var/backups/sgrsi` | Directorio de respaldos |
-| `SGRSI_BACKUP_RETENCION_DIAS` | `14` | Días de retención de dumps |
-| `SGRSI_SSH_DROPIN` | `/etc/ssh/sshd_config.d/99-sgrsi.conf` | Destino del fragmento de sshd |
-| `SGRSI_SSH_PUERTO` | `52205` | Puerto administrativo |
-| `SGRSI_SSH_GRUPO` | `sgrsi-tecnicos` | Grupo con acceso SSH |
-| `DB_HOST` `DB_PORT` `DB_NAME` `DB_USER` `DB_PASSWORD` | `localhost` `5432` `lux` `lux_app` — | Conexión a PostgreSQL |
+Variables principales: `SGRSI_SSH_PUERTO`, `SGRSI_SSH_GRUPO`, `SGRSI_RED_IP`,
+`SGRSI_RED_GATEWAY`, `SGRSI_FW_SSH_ORIGEN`, `SGRSI_DB_MODO`, `SGRSI_STACK_ENV`,
+`SGRSI_BACKUP_DIR`, `SGRSI_BACKUP_DIARIOS` (7), `SGRSI_BACKUP_SEMANAS` (4),
+`SGRSI_RESPALDO_HOST`, `SGRSI_RESPALDO_LLAVE`. La lista completa está en la
+ayuda de cada módulo (`./admin.sh <módulo> ayuda`).
 
 ## Pruebas
 
 ```bash
-sudo ./tests/run-tests.sh
+cd tests
+bats bats/*.bats                 # sin privilegios, no modifica el sistema
+bash integracion-respaldo.sh     # sshd efímero en 127.0.0.1, sin root
+shellcheck -x -S style $(find .. ../../ops -name '*.sh')
 ```
 
-La suite crea usuarios y grupos con prefijo `sgrsitest`, los ejerce y los
-elimina al terminar. Las pruebas de base de datos se saltan solas si no hay
-un PostgreSQL accesible con las credenciales de `DB_*`.
+Las pruebas con `bats` reemplazan `useradd`, `ufw`, `ip`, `podman`, etc. por
+stubs que solo registran cómo los llamaron: lo que afirma una prueba de
+`--dry-run` es que el registro queda sin llamadas al comando que modifica. Las
+de `ssh` validan el fragmento generado con el `sshd` real (`sshd -t -f`, `sshd -T -f`).
+Las de `db` y `backup` usan el PostgreSQL local con bases propias (`sgrsitest_*`)
+que se borran al terminar, y se omiten solas si no hay PostgreSQL.
 
-Para correr también el ciclo completo de respaldo y restauración:
-
-```bash
-sudo DB_USER=lux_app DB_PASSWORD=... ./tests/run-tests.sh
-```
-
-Linter: `shellcheck --shell=bash --external-sources admin.sh backup.sh lib/*.sh tests/*.sh`
+`tests/run-tests.sh` (E2) ejecuta de verdad `useradd`, `groupadd` y `sshd`:
+solo en una máquina virtual descartable.
 
 ## Documentación
 
-El diseño y las decisiones están en el vault (`wefaber/ethernum-obsidian`):
-
-- `05-ADMIN-SO/E2/Scripts-Bash-V1.md` — estructura modular y despachador
-- `05-ADMIN-SO/E2/RutinasBackup.md` — medios de respaldo, retención y cron
-- `05-ADMIN-SO/E2/SSH-Configuracion.md` — configuración de sshd y llaves
+El diseño y las decisiones están en el vault (`05-ADMIN-SO/E3/`): `Script-Final.md`,
+`Docker-Compose.md`, `ServidorRespaldo.md`, `ManualInstalacion.md`, `SSH.md`, `RedYPuertos.md`.

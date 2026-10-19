@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Stub de curl para /ready: STUB_CURL_RC controla si responde.
+echo "curl $*" >> "${STUB_LOG:-/dev/null}"
+exit "${STUB_CURL_RC:-0}"

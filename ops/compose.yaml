@@ -1,0 +1,152 @@
+# Stack de Lux para Podman rootless: web (nginx + SPA) + api (Bun) + db
+# (PostgreSQL 17) + volumen de datos + red interna. Un solo archivo.
+#
+#   podman compose --env-file /etc/sgrsi/lux.env -f ops/compose.yaml up -d --build
+#
+# Las variables obligatorias (${VAR:?}) hacen fallar el arranque si faltan, en
+# vez de levantar la base con una clave vacia. Los valores viven FUERA del repo
+# (ver ops/env/lux.env.example); aca no hay secretos.
+#
+# Documentado en: 05-ADMIN-SO/E3/Docker-Compose.md
+
+name: lux
+
+services:
+  # --- Base de datos -------------------------------------------------------
+  db:
+    image: docker.io/library/postgres:17-trixie
+    container_name: lux-db            # fijo: scripts/lib/db.sh lo usa. db no se escala.
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?definir POSTGRES_PASSWORD en lux.env}
+      # Los usa ops/containers/db/init/10-roles.sh para crear el rol y la base de la app
+      LUX_DB_NAME: ${LUX_DB_NAME:-lux}
+      LUX_DB_USER: ${LUX_DB_USER:-lux_app}
+      LUX_DB_PASSWORD: ${LUX_DB_PASSWORD:?definir LUX_DB_PASSWORD en lux.env}
+    volumes:
+      - lux_pgdata:/var/lib/postgresql/data
+      - ./containers/db/init:/docker-entrypoint-initdb.d:ro
+    networks: [lux_internal]
+    # Sin `ports:`. La base solo existe dentro de la red interna.
+    healthcheck:
+      # -h 127.0.0.1 fuerza TCP: durante la inicializacion el servidor temporal
+      # solo escucha en el socket y el chequeo por socket daria "healthy" antes
+      # de que existan el rol y la base.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${LUX_DB_USER}\" -d \"$${LUX_DB_NAME}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    mem_limit: 1g
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]   # lo minimo que usa el entrypoint de postgres
+    security_opt: ["no-new-privileges:true"]
+
+  # --- Migraciones (una vez por despliegue) --------------------------------
+  migrate:
+    image: localhost/lux-api:${LUX_IMAGE_TAG:-latest}
+    build:
+      context: ..
+      dockerfile: ops/containers/api/Containerfile
+    restart: "no"
+    command:
+      - sh
+      - -c
+      # Reintenta hasta que la base responda: no depende de que el orquestador
+      # respete service_healthy (podman-compose lo cumple segun la version).
+      - 'for i in $$(seq 1 30); do bun run db:migrate && exit 0; echo "base no lista, reintento $$i/30"; sleep 2; done; exit 1'
+    environment: &api_env
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${LUX_DB_NAME:-lux}
+      DB_USER: ${LUX_DB_USER:-lux_app}
+      DB_PASSWORD: ${LUX_DB_PASSWORD:?definir LUX_DB_PASSWORD en lux.env}
+      AUTH_SECRET: ${AUTH_SECRET:?definir AUTH_SECRET en lux.env}
+      HOST: 0.0.0.0
+      PORT: "4111"
+    networks: [lux_internal]
+    depends_on:
+      db:
+        condition: service_healthy
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  # --- API -----------------------------------------------------------------
+  api:
+    image: localhost/lux-api:${LUX_IMAGE_TAG:-latest}
+    build:
+      context: ..
+      dockerfile: ops/containers/api/Containerfile
+    # Sin container_name: permite escalar. Replicas por LUX_API_REPLICAS (la
+    # honran docker-compose y podman-compose; `deploy.replicas` es el campo del
+    # estandar Compose). admin.sh deploy escalar <n> lo ajusta.
+    deploy:
+      replicas: ${LUX_API_REPLICAS:-1}
+    restart: unless-stopped
+    environment: *api_env
+    networks: [lux_internal]
+    # Bun no instala un manejador de SIGTERM y, como PID 1, el nucleo ignora la
+    # senal: sin init, `stop` espera 10 s y termina en SIGKILL (comprobado con
+    # podman-compose 1.0.6). Con init (catatonit) el cierre es inmediato.
+    init: true
+    # No depende de `migrate` a proposito: un servicio que termina (exit 0) no
+    # sirve como dependencia en podman-compose (traduce depends_on a --requires,
+    # que exige el contenedor corriendo). La API arranca igual y /ready responde
+    # 503 hasta que las migraciones terminan; web espera a que la API este sana.
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # /ready responde 503 si la base no esta o faltan migraciones.
+      # CMD-SHELL en una sola cadena: la forma de lista con CMD se re-entrecomilla
+      # mal en podman-compose 1.0.x. wget (busybox) devuelve error ante un 503.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:4111/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    mem_limit: 512m
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  # --- Web (SPA + proxy a la API) -------------------------------------------
+  web:
+    image: localhost/lux-web:${LUX_IMAGE_TAG:-latest}
+    build:
+      context: ..
+      dockerfile: ops/containers/web/Containerfile
+      args:
+        VITE_ENABLE_MOCKS: "false"
+    restart: unless-stopped
+    ports:
+      # Solo loopback: el Nginx del host (80/443, TLS) es la unica entrada.
+      - "127.0.0.1:${LUX_WEB_PORT:-8080}:8080"
+    networks: [lux_internal, lux_edge]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    mem_limit: 128m
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+volumes:
+  lux_pgdata: {}
+
+networks:
+  # Red interna: sin salida a Internet ni acceso desde el host. db y api solo
+  # se alcanzan entre si y a traves de web.
+  lux_internal:
+    driver: bridge
+    internal: true
+  # Red de publicacion: la usa solo web para exponer 127.0.0.1:8080.
+  lux_edge:
+    driver: bridge

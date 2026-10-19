@@ -1,0 +1,23 @@
+# Imagen del frontend de Lux: build de Vite + nginx sin privilegios.
+# Contexto de build: la raiz del repositorio (ver ops/compose.yaml).
+
+FROM docker.io/oven/bun:1.4.2-alpine AS build
+WORKDIR /src
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+COPY . .
+# Contra la API real los mocks de MSW tienen que estar apagados. El valor de
+# .env.production (true) se pisa porque las variables del entorno de build
+# tienen prioridad sobre los archivos .env de Vite.
+ARG VITE_ENABLE_MOCKS=false
+ENV VITE_ENABLE_MOCKS=${VITE_ENABLE_MOCKS}
+RUN bun run build
+
+FROM docker.io/nginxinc/nginx-unprivileged:1.28-alpine
+# La imagen procesa /etc/nginx/templates/*.template con envsubst al arrancar.
+# NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1 deja en NGINX_LOCAL_RESOLVERS el DNS del
+# contenedor, necesario para resolver `api` en cada request (escalado).
+ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
+COPY ops/containers/web/default.conf.template /etc/nginx/templates/default.conf.template
+COPY --from=build /src/dist /usr/share/nginx/html
+EXPOSE 8080

@@ -1,0 +1,23 @@
+# /etc/cron.d/sgrsi-respaldo-servidor: Rutinas del SERVIDOR DE RESPALDO.
+# Se instala con: sudo ./servidor-respaldo.sh instalar
+# Documentado en 05-ADMIN-SO/E3/ServidorRespaldo.md
+#
+# Corren como "sgrsi_backup", la cuenta que recibe los envios por rsync. Esa
+# cuenta no tiene shell interactiva util: las llaves SSH estan limitadas a rrsync.
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+MAILTO=""
+
+# min hora dia mes dia-semana  usuario  comando
+# Cada 10 minutos: valida lo recibido (SHA-256 + gzip), lo mueve del
+# almacenamiento temporal (incoming/) al almacen definitivo y aplica la rotacion.
+*/10 * * * *  sgrsi_backup  /opt/sgrsi/lux/ops/backup-server/servidor-respaldo.sh procesar >> /var/log/sgrsi-respaldo/servidor.log 2>&1
+
+# Auditoria diaria de integridad de TODO el almacen (04:30): detecta corrupcion
+# silenciosa de disco comparando con las sumas que llegaron del origen.
+30 4 * * *    sgrsi_backup  /opt/sgrsi/lux/ops/backup-server/servidor-respaldo.sh verificar >> /var/log/sgrsi-respaldo/servidor.log 2>&1
+
+# Control de antiguedad y espacio (06:00): deja ERROR en el log si el origen
+# dejo de enviar o si el disco pasa el umbral.
+0 6 * * *     sgrsi_backup  /opt/sgrsi/lux/ops/backup-server/servidor-respaldo.sh estado >> /var/log/sgrsi-respaldo/servidor.log 2>&1

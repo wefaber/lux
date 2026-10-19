@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# usuarios.sh — Modulo de gestion de usuarios del sistema operativo (no
+# usuarios.sh: Modulo de gestion de usuarios del sistema operativo (no
 # confundir con los usuarios de la aplicacion Lux, que viven en la tabla
 # `usuario` de PostgreSQL). Cubre alta, baja, modificacion y listado de
 # cuentas de sistema, invocado por admin.sh.
@@ -8,6 +8,8 @@
 # Documentado en: 05-ADMIN-SO/E2/Scripts-Bash-V1.md
 
 # Requiere que comun.sh ya este cargado por quien invoca este modulo.
+
+usuarios_descripcion() { echo "Alta, baja, bloqueo y consulta de cuentas del sistema"; }
 
 usuarios_ayuda() {
     cat <<'EOF'
@@ -28,6 +30,7 @@ usuarios_alta() {
     local comentario="${2:-}"
 
     validar_no_vacio "$usuario" "usuario" || return 1
+    validar_nombre "$usuario" "usuario" || return 1
     requerir_root
 
     if existe_usuario "$usuario"; then
@@ -35,15 +38,15 @@ usuarios_alta() {
         return 1
     fi
 
-    useradd --create-home --shell /bin/bash --comment "$comentario" "$usuario"
-    log INFO "Usuario '$usuario' creado con home en /home/$usuario."
+    ejecutar useradd --create-home --shell /bin/bash --comment "$comentario" "$usuario"
+    hecho "Usuario '$usuario' creado con home en /home/$usuario."
 
     # `passwd` es interactivo por definicion: solo tiene sentido ofrecerlo
     # cuando hay una terminal de entrada. En uso desatendido (cron, otro
     # script, la suite de pruebas) la cuenta queda creada sin contrasena y
     # el aviso queda en el log, en vez de bloquear el script en un prompt
     # que nadie va a responder.
-    if [[ -t 0 ]] && confirmar "Establecer contrasena para '$usuario' ahora"; then
+    if [[ -t 0 ]] && ! es_dry_run && confirmar "Establecer contrasena para '$usuario' ahora"; then
         passwd "$usuario" || log WARN "No se pudo establecer la contrasena de '$usuario'."
     else
         log WARN "Usuario '$usuario' creado sin contrasena. Debera establecerse antes del primer acceso."
@@ -62,8 +65,8 @@ usuarios_baja() {
     fi
 
     if confirmar "Eliminar el usuario '$usuario' y su directorio home de forma irreversible"; then
-        userdel --remove "$usuario"
-        log INFO "Usuario '$usuario' eliminado."
+        ejecutar userdel --remove "$usuario"
+        hecho "Usuario '$usuario' eliminado."
     else
         log INFO "Operacion cancelada."
     fi
@@ -91,8 +94,8 @@ usuarios_bloquear() {
         return 0
     fi
 
-    usermod --lock "$usuario"
-    log INFO "Usuario '$usuario' bloqueado. No puede autenticarse por contrasena."
+    ejecutar usermod --lock "$usuario"
+    hecho "Usuario '$usuario' bloqueado. No puede autenticarse por contrasena."
 }
 
 usuarios_desbloquear() {
@@ -105,19 +108,19 @@ usuarios_desbloquear() {
         return 1
     fi
 
-    usermod --unlock "$usuario" 2>/dev/null || true
+    ejecutar usermod --unlock "$usuario" 2>/dev/null || true
 
     # `usermod --unlock` sobre una cuenta que nunca tuvo contrasena avisa por
     # stderr y termina con codigo 0 sin desbloquear nada. Sin esta
     # comprobacion el script informaria un exito que no ocurrio, y la cuenta
     # seguiria sin poder autenticarse.
-    if [[ "$(usuarios_estado "$usuario")" == "L" ]]; then
+    if ! es_dry_run && [[ "$(usuarios_estado "$usuario")" == "L" ]]; then
         log ERROR "No se pudo desbloquear '$usuario': la cuenta no tiene contrasena establecida."
         log ERROR "Establecer una primero con: passwd $usuario"
         return 1
     fi
 
-    log INFO "Usuario '$usuario' desbloqueado."
+    hecho "Usuario '$usuario' desbloqueado."
 }
 
 usuarios_listar() {

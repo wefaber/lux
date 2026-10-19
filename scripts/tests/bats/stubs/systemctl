@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+echo "systemctl $*" >> "${STUB_LOG:-/dev/null}"
+# is-active: por defecto "inactivo" (rc 3) salvo que la prueba lo defina
+if [[ "${1:-}" == "is-active" ]]; then
+    exit "${STUB_SYSTEMCTL_ACTIVE_RC:-3}"
+fi
+exit 0

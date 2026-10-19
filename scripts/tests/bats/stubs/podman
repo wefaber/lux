@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Stub de podman. Registra todo (incluida la variable LUX_IMAGE_TAG para ver el
+# rollback) y responde a lo que deploy.sh consulta.
+echo "podman[tag=${LUX_IMAGE_TAG:-}] $*" >> "${STUB_LOG:-/dev/null}"
+case "$1" in
+    info)    echo "${STUB_PODMAN_ROOTLESS:-true}" ;;
+    image)   [[ "${2:-}" == "exists" ]] && exit "${STUB_IMAGE_EXISTS_RC:-0}" ;;
+    compose) [[ "${2:-}" == "version" ]] && echo "stub compose 1.0" ;;
+esac
+exit 0
