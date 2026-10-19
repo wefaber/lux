@@ -3,7 +3,7 @@
 # definidas; las variables de nginx como $uri no se tocan).
 
 # Resolver dinamico: `api` se vuelve a resolver cada 10 s, asi que al escalar
-# (`--scale api=2`) o reemplazar un contenedor no hace falta reiniciar web.
+# (`LUX_API_REPLICAS=2`) o reemplazar un contenedor no hace falta reiniciar web.
 resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
 
 server {
