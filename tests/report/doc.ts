@@ -64,7 +64,9 @@ const total = CASES.length;
 const automated = CASES.filter((c) => c.api || c.ui).length;
 out.push(`### Resumen`, "");
 out.push(`- Casos de prueba: **${total}** (${automated} automatizados, ${total - automated} manuales).`);
-out.push(`- Casos de uso cubiertos: **${new Set(CASES.map((c) => c.cu)).size}** de ${CATALOG.length} (incluye CU-V, CU-N, CU-R y RNF).`);
+const conCasos = new Set(CASES.map((c) => c.cu));
+const cubiertos = CATALOG.filter((u) => conCasos.has(u.id)).length;
+out.push(`- Casos de uso cubiertos: **${cubiertos}** de ${CATALOG.length} (incluye CU-V, CU-N y CU-R), más los requisitos no funcionales.`);
 out.push(`- Tablas de decisión: **${DECISION_TABLES.length}**.`);
 if (api) {
   const s = api.summary;
@@ -101,7 +103,7 @@ for (const cu of groups) {
     const refs = [...c.rf, ...(c.rn ?? [])].join(", ");
     const steps = c.steps.map((s, i) => `${i + 1}. ${s}`).join("<br>");
     out.push(
-      `| ${c.id} | ${cell(c.title)} | ${KIND[c.kind] ?? c.kind} | ${ACTOR[c.actor] ?? c.actor} | ${refs} | ${cell(c.precondition)} | ${cell(steps)} | ${cell(c.expected)} | ${level(c)} | ${status(c)} |`,
+      `| ${c.id} | ${cell(c.title)} | ${KIND[c.kind] ?? c.kind} | ${ACTOR[c.actor] ?? c.actor} | ${refs || "—"} | ${cell(c.precondition)} | ${cell(steps)} | ${cell(c.expected)} | ${level(c)} | ${status(c)} |`,
     );
   }
   out.push("");
