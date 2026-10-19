@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { createSchema } from "graphql-yoga";
 import { createContext } from "./context";
 import { corsPlugin } from "./cors";
+import { securityHeadersPlugin } from "./security-headers";
 import { pool } from "./db/client";
 import { restPlugin } from "./rest/plugin";
 import { loadEnv, maxBodyBytes, serverHost, serverPort } from "./env";
@@ -60,6 +61,7 @@ async function readiness(): Promise<boolean> {
 }
 
 const app = new Elysia()
+  .use(securityHeadersPlugin(process.env.NODE_ENV === "production"))
   .use(corsPlugin())
   .get("/health", () => ({ status: "ok" }))
   .get("/ready", async ({ set }) => {

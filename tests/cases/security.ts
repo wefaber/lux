@@ -232,4 +232,68 @@ export const securityCases: TestCase[] = [
       check(viaRest.body.message === wrong.message, "el mensaje por REST es distinto");
     },
   },
+  {
+    id: "CP-SEG-06",
+    cu: "RNF",
+    title: "Cabeceras de seguridad, CORS con lista de orígenes y tope de tamaño del body",
+    rf: [],
+    kind: "negativo",
+    actor: "anonimo",
+    priority: "alta",
+    precondition: "API en ejecución; origen ajeno que no figura en CORS_ORIGINS.",
+    steps: [
+      "Pedir /graphql, /health y una ruta /api/v1 inexistente y revisar las cabeceras",
+      "Preflight desde un origen ajeno y desde uno permitido",
+      "Enviar un body de 300 KiB y 15 alias de login en un request",
+    ],
+    expected: "nosniff, X-Frame-Options DENY, Referrer-Policy y CSP en todas; el origen ajeno recibe 403 sin Allow-Origin; el body grande da 413; los alias dan BAD_REQUEST sin ejecutar ningún login.",
+    api: async (t) => {
+      const url = (path: string) => new URL(path, t.endpoint).toString();
+      const json = { "content-type": "application/json" };
+      const probes = [
+        await fetch(url("/graphql"), { method: "POST", headers: json, body: JSON.stringify({ query: "{ __typename }" }) }),
+        await fetch(url("/health")),
+        await fetch(url("/api/v1/ruta-que-no-existe")),
+      ];
+      for (const res of probes) {
+        const where = new URL(res.url).pathname;
+        check(res.headers.get("x-content-type-options") === "nosniff", `${where}: falta nosniff`);
+        check(res.headers.get("x-frame-options") === "DENY", `${where}: falta X-Frame-Options`);
+        check(res.headers.get("referrer-policy") === "no-referrer", `${where}: falta Referrer-Policy`);
+        check(res.headers.get("content-security-policy")?.includes("default-src 'none'"), `${where}: falta la CSP`);
+      }
+
+      const foreign = "https://sitio-ajeno.example";
+      for (const path of ["/graphql", "/api/v1/auth/login"]) {
+        const pre = await fetch(url(path), {
+          method: "OPTIONS",
+          headers: { origin: foreign, "access-control-request-method": "POST", "access-control-request-headers": "content-type,authorization" },
+        });
+        check(pre.status === 403, `${path}: el preflight ajeno devolvió ${pre.status}`);
+        check(pre.headers.get("access-control-allow-origin") === null, `${path}: se reflejó el origen ajeno`);
+      }
+      const post = await fetch(url("/graphql"), {
+        method: "POST",
+        headers: { ...json, origin: foreign },
+        body: JSON.stringify({ query: "{ __typename }" }),
+      });
+      check(post.headers.get("access-control-allow-origin") === null, "la respuesta a un origen ajeno trae Allow-Origin");
+      check(post.headers.get("access-control-allow-credentials") === null, "la respuesta a un origen ajeno trae Allow-Credentials");
+
+      const big = await fetch(url("/graphql"), {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify({ query: "{ __typename }", padding: "a".repeat(300 * 1024) }),
+      });
+      check(big.status === 413, `un body de 300 KiB devolvió HTTP ${big.status}`);
+
+      const user = await t.newUser("solicitante");
+      const aliases = Array.from({ length: 15 }, (_, i) => `a${i}: login(dni: "${user.dni}", password: "mala-${i}") { token }`).join(" ");
+      const batch = await t.anon().gql(`{ ${aliases} }`);
+      check(batch.data === null, "se ejecutó algún login de un request con 15 alias");
+      check(batch.errors[0]?.extensions?.code === "BAD_REQUEST", `código inesperado: ${batch.errors[0]?.extensions?.code}`);
+      // Ningún intento llegó a contarse: la cuenta sigue pudiendo iniciar sesión
+      await t.login(user.dni, user.password);
+    },
+  },
 ];
