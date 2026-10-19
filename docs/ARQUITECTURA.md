@@ -9,13 +9,13 @@ Documento tecnico del Sistema de Gestion de Recursos y Servicios Informaticos (S
 Lux sigue una arquitectura **cliente-servidor** con separacion estricta entre frontend y backend:
 
 ```
-[ Navegador ] ─── HTTPS ─── [ Nginx ] ─── proxy ─── [ API GraphQL ]
-                                                    [ MariaDB ]
+[ Navegador ] ─── HTTPS ─── [ Nginx ] ─── proxy ─── [ API GraphQL + REST ]
+                                                    [ PostgreSQL ]
 ```
 
 - **Frontend**: SPA (Single Page Application) en React 19, servida como archivos estaticos desde Nginx.
-- **Backend**: API GraphQL con resolvers que operan sobre MariaDB. En desarrollo, MSW simula el backend completo.
-- **Base de datos**: MariaDB con modelo relacional normalizado a 3FN.
+- **Backend**: API en Bun, Elysia y GraphQL Yoga (carpeta `api/`) con Drizzle sobre PostgreSQL. Expone GraphQL en `/graphql` y un adaptador REST en `/api/v1`. Ver `docs/BACKEND.md`. En desarrollo, MSW simula el backend completo.
+- **Base de datos**: PostgreSQL con claves foraneas y restricciones CHECK (migraciones en `api/drizzle/`).
 
 La comunicacion entre frontend y backend es unicamente via GraphQL sobre HTTP. No hay WebSockets ni polling.
 
@@ -99,8 +99,10 @@ Todas las mutaciones de eliminacion son **soft delete** (marcan `deletedAt` sin 
 
 | Archivo | Contenido |
 |---------|-----------|
-| `proyecto.sql` | Schema real de la base `lux` (DDL de las 17 tablas + datos de ejemplo) descrito en este documento |
+| `proyecto.sql` | Schema real de la base `lux` (DDL en MariaDB, **legado**: no corresponde al esquema PostgreSQL vigente de `api/src/db/schema.ts`) |
 | `queries.sql` | **No es parte del sistema.** Resolucion de un ejercicio de practica de SQL (`docs/18+07+Actividad+SQL.pdf`) adaptado al schema de `lux` |
+
+> **Nota de vigencia.** Las secciones 4 y 6 describen la instalacion original y se mantienen como referencia; el procedimiento vigente (Podman rootless, `ops/compose.yaml`, respaldo por rsync) esta en `ops/` y `scripts/README.md`, y en el manual de instalacion del vault de documentacion.
 
 Ver `docs/CAMBIOS.md` para el detalle de las correcciones aplicadas a ambos archivos.
 
@@ -116,7 +118,7 @@ Ver `docs/CAMBIOS.md` para el detalle de las correcciones aplicadas a ambos arch
 
 Criterios de eleccion:
 - Ciclo de vida estable y predecible (Debian Stable)
-- Repositorios oficiales con todas las dependencias necesarias (Nginx, PHP, MariaDB)
+- Repositorios oficiales con todas las dependencias necesarias (Nginx, PostgreSQL, Podman)
 - Comunidad activa y documentacion extensa
 - Compatibilidad total con Podman para contenedores rootless
 - Sin sobrecarga de snaps o servicios innecesarios que vienen con Ubuntu Server
@@ -166,7 +168,7 @@ UFW configurado con politica `deny incoming, allow outgoing`:
 | 443/tcp | HTTPS | API GraphQL y frontend |
 | 52205/tcp | SSH | Acceso administrativo (puerto no estandar) |
 
-MariaDB (3306) **no se expone**. El backend se conecta internamente via socket Unix o red de Podman. La API GraphQL corre dentro de un contenedor Podman rootless con red interna.
+PostgreSQL (5432) **no se expone**. El backend se conecta por la red interna de Podman. La API GraphQL corre dentro de un contenedor Podman rootless con red interna.
 
 ### 4.5 Paquetes del sistema
 
@@ -175,7 +177,7 @@ Instalados via `apt`:
 | Paquete | Version | Proposito |
 |---------|---------|-----------|
 | `nginx` | >= 1.26 | Servidor web y proxy reverso |
-| `mariadb-server` | >= 10.11 | Base de datos relacional |
+| `postgresql` | 17 | Base de datos relacional (en el stack de `ops/compose.yaml` corre como contenedor) |
 | `podman` | >= 5.0 | Contenedores rootless para el backend |
 | `curl` | >= 8.0 | Herramientas de red y verificacion |
 | `git` | >= 2.43 | Control de versiones y despliegue |
@@ -193,8 +195,8 @@ ping -c 4 1.1.1.1
 # Verificar Nginx
 curl -I http://localhost
 
-# Verificar MariaDB
-sudo mariadb -e "SELECT VERSION();"
+# Verificar la API y la base
+curl -s http://localhost:4111/ready
 
 # Verificar Podman
 podman run --rm hello-world
@@ -271,12 +273,12 @@ sudo podman auto-update          # Actualiza contenedores con politica de auto-u
 ### Backup de base de datos
 
 ```bash
-sudo mariadb-dump sgrsi > backup_$(date +%Y%m%d).sql
+sudo scripts/backup.sh respaldar   # ver scripts/README.md
 ```
 
 ### Logs
 
 - **Nginx**: `/var/log/nginx/access.log`, `/var/log/nginx/error.log`
-- **MariaDB**: `/var/log/mysql/error.log`
+- **PostgreSQL**: `podman logs <contenedor-db>`
 - **Podman**: `podman logs <contenedor>`
 - **UFW**: `/var/log/ufw.log`
