@@ -1,8 +1,37 @@
-import { boolean, index, integer, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
+import { sql, type SQL } from "drizzle-orm";
+import { boolean, check, index, integer, pgTable, primaryKey, text, type AnyPgColumn } from "drizzle-orm/pg-core";
+import {
+  COMMENT_ENTITIES,
+  EQUIPMENT_STATUSES,
+  INTERVENTION_TYPES,
+  LOAN_STATUSES,
+  LOCATION_KINDS,
+  NOTICE_ENTITIES,
+  NOTICE_KINDS,
+  RESERVATION_RESOURCES,
+  RESERVATION_STATUSES,
+  SERVICE_STATUSES,
+  SERVICE_TYPES,
+  TICKET_CATEGORIES,
+  TICKET_STATUSES,
+  USER_ROLES,
+} from "./enums";
+
+// Bajas logicas: `deleted_at` (texto ISO) en las tablas que acumulan historial.
+// La fila nunca se borra: la API deja de mostrarla, y la auditoria y la base
+// conservan el registro. En `users` la baja es `is_active = false`.
 
 // Timestamps: se guardan como texto ISO-8601 UTC. El contrato GraphQL los expone
 // como String y el frontend los ordena con localeCompare / los parsea con
 // new Date(); el texto ISO es ordenable y evita conversiones de zona horaria.
+// CHECK `columna IN ('a', 'b', ...)`. DDL no admite parametros, asi que los
+// valores se escriben literales; salen solo de las listas constantes de enums.ts
+// (nunca de entrada del usuario) y se rechaza cualquier comilla por las dudas.
+function oneOf(column: AnyPgColumn, values: readonly string[]): SQL {
+  if (values.some((v) => !/^[a-z_]+$/.test(v))) throw new Error("valor de enum invalido para un CHECK");
+  return sql`${column} in (${sql.raw(values.map((v) => `'${v}'`).join(", "))})`;
+}
+
 const createdAt = text("created_at").notNull();
 const updatedAt = text("updated_at").notNull();
 
@@ -16,7 +45,7 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   createdAt,
   updatedAt,
-});
+}, (t) => [check("users_role_check", oneOf(t.role, USER_ROLES))]);
 
 export const locations = pgTable(
   "locations",
@@ -30,7 +59,10 @@ export const locations = pgTable(
     updatedAt,
     deletedAt: text("deleted_at"),
   },
-  (t) => [index("locations_code_idx").on(t.code)],
+  (t) => [
+    index("locations_code_idx").on(t.code),
+    check("locations_kind_check", oneOf(t.kind, LOCATION_KINDS)),
+  ],
 );
 
 export const products = pgTable(
@@ -45,7 +77,9 @@ export const products = pgTable(
     partNumber: text("part_number").notNull(),
     status: text("status").notNull(),
     issues: text("issues"),
-    locationId: text("location_id").notNull(),
+    locationId: text("location_id")
+      .notNull()
+      .references(() => locations.id),
     location: text("location").notNull(),
     createdAt,
     updatedAt,
@@ -54,6 +88,7 @@ export const products = pgTable(
   (t) => [
     index("products_location_idx").on(t.locationId),
     index("products_status_idx").on(t.status),
+    check("products_status_check", oneOf(t.status, EQUIPMENT_STATUSES)),
   ],
 );
 
@@ -68,7 +103,7 @@ export const components = pgTable(
     partNumber: text("part_number").notNull(),
     isFactory: boolean("is_factory").notNull(),
     isWorking: boolean("is_working").notNull(),
-    productId: text("product_id"),
+    productId: text("product_id").references(() => products.id),
     createdAt,
     updatedAt,
     deletedAt: text("deleted_at"),
@@ -84,20 +119,25 @@ export const tickets = pgTable(
     description: text("description").notNull(),
     category: text("category").notNull(),
     status: text("status").notNull(),
-    submittedById: text("submitted_by_id").notNull(),
-    assignedToId: text("assigned_to_id"),
-    equipmentId: text("equipment_id"),
+    submittedById: text("submitted_by_id")
+      .notNull()
+      .references(() => users.id),
+    assignedToId: text("assigned_to_id").references(() => users.id),
+    equipmentId: text("equipment_id").references(() => products.id),
     diagnosis: text("diagnosis"),
     corrected: boolean("corrected"),
     actionsTaken: text("actions_taken"),
     createdAt,
     updatedAt,
     resolvedAt: text("resolved_at"),
+    deletedAt: text("deleted_at"),
   },
   (t) => [
     index("tickets_status_idx").on(t.status),
     index("tickets_submitted_by_idx").on(t.submittedById),
     index("tickets_assigned_to_idx").on(t.assignedToId),
+    check("tickets_status_check", oneOf(t.status, TICKET_STATUSES)),
+    check("tickets_category_check", oneOf(t.category, TICKET_CATEGORIES)),
   ],
 );
 
@@ -105,11 +145,15 @@ export const loans = pgTable(
   "loans",
   {
     id: text("id").primaryKey(),
-    equipmentId: text("equipment_id").notNull(),
-    userId: text("user_id").notNull(),
+    equipmentId: text("equipment_id")
+      .notNull()
+      .references(() => products.id),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
     status: text("status").notNull(),
-    approvedById: text("approved_by_id"),
-    deliveredById: text("delivered_by_id"),
+    approvedById: text("approved_by_id").references(() => users.id),
+    deliveredById: text("delivered_by_id").references(() => users.id),
     deliveredAt: text("delivered_at"),
     issueDate: text("issue_date").notNull(),
     returnDate: text("return_date").notNull(),
@@ -117,15 +161,24 @@ export const loans = pgTable(
     rejectionReason: text("rejection_reason"),
     createdAt,
     updatedAt,
+    deletedAt: text("deleted_at"),
   },
-  (t) => [index("loans_user_idx").on(t.userId), index("loans_status_idx").on(t.status)],
+  (t) => [
+    index("loans_user_idx").on(t.userId),
+    index("loans_status_idx").on(t.status),
+    check("loans_status_check", oneOf(t.status, LOAN_STATUSES)),
+  ],
 );
 
 export const loanComponents = pgTable(
   "loan_components",
   {
-    loanId: text("loan_id").notNull(),
-    componentId: text("component_id").notNull(),
+    loanId: text("loan_id")
+      .notNull()
+      .references(() => loans.id),
+    componentId: text("component_id")
+      .notNull()
+      .references(() => components.id),
   },
   (t) => [primaryKey({ columns: [t.loanId, t.componentId] })],
 );
@@ -136,34 +189,49 @@ export const serviceRequests = pgTable(
     id: text("id").primaryKey(),
     type: text("type").notNull(),
     status: text("status").notNull(),
-    requestedById: text("requested_by_id").notNull(),
-    assignedToId: text("assigned_to_id"),
+    requestedById: text("requested_by_id")
+      .notNull()
+      .references(() => users.id),
+    assignedToId: text("assigned_to_id").references(() => users.id),
     description: text("description").notNull(),
     labNumber: text("lab_number"),
     softwareName: text("software_name"),
-    equipmentId: text("equipment_id"),
+    equipmentId: text("equipment_id").references(() => products.id),
     resolutionText: text("resolution_text"),
     createdAt,
     updatedAt,
+    deletedAt: text("deleted_at"),
   },
-  (t) => [index("services_status_idx").on(t.status)],
+  (t) => [
+    index("services_status_idx").on(t.status),
+    check("service_requests_type_check", oneOf(t.type, SERVICE_TYPES)),
+    check("service_requests_status_check", oneOf(t.status, SERVICE_STATUSES)),
+  ],
 );
 
 export const interventions = pgTable(
   "interventions",
   {
     id: text("id").primaryKey(),
-    equipmentId: text("equipment_id").notNull(),
-    technicianId: text("technician_id").notNull(),
+    equipmentId: text("equipment_id")
+      .notNull()
+      .references(() => products.id),
+    technicianId: text("technician_id")
+      .notNull()
+      .references(() => users.id),
     type: text("type").notNull(),
     description: text("description").notNull(),
     partsReplaced: text("parts_replaced"),
-    ticketId: text("ticket_id"),
+    ticketId: text("ticket_id").references(() => tickets.id),
     performedAt: text("performed_at").notNull(),
     createdAt,
     updatedAt,
+    deletedAt: text("deleted_at"),
   },
-  (t) => [index("interventions_equipment_idx").on(t.equipmentId)],
+  (t) => [
+    index("interventions_equipment_idx").on(t.equipmentId),
+    check("interventions_type_check", oneOf(t.type, INTERVENTION_TYPES)),
+  ],
 );
 
 export const comments = pgTable(
@@ -172,11 +240,19 @@ export const comments = pgTable(
     id: text("id").primaryKey(),
     entityType: text("entity_type").notNull(),
     entityId: text("entity_id").notNull(),
-    authorId: text("author_id").notNull(),
+    authorId: text("author_id")
+      .notNull()
+      .references(() => users.id),
     body: text("body").notNull(),
     createdAt,
+    deletedAt: text("deleted_at"),
   },
-  (t) => [index("comments_entity_idx").on(t.entityType, t.entityId)],
+  // entity_id apunta a un ticket o a una solicitud segun entity_type: referencia
+  // polimorfica, no se puede declarar como FK; la valida el resolver.
+  (t) => [
+    index("comments_entity_idx").on(t.entityType, t.entityId),
+    check("comments_entity_type_check", oneOf(t.entityType, COMMENT_ENTITIES)),
+  ],
 );
 
 export const reservations = pgTable(
@@ -184,45 +260,78 @@ export const reservations = pgTable(
   {
     id: text("id").primaryKey(),
     resourceType: text("resource_type").notNull(),
-    equipmentId: text("equipment_id"),
-    locationId: text("location_id"),
-    userId: text("user_id").notNull(),
+    equipmentId: text("equipment_id").references(() => products.id),
+    locationId: text("location_id").references(() => locations.id),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
     purpose: text("purpose").notNull(),
     startsAt: text("starts_at").notNull(),
     endsAt: text("ends_at").notNull(),
     status: text("status").notNull(),
-    reviewedById: text("reviewed_by_id"),
+    reviewedById: text("reviewed_by_id").references(() => users.id),
     rejectionReason: text("rejection_reason"),
-    cancelledById: text("cancelled_by_id"),
+    cancelledById: text("cancelled_by_id").references(() => users.id),
     createdAt,
     updatedAt,
   },
-  (t) => [index("reservations_user_idx").on(t.userId), index("reservations_status_idx").on(t.status)],
+  (t) => [
+    index("reservations_user_idx").on(t.userId),
+    index("reservations_status_idx").on(t.status),
+    check("reservations_resource_type_check", oneOf(t.resourceType, RESERVATION_RESOURCES)),
+    check("reservations_status_check", oneOf(t.status, RESERVATION_STATUSES)),
+    // una reserva es de un equipo o de un espacio, nunca de los dos ni de ninguno
+    check(
+      "reservations_resource_check",
+      sql`(${t.resourceType} = 'equipment' and ${t.equipmentId} is not null and ${t.locationId} is null)
+        or (${t.resourceType} = 'location' and ${t.locationId} is not null and ${t.equipmentId} is null)`,
+    ),
+  ],
 );
 
 export const notices = pgTable(
   "notices",
   {
     id: text("id").primaryKey(),
-    userId: text("user_id").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
     entityType: text("entity_type").notNull(),
     entityId: text("entity_id").notNull(),
     kind: text("kind").notNull(),
-    byId: text("by_id"),
+    byId: text("by_id").references(() => users.id),
     createdAt,
   },
-  (t) => [index("notices_user_idx").on(t.userId)],
+  (t) => [
+    index("notices_user_idx").on(t.userId),
+    check("notices_entity_type_check", oneOf(t.entityType, NOTICE_ENTITIES)),
+    check("notices_kind_check", oneOf(t.kind, NOTICE_KINDS)),
+  ],
 );
 
 export const pendingSeen = pgTable(
   "pending_seen",
   {
-    userId: text("user_id").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
     section: text("section").notNull(),
     seenAt: text("seen_at").notNull(),
   },
-  (t) => [primaryKey({ columns: [t.userId, t.section] })],
+  (t) => [
+    primaryKey({ columns: [t.userId, t.section] }),
+    check("pending_seen_section_check", oneOf(t.section, NOTICE_ENTITIES)),
+  ],
 );
+
+// Tokens cerrados con logout antes de vencer. Se consulta por `jti` en cada
+// request; las filas vencidas se limpian en cada logout.
+export const revokedTokens = pgTable("revoked_tokens", {
+  jti: text("jti").primaryKey(),
+  userId: text("user_id").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  revokedAt: text("revoked_at").notNull(),
+});
 
 export const activityLogs = pgTable("activity_logs", {
   id: text("id").primaryKey(),

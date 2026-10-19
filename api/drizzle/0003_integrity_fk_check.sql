@@ -1,0 +1,43 @@
+ALTER TABLE "comments" ADD CONSTRAINT "comments_author_id_users_id_fk" FOREIGN KEY ("author_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "components" ADD CONSTRAINT "components_product_id_products_id_fk" FOREIGN KEY ("product_id") REFERENCES "public"."products"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "interventions" ADD CONSTRAINT "interventions_equipment_id_products_id_fk" FOREIGN KEY ("equipment_id") REFERENCES "public"."products"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "interventions" ADD CONSTRAINT "interventions_technician_id_users_id_fk" FOREIGN KEY ("technician_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "interventions" ADD CONSTRAINT "interventions_ticket_id_tickets_id_fk" FOREIGN KEY ("ticket_id") REFERENCES "public"."tickets"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "loan_components" ADD CONSTRAINT "loan_components_loan_id_loans_id_fk" FOREIGN KEY ("loan_id") REFERENCES "public"."loans"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "loan_components" ADD CONSTRAINT "loan_components_component_id_components_id_fk" FOREIGN KEY ("component_id") REFERENCES "public"."components"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "loans" ADD CONSTRAINT "loans_equipment_id_products_id_fk" FOREIGN KEY ("equipment_id") REFERENCES "public"."products"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "loans" ADD CONSTRAINT "loans_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "loans" ADD CONSTRAINT "loans_approved_by_id_users_id_fk" FOREIGN KEY ("approved_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "loans" ADD CONSTRAINT "loans_delivered_by_id_users_id_fk" FOREIGN KEY ("delivered_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "notices" ADD CONSTRAINT "notices_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "notices" ADD CONSTRAINT "notices_by_id_users_id_fk" FOREIGN KEY ("by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "pending_seen" ADD CONSTRAINT "pending_seen_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "products" ADD CONSTRAINT "products_location_id_locations_id_fk" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "reservations" ADD CONSTRAINT "reservations_equipment_id_products_id_fk" FOREIGN KEY ("equipment_id") REFERENCES "public"."products"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "reservations" ADD CONSTRAINT "reservations_location_id_locations_id_fk" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "reservations" ADD CONSTRAINT "reservations_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "reservations" ADD CONSTRAINT "reservations_reviewed_by_id_users_id_fk" FOREIGN KEY ("reviewed_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "reservations" ADD CONSTRAINT "reservations_cancelled_by_id_users_id_fk" FOREIGN KEY ("cancelled_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "service_requests" ADD CONSTRAINT "service_requests_requested_by_id_users_id_fk" FOREIGN KEY ("requested_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "service_requests" ADD CONSTRAINT "service_requests_assigned_to_id_users_id_fk" FOREIGN KEY ("assigned_to_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "service_requests" ADD CONSTRAINT "service_requests_equipment_id_products_id_fk" FOREIGN KEY ("equipment_id") REFERENCES "public"."products"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tickets" ADD CONSTRAINT "tickets_submitted_by_id_users_id_fk" FOREIGN KEY ("submitted_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tickets" ADD CONSTRAINT "tickets_assigned_to_id_users_id_fk" FOREIGN KEY ("assigned_to_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tickets" ADD CONSTRAINT "tickets_equipment_id_products_id_fk" FOREIGN KEY ("equipment_id") REFERENCES "public"."products"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "comments" ADD CONSTRAINT "comments_entity_type_check" CHECK ("comments"."entity_type" in ('ticket', 'service_request'));--> statement-breakpoint
+ALTER TABLE "interventions" ADD CONSTRAINT "interventions_type_check" CHECK ("interventions"."type" in ('preventive_maintenance', 'corrective_repair', 'component_replacement', 'cleaning', 'software_update', 'other'));--> statement-breakpoint
+ALTER TABLE "loans" ADD CONSTRAINT "loans_status_check" CHECK ("loans"."status" in ('pending', 'approved', 'rejected', 'active', 'overdue', 'returned'));--> statement-breakpoint
+ALTER TABLE "locations" ADD CONSTRAINT "locations_kind_check" CHECK ("locations"."kind" in ('laboratory', 'classroom', 'administration', 'other'));--> statement-breakpoint
+ALTER TABLE "notices" ADD CONSTRAINT "notices_entity_type_check" CHECK ("notices"."entity_type" in ('ticket', 'service_request', 'loan', 'reservation'));--> statement-breakpoint
+ALTER TABLE "notices" ADD CONSTRAINT "notices_kind_check" CHECK ("notices"."kind" in ('assigned', 'unassigned', 'taken', 'approved', 'rejected', 'in_resolution', 'resolved', 'completed', 'modified', 'cancelled', 'delivered', 'comment', 'overdue'));--> statement-breakpoint
+ALTER TABLE "pending_seen" ADD CONSTRAINT "pending_seen_section_check" CHECK ("pending_seen"."section" in ('ticket', 'service_request', 'loan', 'reservation'));--> statement-breakpoint
+ALTER TABLE "products" ADD CONSTRAINT "products_status_check" CHECK ("products"."status" in ('available', 'in_use', 'in_repair', 'retired'));--> statement-breakpoint
+ALTER TABLE "reservations" ADD CONSTRAINT "reservations_resource_type_check" CHECK ("reservations"."resource_type" in ('equipment', 'location'));--> statement-breakpoint
+ALTER TABLE "reservations" ADD CONSTRAINT "reservations_status_check" CHECK ("reservations"."status" in ('pending', 'approved', 'rejected', 'active', 'completed', 'cancelled'));--> statement-breakpoint
+ALTER TABLE "reservations" ADD CONSTRAINT "reservations_resource_check" CHECK (("reservations"."resource_type" = 'equipment' and "reservations"."equipment_id" is not null and "reservations"."location_id" is null)
+        or ("reservations"."resource_type" = 'location' and "reservations"."location_id" is not null and "reservations"."equipment_id" is null));--> statement-breakpoint
+ALTER TABLE "service_requests" ADD CONSTRAINT "service_requests_type_check" CHECK ("service_requests"."type" in ('lab_preparation', 'software_installation', 'equipment_setup', 'other'));--> statement-breakpoint
+ALTER TABLE "service_requests" ADD CONSTRAINT "service_requests_status_check" CHECK ("service_requests"."status" in ('pending', 'approved', 'in_progress', 'completed', 'rejected'));--> statement-breakpoint
+ALTER TABLE "tickets" ADD CONSTRAINT "tickets_status_check" CHECK ("tickets"."status" in ('pending', 'in_progress', 'in_resolution', 'resolved'));--> statement-breakpoint
+ALTER TABLE "tickets" ADD CONSTRAINT "tickets_category_check" CHECK ("tickets"."category" in ('hardware', 'software', 'network', 'other'));--> statement-breakpoint
+ALTER TABLE "users" ADD CONSTRAINT "users_role_check" CHECK ("users"."role" in ('root_admin', 'admin', 'tecnico', 'solicitante'));

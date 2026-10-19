@@ -6,9 +6,14 @@ import type { Role } from "../cases/types";
 // seed del propio repo (api/src/db/fixtures/data/users.ts); en un entorno que no
 // use ese seed se pisan con QA_DNI_<ROL> y QA_PASSWORD_<ROL>.
 
+export interface GqlError {
+  message: string;
+  extensions?: { code?: string; status?: number; [key: string]: unknown };
+}
+
 export interface GqlResult<T = Record<string, unknown>> {
   data: T | null;
-  errors: { message: string }[];
+  errors: GqlError[];
 }
 
 export class AssertionError extends Error {}
@@ -78,6 +83,66 @@ export class Client {
     }
     return msg;
   }
+
+  // Exige que falle con un código del catálogo de errores (extensions.code) y el
+  // status HTTP equivalente que lo acompaña.
+  async failsWith(
+    query: string,
+    variables: Record<string, unknown> | undefined,
+    code: string,
+    status: number,
+  ): Promise<GqlError> {
+    const r = await this.gql(query, variables);
+    const error = r.errors[0];
+    if (!error) throw new AssertionError("se esperaba un error y la operación se ejecutó");
+    const got = error.extensions;
+    if (got?.code !== code || got?.status !== status) {
+      throw new AssertionError(
+        `se esperaba ${code}/${status} y la API devolvió ${got?.code}/${got?.status} ("${error.message}")`,
+      );
+    }
+    return error;
+  }
+}
+
+export interface RestResponse<T = unknown> {
+  http: number;
+  headers: Headers;
+  body: { status: number; message: string; data: T; code?: string };
+}
+
+// Cliente de las rutas REST /api/v1 (adaptador sobre los mismos resolvers).
+export class RestClient {
+  constructor(
+    private readonly base: string,
+    readonly token: string | null,
+  ) {}
+
+  async req<T = unknown>(method: string, path: string, body?: unknown, rawBody?: string): Promise<RestResponse<T>> {
+    const res = await fetch(`${this.base}${path}`, {
+      method,
+      headers: {
+        ...(body !== undefined || rawBody !== undefined ? { "content-type": "application/json" } : {}),
+        ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
+      },
+      body: rawBody ?? (body === undefined ? undefined : JSON.stringify(body)),
+    });
+    const parsed = (await res.json().catch(() => null)) as RestResponse<T>["body"] | null;
+    if (!parsed) throw new AssertionError(`${method} ${path} no devolvió JSON (HTTP ${res.status})`);
+    return { http: res.status, headers: res.headers, body: parsed };
+  }
+
+  // Exige un status HTTP y devuelve el cuerpo; el envelope debe repetir ese status.
+  async expect<T = unknown>(status: number, method: string, path: string, body?: unknown): Promise<RestResponse<T>> {
+    const r = await this.req<T>(method, path, body);
+    if (r.http !== status) {
+      throw new AssertionError(`${method} ${path}: se esperaba HTTP ${status} y fue ${r.http} ("${r.body.message}")`);
+    }
+    if (r.body.status !== status) {
+      throw new AssertionError(`${method} ${path}: el envelope dice status ${r.body.status} y el HTTP fue ${status}`);
+    }
+    return r;
+  }
 }
 
 export class ApiCtx {
@@ -90,6 +155,17 @@ export class ApiCtx {
 
   anon(): Client {
     return new Client(this.endpoint, null);
+  }
+
+  // Cliente REST con la sesión del rol (o sin sesión si no se indica).
+  async rest(role?: Role): Promise<RestClient> {
+    const base = new URL("/api/v1", this.endpoint).toString().replace(/\/$/, "");
+    if (!role) return new RestClient(base, null);
+    return new RestClient(base, (await this.as(role)).token);
+  }
+
+  restWith(token: string | null): RestClient {
+    return new RestClient(new URL("/api/v1", this.endpoint).toString().replace(/\/$/, ""), token);
   }
 
   withToken(token: string): Client {
@@ -153,6 +229,34 @@ export class ApiCtx {
       },
     );
     return d.createTicket.id;
+  }
+
+  // Préstamo pendiente del solicitante sobre un equipo nuevo (o el indicado).
+  async newLoan(equipmentId?: string): Promise<{ id: string; equipmentId: string }> {
+    const eq = equipmentId ?? (await this.newProduct()).id;
+    const sol = await this.as("solicitante");
+    const day = 24 * 3600 * 1000;
+    const d = await sol.ok<{ createLoan: { id: string } }>(
+      `mutation QaCreateLoan($input: LoanInput!) { createLoan(input: $input) { id } }`,
+      {
+        input: {
+          equipmentId: eq,
+          issueDate: new Date(Date.now() + day).toISOString(),
+          returnDate: new Date(Date.now() + 2 * day).toISOString(),
+        },
+      },
+    );
+    return { id: d.createLoan.id, equipmentId: eq };
+  }
+
+  // Solicitud de servicio nueva del solicitante, pendiente.
+  async newService(): Promise<string> {
+    const sol = await this.as("solicitante");
+    const d = await sol.ok<{ createServiceRequest: { id: string } }>(
+      `mutation QaCreateService($input: ServiceRequestInput!) { createServiceRequest(input: $input) { id } }`,
+      { input: { type: "other", description: this.tag("Instalar un programa en el laboratorio") } },
+    );
+    return d.createServiceRequest.id;
   }
 
   // Texto único por corrida, para que los datos que crea la suite se reconozcan.

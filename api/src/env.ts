@@ -61,3 +61,36 @@ export function serverHost(): string {
 export function serverPort(): number {
   return Number(process.env.PORT ?? 4111);
 }
+
+function positiveInt(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+/** Intentos de login fallidos por documento antes del bloqueo (default 5). */
+export function loginMaxAttempts(): number {
+  loadEnv();
+  return positiveInt("LOGIN_MAX_ATTEMPTS", 5);
+}
+
+/** Intentos de login fallidos por IP antes del bloqueo (default 50). */
+export function loginIpMaxAttempts(): number {
+  loadEnv();
+  return positiveInt("LOGIN_IP_MAX_ATTEMPTS", 50);
+}
+
+/** Minutos de bloqueo, y ventana de conteo de fallos (default 15). */
+export function loginLockMinutes(): number {
+  loadEnv();
+  return positiveInt("LOGIN_LOCK_MINUTES", 15);
+}
+
+/**
+ * IP del cliente. Detras de nginx el socket es siempre el proxy; con
+ * TRUST_PROXY=1 se toma la ultima entrada de X-Forwarded-For, la que agrego el
+ * proxy (las anteriores las puede escribir el cliente).
+ */
+export function trustProxy(): boolean {
+  loadEnv();
+  return process.env.TRUST_PROXY === "1";
+}
