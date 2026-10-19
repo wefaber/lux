@@ -273,10 +273,16 @@ async function at03(): Promise<Check[]> {
   const batch = await rawPost("/graphql", { query: `{ ${fields} }` });
   const ms = performance.now() - t0;
   const errorsReturned = batch.json?.errors?.length ?? 0;
+  // Con limite, el request se rechaza entero antes de ejecutar ningun resolutor
+  // (data ausente y un solo error de validacion); sin limite, cada alias devuelve
+  // su propio error de login.
+  const rejectedWhole = (batch.json?.data ?? null) === null && errorsReturned > 0 && errorsReturned < aliasCount;
   checks.push({
     label: `${aliasCount} intentos de login en una sola petición vía alias`,
-    status: errorsReturned >= aliasCount ? "fail" : "partial",
-    detail: `HTTP ${batch.status} en ${ms.toFixed(0)} ms, ${errorsReturned} resolutores de login evaluados en una sola petición. Sin límite de batching ni de operaciones por lote (Anexo C, sección "GraphQL")`,
+    status: rejectedWhole ? "pass" : errorsReturned >= aliasCount ? "fail" : "partial",
+    detail: rejectedWhole
+      ? `HTTP ${batch.status} en ${ms.toFixed(0)} ms: el request se rechazó completo sin ejecutar ningún login ("${batch.json?.errors?.[0]?.message}")`
+      : `HTTP ${batch.status} en ${ms.toFixed(0)} ms, ${errorsReturned} resolutores de login evaluados en una sola petición. Sin límite de batching ni de operaciones por lote (Anexo C, sección "GraphQL")`,
   });
 
   return checks;
@@ -351,13 +357,14 @@ async function at04(): Promise<Check[]> {
   const clientBefore = await ctx.login(disposable.dni, disposable.password);
   await clientBefore.ok("mutation { changePassword(currentPassword: \"" + disposable.password + "\", newPassword: \"NuevaClave-2026x\") }" as never);
   const stillWorks = await clientBefore.gql("{ me { id } }");
-  const tokenStillValid = !!stillWorks.data && !stillWorks.errors.length;
+  // `me` devuelve null (sin error) cuando el token no autentica: igual que en el chequeo (f)
+  const tokenStillValid = !!(stillWorks.data as { me?: { id: string } | null } | null)?.me;
   checks.push({
     label: "Token anterior sigue válido después de changePassword",
     status: tokenStillValid ? "fail" : "pass",
     detail: tokenStillValid
       ? "El token emitido antes del cambio de contraseña sigue autenticando (sin revocación, resolvers.ts changePassword no invalida tokens previos)"
-      : "El token anterior fue rechazado tras el cambio de contraseña",
+      : "El token anterior ya no autentica tras el cambio de contraseña (me = null)",
   });
 
   // (f) Usuario desactivado: su token previo debe dejar de servir
@@ -418,13 +425,19 @@ async function at06(): Promise<Check[]> {
 
   const tecA = await ctx.newUser("tecnico");
   const tecAClient = await ctx.login(tecA.dni, tecA.password);
-  const usersList = await tecAClient.ok<{ users: { id: string; dni: string; email: string }[] }>(
+  const usersList = await tecAClient.ok<{ users: { id: string; dni: string | null; email: string | null }[] }>(
     "{ users { id dni email role } }",
   );
+  // Lo que importa es el dato expuesto, no la cantidad de filas: el tecnico descartable
+  // no tiene tickets ni prestamos asignados, asi que solo puede ver su propio contacto.
+  const exposed = usersList.users.filter((u) => u.id !== tecA.id && (u.dni || u.email));
   checks.push({
     label: "Rol técnico lee dni/email de todo el personal y usuarios (resolvers.ts:446-454)",
-    status: usersList.users.length > 1 ? "fail" : "pass",
-    detail: `El técnico descartable obtuvo ${usersList.users.length} registros con dni y email, sin relación con ningún ticket asignado (Protocolo 8.1 exige "solo con ticket asignado")`,
+    status: exposed.length > 0 ? "fail" : "pass",
+    detail:
+      exposed.length > 0
+        ? `El técnico descartable obtuvo dni o email de ${exposed.length} de ${usersList.users.length} registros, sin relación con ningún ticket asignado (Protocolo 8.1 exige "solo con ticket asignado")`
+        : `El técnico descartable recibió ${usersList.users.length} registros y dni/email en null salvo el propio (Protocolo 8.1)`,
   });
 
   const solicitante = await ctx.newUser("solicitante");
