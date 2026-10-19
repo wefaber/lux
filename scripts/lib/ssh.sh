@@ -312,6 +312,11 @@ ssh_llave_agregar() {
     local dir_ssh="$home/.ssh"
     local autorizadas="$dir_ssh/authorized_keys"
 
+    if es_dry_run; then
+        log INFO "[dry-run] Se instalaria la llave de '$archivo' en $autorizadas (modo 600, directorio 700)."
+        return 0
+    fi
+
     mkdir -p "$dir_ssh"
     touch "$autorizadas"
 

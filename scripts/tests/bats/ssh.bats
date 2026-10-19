@@ -137,3 +137,10 @@ FIN
     run "$ADMIN" --dry-run ssh llave-agregar root "$TMP/mala.pub"
     [ "$status" -eq 1 ]
 }
+
+@test "llave-agregar --dry-run con llave valida no escribe authorized_keys" {
+    ssh-keygen -q -t ed25519 -N '' -f "$TMP/k"
+    run "$ADMIN" --dry-run ssh llave-agregar root "$TMP/k.pub"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"[dry-run] Se instalaria la llave"* ]]
+}

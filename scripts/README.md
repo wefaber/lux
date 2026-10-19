@@ -25,7 +25,7 @@ scripts/
 │   ├── usuarios.sh  grupos.sh  ssh.sh
 │   ├── red.sh  firewall.sh  db.sh  logs.sh  deploy.sh  respaldo.sh
 └── tests/
-    ├── bats/             Pruebas con stubs en PATH (no tocan el sistema). 170 casos.
+    ├── bats/             Pruebas con stubs en PATH (no tocan el sistema). 171 casos.
     ├── integracion-respaldo.sh   Cliente y servidor de respaldo contra un sshd efímero.
     └── run-tests.sh      Suite de E2: crea usuarios reales; requiere root y una máquina descartable.
 ```
