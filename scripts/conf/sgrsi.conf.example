@@ -40,5 +40,5 @@ SGRSI_RESPALDO_HOST="192.168.50.20"         # [COMPLETAR] IP del servidor de res
 SGRSI_RESPALDO_HOST_ALT=""                  # destino alterno opcional
 SGRSI_RESPALDO_PUERTO="52205"
 SGRSI_RESPALDO_USUARIO="sgrsi_backup"
-SGRSI_RESPALDO_LLAVE="/var/lib/sgrsi/.ssh/id_ed25519_respaldo"
-SGRSI_RESPALDO_KNOWN_HOSTS="/var/lib/sgrsi/.ssh/known_hosts_respaldo"
+SGRSI_RESPALDO_LLAVE="/home/sgrsi/.ssh/id_ed25519_respaldo"
+SGRSI_RESPALDO_KNOWN_HOSTS="/home/sgrsi/.ssh/known_hosts_respaldo"
