@@ -1,5 +1,4 @@
 import type {
-  ActivityLog,
   Comment,
   Component,
   Intervention,
@@ -13,7 +12,7 @@ import type {
   User,
   UserRole,
 } from "@/lib/types";
-import { db } from "./db/client";
+import { db, readAll } from "./db/client";
 import * as t from "./db/schema";
 
 export interface PendingSeenRow {
@@ -36,8 +35,13 @@ export interface State {
   comments: Comment[];
   reservations: Reservation[];
   notices: Notice[];
-  activityLogs: ActivityLog[];
   pendingSeen: PendingSeenRow[];
+  /**
+   * Ids de filas con baja logica de tickets, prestamos, solicitudes,
+   * intervenciones y comentarios. No se exponen (la API las oculta) pero siguen
+   * ocupando su id: `nextId` no puede reusarlo.
+   */
+  deletedIds: Set<string>;
   usersById: Map<string, User>;
   locationsById: Map<string, Location>;
   productsById: Map<string, Product>;
@@ -127,32 +131,43 @@ export async function loadState(): Promise<State> {
     locationRows,
     productRows,
     componentRows,
-    ticketRows,
-    loanRows,
+    allTicketRows,
+    allLoanRows,
     loanComponentRows,
-    serviceRows,
-    interventionRows,
-    commentRows,
+    allServiceRows,
+    allInterventionRows,
+    allCommentRows,
     reservationRows,
     noticeRows,
-    logRows,
     pendingRows,
-  ] = await Promise.all([
-    db.select().from(t.users),
-    db.select().from(t.locations),
-    db.select().from(t.products),
-    db.select().from(t.components),
-    db.select().from(t.tickets),
-    db.select().from(t.loans),
-    db.select().from(t.loanComponents),
-    db.select().from(t.serviceRequests),
-    db.select().from(t.interventions),
-    db.select().from(t.comments),
-    db.select().from(t.reservations),
-    db.select().from(t.notices),
-    db.select().from(t.activityLogs),
-    db.select().from(t.pendingSeen),
-  ]);
+  ] = await readAll([
+    () => db.select().from(t.users),
+    () => db.select().from(t.locations),
+    () => db.select().from(t.products),
+    () => db.select().from(t.components),
+    () => db.select().from(t.tickets),
+    () => db.select().from(t.loans),
+    () => db.select().from(t.loanComponents),
+    () => db.select().from(t.serviceRequests),
+    () => db.select().from(t.interventions),
+    () => db.select().from(t.comments),
+    () => db.select().from(t.reservations),
+    () => db.select().from(t.notices),
+    () => db.select().from(t.pendingSeen),
+  ] as const);
+
+  const deletedIds = new Set<string>();
+  const alive = <R extends { id: string; deletedAt: string | null }>(rows: R[]): R[] =>
+    rows.filter((row) => {
+      if (row.deletedAt === null) return true;
+      deletedIds.add(row.id);
+      return false;
+    });
+  const ticketRows = alive(allTicketRows);
+  const loanRows = alive(allLoanRows);
+  const serviceRows = alive(allServiceRows);
+  const interventionRows = alive(allInterventionRows);
+  const commentRows = alive(allCommentRows);
 
   const users = userRows.map(toUser);
   const locations = locationRows.map(toLocation);
@@ -288,17 +303,6 @@ export async function loadState(): Promise<State> {
     createdAt: row.createdAt,
   }));
 
-  const activityLogs: ActivityLog[] = logRows.map((row) => ({
-    id: row.id,
-    userId: row.userId,
-    userName: row.userName,
-    operation: row.operation,
-    entity: row.entity,
-    entityId: row.entityId,
-    timestamp: row.timestamp,
-    details: row.details,
-  }));
-
   return {
     users,
     locations,
@@ -311,7 +315,7 @@ export async function loadState(): Promise<State> {
     comments,
     reservations,
     notices,
-    activityLogs,
+    deletedIds,
     pendingSeen: pendingRows.map((r) => ({ userId: r.userId, section: r.section, seenAt: r.seenAt })),
     usersById,
     locationsById,

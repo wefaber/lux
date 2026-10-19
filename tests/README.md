@@ -40,3 +40,10 @@ El nivel 2 necesita un build **sin mocks** (con la API real detrás de `/graphql
 4. `bun run qa:typecheck` y `bun run qa:doc --into <Testing.md>` para regenerar el documento.
 
 Los casos destructivos tienen que restaurar lo que tocan (ver CP-25-02): la suite corre sobre una base persistente.
+
+## Casos de API agregados en la 3ra entrega
+
+- `tests/cases/api.ts` (CP-RNF-06 a 09 y 14, CP-R-02 a 04): catalogo de errores, 401/403, bajas logicas, auditoria.
+- `tests/cases/crud.ts` (CP-RNF-10 a 13): altas, cambios y bajas con verificacion de la fila y del registro de auditoria.
+- `tests/cases/rest.ts` (CP-REST-01 a 05): rutas `/api/v1`, envelope y codigos HTTP reales.
+- Los casos de login fallido consumen el umbral de bloqueo (5 por DNI, 50 por IP en 15 minutos): usan DNI inexistentes o repartidos para no bloquear las cuentas del seed. Si una corrida se repite muchas veces seguidas contra el mismo proceso, reiniciar la API libera los contadores.

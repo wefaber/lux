@@ -73,13 +73,14 @@ export const authCases: TestCase[] = [
     priority: "alta",
     precondition: "Existe la cuenta.",
     steps: ["Fallar el login 6 veces seguidas", "Intentar con la clave correcta"],
-    expected: "El acceso queda restringido por un plazo y se informa la restricción.",
-    knownGap: "RF-AUTH-007 sin implementar: no hay rate limit ni bloqueo",
+    expected: "El acceso queda restringido 15 minutos (bloqueo desde el quinto fallo) y se informa con TOO_MANY_ATTEMPTS / 429.",
     api: async (t) => {
       const { dni, password } = await t.newUser();
       for (let i = 0; i < 6; i++) await t.anon().gql(LOGIN, { dni, password: `mal-${i}` });
       const r = await t.anon().gql(LOGIN, { dni, password });
       check(r.errors.length > 0, "después de 6 fallos el login siguió funcionando");
+      check(r.errors[0]?.extensions?.code === "TOO_MANY_ATTEMPTS", `código inesperado: ${r.errors[0]?.extensions?.code}`);
+      check(r.errors[0]?.extensions?.status === 429, "el status equivalente no es 429");
     },
   },
   {
@@ -161,15 +162,24 @@ export const authCases: TestCase[] = [
     kind: "negativo",
     actor: "solicitante",
     priority: "media",
-    precondition: "Se cerró la sesión desde la interfaz.",
-    steps: ["Reutilizar el token anterior contra la API"],
-    expected: "La API rechaza el token invalidado.",
-    knownGap: "El logout borra el token en el navegador pero el servidor no lo revoca (JWT sin lista de revocación)",
+    precondition: "Se cerró la sesión con la operación logout.",
+    steps: ["Iniciar sesión", "Ejecutar logout", "Reutilizar el token anterior contra la API", "Revisar la auditoría"],
+    expected: "La API trata el token como no autenticado y la auditoría tiene LOGOUT a nombre del usuario.",
     api: async (t) => {
-      const sol = await t.as("solicitante");
-      // No hay operación de logout en la API: el token sigue siendo válido.
-      const r = await t.withToken(sol.token ?? "").ok<{ me: { id: string } | null }>(ME);
-      check(r.me === null, "el token sigue autenticando: no hay revocación en el servidor");
+      const user = await t.newUser();
+      const session = await t.login(user.dni, user.password);
+      const before = await session.ok<{ me: { id: string } | null }>(ME);
+      check(before.me?.id === user.id, "la sesión recién abierta no autentica");
+      await session.ok(`mutation QaLogout { logout }`);
+      const after = await session.ok<{ me: unknown }>(ME);
+      check(after.me === null, "el token sigue autenticando después del logout");
+      await session.failsWith(`query { tickets { id } }`, {}, "UNAUTHENTICATED", 401);
+      const root = await t.as("root_admin");
+      const logs = await root.ok<{ activityLogs: { entityId: string }[] }>(
+        `query QaLogout($userId: ID, $operation: String) { activityLogs(userId: $userId, operation: $operation) { entityId } }`,
+        { userId: user.id, operation: "LOGOUT" },
+      );
+      check(logs.activityLogs.length === 1, "el logout no quedó en auditoría");
     },
   },
   {
@@ -191,6 +201,23 @@ export const authCases: TestCase[] = [
     },
   },
   {
+    id: "CP-27-03",
+    cu: "CU-27",
+    title: "El token vence a las 8 horas",
+    rf: ["RF-AUTH-003"],
+    kind: "limite",
+    actor: "reloj",
+    priority: "media",
+    precondition: "Sesión recién iniciada.",
+    steps: ["Decodificar el JWT (iat y exp)"],
+    expected: "exp - iat = 28800 s (8 h), como se declaró en E2.",
+    api: async (t) => {
+      const sol = await t.as("solicitante");
+      const payload = JSON.parse(Buffer.from((sol.token ?? "").split(".")[1] ?? "", "base64url").toString()) as { iat: number; exp: number };
+      check(payload.exp - payload.iat === 8 * 3600, `la vigencia es de ${(payload.exp - payload.iat) / 3600} h`);
+    },
+  },
+  {
     id: "CP-27-02",
     cu: "CU-27",
     title: "Expiración por inactividad configurable",
@@ -201,6 +228,6 @@ export const authCases: TestCase[] = [
     precondition: "Sesión inactiva por más del período configurado.",
     steps: ["Dejar la sesión inactiva", "Intentar operar"],
     expected: "La sesión expira y se pide iniciar sesión de nuevo.",
-    knownGap: "El JWT vence a las 12 h fijas; no hay expiración por inactividad configurable",
+    knownGap: "El JWT vence a las 8 h fijas desde el login; no hay expiración por inactividad configurable",
   },
 ];

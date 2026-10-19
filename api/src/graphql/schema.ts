@@ -1,5 +1,6 @@
-// SDL identico al contrato que sirven los mocks (src/mocks/schema.ts del frontend).
-// Es la fuente de verdad de las 64 operaciones que consume la app.
+// SDL identico al contrato que sirven los mocks (src/mocks/schema.ts del frontend)
+// mas operaciones aditivas que la app no usa: bajas logicas (softDelete*) y lecturas
+// por id (location, intervention, comment). Las 64 operaciones de la app no cambian.
 export const typeDefs = /* GraphQL */ `
   type Query {
     login(dni: String!, password: String!): AuthUser
@@ -22,8 +23,11 @@ export const typeDefs = /* GraphQL */ `
     reports: Reports!
     activityLogs(userId: ID, operation: String, startDate: String, endDate: String): [ActivityLog!]!
     locations: [Location!]!
+    location(id: ID!): Location
     interventions(equipmentId: ID!): [Intervention!]!
+    intervention(id: ID!): Intervention
     comments(entityType: String!, entityId: ID!): [Comment!]!
+    comment(id: ID!): Comment
     reservations(status: String): [Reservation!]!
     reservation(id: ID!): Reservation
     notices: [Notice!]!
@@ -55,6 +59,12 @@ export const typeDefs = /* GraphQL */ `
     updateServiceRequest(id: ID!, input: ServiceRequestUpdateInput!): ServiceRequest!
     claimServiceRequest(id: ID!): ServiceRequest!
     assignServiceRequest(id: ID!, technicianId: ID!): ServiceRequest!
+    softDeleteTicket(id: ID!): Boolean!
+    softDeleteLoan(id: ID!): Boolean!
+    softDeleteServiceRequest(id: ID!): Boolean!
+    softDeleteIntervention(id: ID!): Boolean!
+    softDeleteComment(id: ID!): Boolean!
+    logout: Boolean!
     changePassword(currentPassword: String!, newPassword: String!): Boolean!
     createLocation(input: LocationInput!): Location!
     updateLocation(id: ID!, input: LocationUpdateInput!): Location!
@@ -147,8 +157,9 @@ export const typeDefs = /* GraphQL */ `
   type User {
     id: ID!
     name: String!
-    dni: String!
-    email: String!
+    # dni y email son null cuando quien consulta no tiene relacion con la persona
+    dni: String
+    email: String
     role: String!
     isActive: Boolean!
     createdAt: String!

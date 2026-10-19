@@ -8,6 +8,34 @@
       "when": 1791780582577,
       "tag": "0000_uneven_proemial_gods",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792389878320,
+      "tag": "0001_soft_delete_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792390127977,
+      "tag": "0002_revoked_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792390517590,
+      "tag": "0003_integrity_fk_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792391901647,
+      "tag": "0004_token_version",
+      "breakpoints": true
     }
   ]
 }

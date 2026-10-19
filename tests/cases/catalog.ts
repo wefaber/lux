@@ -4,8 +4,8 @@ import type { CuInfo } from "./types";
 // Es la tabla que pidió Ingeniería en la devolución de E2: cada caso de uso
 // referencia los requisitos donde se definió la funcionalidad.
 export const CATALOG: CuInfo[] = [
-  { id: "CU-01", name: "Iniciar sesión", actor: "Solicitante (y todos los humanos)", rf: ["RF-AUTH-001", "RF-AUTH-002", "RF-AUTH-006", "RF-AUTH-007"], status: "parcial", note: "Sin bloqueo por intentos fallidos (RF-AUTH-007)" },
-  { id: "CU-02", name: "Cerrar sesión", actor: "Solicitante", rf: ["RF-AUTH-004"], status: "parcial", note: "Logout del lado del cliente; el JWT no se revoca en el servidor" },
+  { id: "CU-01", name: "Iniciar sesión", actor: "Solicitante (y todos los humanos)", rf: ["RF-AUTH-001", "RF-AUTH-002", "RF-AUTH-006", "RF-AUTH-007"], status: "implementado", note: "Bloqueo de 15 min tras 5 fallos por documento (y por IP) en memoria del proceso" },
+  { id: "CU-02", name: "Cerrar sesión", actor: "Solicitante", rf: ["RF-AUTH-004"], status: "implementado", note: "La mutación logout revoca el token (tabla revoked_tokens) y deja traza" },
   { id: "CU-03", name: "Reportar incidencia", actor: "Solicitante", rf: ["RF-TKT-001"], status: "parcial", note: "La API no valida extensión mínima ni referente (RN-04)" },
   { id: "CU-04", name: "Consultar mis pedidos", actor: "Solicitante", rf: ["RF-TKT-005", "RF-SERV-004", "RF-PRES-006"], status: "implementado" },
   { id: "CU-05", name: "Solicitar préstamo", actor: "Solicitante", rf: ["RF-PRES-001", "RF-PRES-002"], status: "implementado" },
@@ -30,8 +30,8 @@ export const CATALOG: CuInfo[] = [
   { id: "CU-24", name: "Auditar sistema", actor: "Administrador raíz", rf: ["RF-TRZ-002", "RF-TRZ-003", "RF-TRZ-004", "RF-TRZ-005"], status: "parcial", note: "Consulta y filtros sí; exportación CSV no" },
   { id: "CU-25", name: "Gestionar cuentas administrativas", actor: "Administrador raíz", rf: ["RF-USR-004", "RF-USR-005"], status: "parcial" },
   { id: "CU-26", name: "Vencer préstamo", actor: "Reloj", rf: ["RF-PRES-006"], status: "implementado", note: "Se evalúa al consultar préstamos, no por un proceso programado" },
-  { id: "CU-27", name: "Expirar sesión", actor: "Reloj", rf: ["RF-AUTH-003"], status: "parcial", note: "El token vence a las 12 h fijas, no por inactividad" },
+  { id: "CU-27", name: "Expirar sesión", actor: "Reloj", rf: ["RF-AUTH-003"], status: "parcial", note: "El token vence a las 8 h fijas, no por inactividad" },
   { id: "CU-V", name: "Verificar disponibilidad", actor: "(incluido)", rf: ["RF-PRES-002", "RF-MANT-003"], status: "implementado" },
   { id: "CU-N", name: "Notificar acuse", actor: "(incluido)", rf: ["RF-TKT-001", "RF-SERV-002"], status: "implementado" },
-  { id: "CU-R", name: "Registrar en auditoría", actor: "(incluido)", rf: ["RF-TRZ-001", "RF-INV-006"], status: "no implementado", note: "Ninguna mutación escribe en activity_logs" },
+  { id: "CU-R", name: "Registrar en auditoría", actor: "(incluido)", rf: ["RF-TRZ-001", "RF-INV-006"], status: "implementado", note: "Toda mutación inserta una fila en activity_logs dentro de su transacción" },
 ];
