@@ -19,9 +19,13 @@ type Placeholders<S extends string> = S extends `${string}{${infer P}}${infer Re
   ? P | Placeholders<Rest>
   : never;
 export type Params = Record<string, string | number>;
-type ParamsFor<K extends MessageKey> = [Placeholders<(typeof es)[K]>] extends [never]
-  ? [params?: Params]
-  : [params: Record<Placeholders<(typeof es)[K]>, string | number> & Params];
+// Distributivo: con una clave dinamica (union de claves) alcanza con no pasar
+// parametros; con una clave literal se exigen los de su marcador
+type ParamsFor<K extends MessageKey> = K extends MessageKey
+  ? [Placeholders<(typeof es)[K]>] extends [never]
+    ? [params?: Params]
+    : [params: Record<Placeholders<(typeof es)[K]>, string | number> & Params]
+  : never;
 export type TArgs<K extends MessageKey> = ParamsFor<K>;
 export type TFunction = <K extends MessageKey>(key: K, ...args: TArgs<K>) => string;
 

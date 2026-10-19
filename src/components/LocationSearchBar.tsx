@@ -4,6 +4,7 @@ import { MapPin, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Location } from "@/lib/types";
 import { normalize } from "@/components/ui/search-select";
+import { useI18n } from "@/hooks/useI18n";
 
 // Ubicaciones sugeridas a la vez
 const MAX_SUGGESTIONS = 6;
@@ -28,9 +29,11 @@ export function LocationSearchBar({
   locations,
   locationId,
   onLocationChange,
-  placeholder = "Buscar o filtrar por ubicación...",
+  placeholder,
   className,
 }: LocationSearchBarProps) {
+  const { t } = useI18n();
+  const defaultPlaceholder = placeholder ?? t("locationSearch.placeholder");
   const listId = useId();
   const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
   // Escape, salir del campo o elegir cierran las sugerencias hasta que se vuelva a escribir
@@ -75,7 +78,7 @@ export function LocationSearchBar({
               <span className="max-w-32 truncate">{selected.name}</span>
               <button
                 type="button"
-                aria-label={`Quitar el filtro ${selected.name}`}
+                aria-label={t("locationSearch.remove", { name: selected.name })}
                 className="rounded-md p-0.5 hover:bg-primary/10 cursor-pointer"
                 onClick={() => onLocationChange("")}
               >
@@ -89,9 +92,9 @@ export function LocationSearchBar({
             aria-expanded={open}
             aria-controls={open ? listId : undefined}
             aria-autocomplete="list"
-            aria-label={placeholder}
+            aria-label={defaultPlaceholder}
             autoComplete="off"
-            placeholder={selected ? "Buscar en esta ubicación..." : placeholder}
+            placeholder={selected ? t("locationSearch.inLocation") : defaultPlaceholder}
             value={search}
             onChange={(e) => {
               onSearchChange(e.target.value);
@@ -115,7 +118,7 @@ export function LocationSearchBar({
         <PopoverPrimitive.Content
           id={listId}
           role="listbox"
-          aria-label="Ubicaciones"
+          aria-label={t("locationSearch.list")}
           align="start"
           sideOffset={4}
           collisionPadding={8}
@@ -127,7 +130,7 @@ export function LocationSearchBar({
           className="z-50 min-w-[var(--radix-popover-trigger-width)] overflow-y-auto rounded-xl border border-border bg-popover shadow-lg"
         >
           <p className="px-3 pt-2 pb-1 text-xs uppercase tracking-widest text-muted-foreground">
-            Filtrar por ubicación
+            {t("locationSearch.filterBy")}
           </p>
           {suggestions.map((l) => (
             <button

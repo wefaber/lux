@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import { type ComponentPropsWithoutRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/hooks/useI18n";
 
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
@@ -26,6 +27,7 @@ function DialogContent({
   children,
   ...props
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Content>) {
+  const { t } = useI18n();
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -48,7 +50,7 @@ function DialogContent({
           {children}
           <DialogPrimitive.Close className="absolute right-4 top-4 rounded-full p-2 text-muted-foreground hover:bg-muted/70 hover:text-foreground hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer">
             <X className="h-4 w-4" />
-            <span className="sr-only">Cerrar</span>
+            <span className="sr-only">{t("ui.close")}</span>
           </DialogPrimitive.Close>
         </motion.div>
       </DialogPrimitive.Content>

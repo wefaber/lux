@@ -1,12 +1,14 @@
 import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { useI18n } from "@/hooks/useI18n";
 import { useHaptics } from "@/hooks/useHaptics";
 import { navItemsFor } from "./navItems";
 import { NavIcon } from "./NavIcon";
 
 export function TabBar() {
   const { user } = useAuth();
+  const { t } = useI18n();
   const { trigger } = useHaptics();
 
   const visibleItems = navItemsFor(user?.role).filter((item) => item.inTabBar);
@@ -31,7 +33,7 @@ export function TabBar() {
             onClick={() => trigger(30)}
           >
             <NavIcon item={item} className="h-[22px] w-[22px]" />
-            <span className="leading-none">{item.label}</span>
+            <span className="leading-none">{t(item.labelKey)}</span>
           </NavLink>
         ))}
       </div>

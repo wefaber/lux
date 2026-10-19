@@ -1,3 +1,4 @@
+import { app } from "./app";
 import { core } from "./core";
 import { domain } from "./domain";
 import { errors } from "./errors";
@@ -7,6 +8,7 @@ import { validation } from "./validation";
 // dominio, todos aplanados en un solo objeto con claves "dominio.seccion.texto"
 export const es = {
   ...core,
+  ...app,
   ...domain,
   ...errors,
   ...validation,
@@ -14,4 +16,4 @@ export const es = {
 
 // Los mismos diccionarios sin mezclar: el test de completitud detecta con esto
 // una clave repetida en dos archivos (el spread la taparia)
-export const esParts = [core, domain, errors, validation] as const;
+export const esParts = [core, app, domain, errors, validation] as const;

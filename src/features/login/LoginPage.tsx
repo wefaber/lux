@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "motion/react";
 import { Zap, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useI18n } from "@/hooks/useI18n";
+import { LanguageSwitcher } from "@/components/accessibility/LanguageSwitcher";
 import { isMocksUnavailable } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +23,7 @@ export function LoginPage() {
   const [error, setError] = useState("");
   const [attempts, setAttempts] = useState(0);
   const { login, isLoading } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as LocationState)?.from?.pathname ?? ROUTES.DASHBOARD;
@@ -30,24 +33,20 @@ export function LoginPage() {
     try {
       await login(userDni, userPassword);
       navigate(from, { replace: true });
-    } catch (error) {
+    } catch (err) {
       setAttempts((a) => a + 1);
-      setError(
-        isMocksUnavailable(error)
-          ? "No responde el servidor de datos de prueba. Recargá la página e intentá de nuevo."
-          : "Credenciales inválidas. Verificá tu cédula y contraseña.",
-      );
+      setError(isMocksUnavailable(err) ? t("login.error.mocks") : t("login.error.credentials"));
     }
   }; // Autenticacion compartida por el formulario y la burbuja de mocks
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!dni.trim() || !password.trim()) {
-      setError("Completá todos los campos.");
+      setError(t("login.error.fields"));
       return;
     }
     if (!/^\d{7,8}$/.test(dni.trim())) {
-      setError("El número de cédula debe tener 7 u 8 dígitos.");
+      setError(t("login.error.dni"));
       return;
     }
     await runLogin(dni.trim(), password);
@@ -66,6 +65,9 @@ export function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-app-light dark:bg-app-dark p-4">
+      <div className="absolute top-4 right-4">
+        <LanguageSwitcher />
+      </div>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -76,21 +78,21 @@ export function LoginPage() {
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary shadow-[0_16px_32px_rgba(0,122,255,0.25)] mb-5">
             <Zap className="h-8 w-8 text-white" />
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Iniciá sesión</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            ITI CETP — Sistema de Gestión de Recursos
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {t("login.title")}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">{t("login.subtitle")}</p>
         </div>
 
         <div className="rounded-2xl border border-border bg-card/40 p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.06)] backdrop-blur-xl">
           <form onSubmit={handleSubmit} className="space-y-5" noValidate>
             <div className="space-y-1.5">
-              <Label htmlFor="dni">Número de cédula</Label>
+              <Label htmlFor="dni">{t("login.dni")}</Label>
               <Input
                 id="dni"
                 type="text"
                 inputMode="numeric"
-                placeholder="Ej: 12345678"
+                placeholder={t("login.dniPlaceholder")}
                 value={dni}
                 onChange={(e) => setDni(e.target.value)}
                 maxLength={8}
@@ -100,12 +102,12 @@ export function LoginPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="password">Contraseña</Label>
+              <Label htmlFor="password">{t("login.password")}</Label>
               <div className="relative">
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Tu contraseña"
+                  placeholder={t("login.passwordPlaceholder")}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
@@ -116,7 +118,7 @@ export function LoginPage() {
                   onClick={() => setShowPassword((s) => !s)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground dark:hover:text-white transition-colors"
                   tabIndex={-1}
-                  aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  aria-label={showPassword ? t("login.hidePassword") : t("login.showPassword")}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -146,7 +148,9 @@ export function LoginPage() {
                     style={{ width: `${Math.min(attempts * 20, 100)}%` }}
                   />
                 </div>
-                <span className="text-xs text-warning whitespace-nowrap">{attempts} intentos</span>
+                <span className="text-xs text-warning whitespace-nowrap">
+                  {t("login.attempts", { count: attempts })}
+                </span>
               </motion.div>
             )}
 
@@ -158,15 +162,13 @@ export function LoginPage() {
                   className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white"
                 />
               ) : (
-                "Ingresar"
+                t("login.submit")
               )}
             </Button>
           </form>
         </div>
 
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          ITI CETP 2026 · Los accesos son gestionados por administración
-        </p>
+        <p className="text-center text-xs text-muted-foreground mt-6">{t("login.footer")}</p>
       </motion.div>
 
       {/* Misma condicion que arranca MSW en main.tsx, inline por el mismo motivo:

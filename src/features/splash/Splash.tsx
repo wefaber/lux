@@ -4,10 +4,12 @@ import { motion } from "motion/react";
 import { Zap } from "lucide-react";
 import { ROUTES } from "@/lib/constants";
 import { useAuth } from "@/hooks/useAuth";
+import { useI18n } from "@/hooks/useI18n";
 
 export function Splash() {
   const navigate = useNavigate(); // Navegacion del panel
   const { isAuthenticated } = useAuth();
+  const { t } = useI18n();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -39,8 +41,8 @@ export function Splash() {
           transition={{ delay: 0.2, type: "spring", stiffness: 300, damping: 30 }}
           className="text-center"
         >
-          <h1 className="text-4xl font-semibold tracking-tight text-foreground">Lux</h1>
-          <p className="text-sm text-muted-foreground mt-1">Sistema de Gestión de Recursos</p>
+          <h1 className="text-4xl font-semibold tracking-tight text-foreground">{t("app.name")}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t("app.subtitle")}</p>
         </motion.div>
 
         <motion.div

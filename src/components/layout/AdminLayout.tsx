@@ -3,21 +3,25 @@ import { Outlet, NavLink, Link, useNavigate } from "react-router-dom";
 import { Users, Shield, ActivitySquare, ArrowLeft, Zap, BarChart3 } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
+import { useI18n } from "@/hooks/useI18n";
+import { LanguageSwitcher } from "@/components/accessibility/LanguageSwitcher";
+import type { MessageKey } from "@/i18n";
 import { ThemeSwitcher } from "@/components/accessibility/ThemeSwitcher";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useResponsiveTables } from "@/hooks/useResponsiveTables";
 
-const adminNav = [
-  { icon: Users, label: "Usuarios", to: ROUTES.ADMIN_USERS },
-  { icon: Shield, label: "Roles y Permisos", to: ROUTES.ADMIN_ROLES },
-  { icon: ActivitySquare, label: "Registros de Actividad", to: ROUTES.ADMIN_LOGS },
-  { icon: BarChart3, label: "Reportes", to: ROUTES.ADMIN_REPORTS },
+const adminNav: Array<{ icon: typeof Users; labelKey: MessageKey; to: string }> = [
+  { icon: Users, labelKey: "admin.nav.users", to: ROUTES.ADMIN_USERS },
+  { icon: Shield, labelKey: "admin.nav.roles", to: ROUTES.ADMIN_ROLES },
+  { icon: ActivitySquare, labelKey: "admin.nav.logs", to: ROUTES.ADMIN_LOGS },
+  { icon: BarChart3, labelKey: "admin.nav.reports", to: ROUTES.ADMIN_REPORTS },
 ];
 
 export function AdminLayout() {
   const { user } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const mainRef = useRef<HTMLElement>(null);
   useResponsiveTables(mainRef); // tablas que no entran -> tarjetas
@@ -32,10 +36,10 @@ export function AdminLayout() {
           </div>
           <div>
             <span className="text-xs font-semibold text-sidebar-foreground block leading-none">
-              Lux Admin
+              {t("admin.brand")}
             </span>
             <span className="text-[10px] text-muted-foreground leading-none">
-              Panel de Administración
+              {t("admin.panel")}
             </span>
           </div>
         </div>
@@ -45,11 +49,11 @@ export function AdminLayout() {
           className="mx-2 mb-2 flex items-center gap-2 rounded-xl px-3 py-2 text-xs text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors cursor-pointer"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Volver al Dashboard
+          {t("admin.backToDashboard")}
         </button>
 
         <nav className="flex-1 px-2 space-y-0.5">
-          {adminNav.map(({ icon: Icon, label, to }) => (
+          {adminNav.map(({ icon: Icon, labelKey, to }) => (
             <NavLink
               key={to}
               to={to}
@@ -64,7 +68,7 @@ export function AdminLayout() {
               }
             >
               <Icon className="h-4 w-4 shrink-0" />
-              <span className="truncate">{label}</span>
+              <span className="truncate">{t(labelKey)}</span>
             </NavLink>
           ))}
         </nav>
@@ -90,22 +94,23 @@ export function AdminLayout() {
         <header className="h-14 flex items-center justify-between gap-2 px-4 md:px-6 glass-topbar">
           <div className="flex items-center gap-1 min-w-0">
             <Button variant="ghost" size="icon" className="md:hidden shrink-0" asChild>
-              <Link to={ROUTES.DASHBOARD} aria-label="Volver al Dashboard">
+              <Link to={ROUTES.DASHBOARD} aria-label={t("admin.backToDashboard")}>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
-            <h1 className="text-sm font-semibold text-foreground truncate">
-              Panel de Administración
-            </h1>
+            <h1 className="text-sm font-semibold text-foreground truncate">{t("admin.panel")}</h1>
           </div>
-          <ThemeSwitcher />
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher />
+            <ThemeSwitcher />
+          </div>
         </header>
         {/* En el telefono las secciones van en una fila que se desplaza de costado */}
         <nav
-          aria-label="Secciones de administración"
+          aria-label={t("admin.sections")}
           className="md:hidden flex gap-1 overflow-x-auto px-4 py-2 border-b border-border"
         >
-          {adminNav.map(({ icon: Icon, label, to }) => (
+          {adminNav.map(({ icon: Icon, labelKey, to }) => (
             <NavLink
               key={to}
               to={to}
@@ -119,7 +124,7 @@ export function AdminLayout() {
               }
             >
               <Icon className="h-4 w-4 shrink-0" />
-              {label}
+              {t(labelKey)}
             </NavLink>
           ))}
         </nav>

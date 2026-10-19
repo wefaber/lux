@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { BellRing, Check, Pin } from "lucide-react";
 import { useNotices } from "@/hooks/useNotices";
+import { useI18n } from "@/hooks/useI18n";
+import { t as translateNow } from "@/i18n";
 import { NOTICE_ENTITY_GENDER, NOTICE_KIND_LABELS } from "@/lib/constants";
 import type { PinState } from "@/lib/pins";
 import type { Notice } from "@/lib/types";
@@ -15,13 +17,14 @@ export function pinRowClass(state: PinState): string {
 
 // Icono junto al ID de lo que esta fijado
 export function PinMark({ state }: { state: PinState }) {
+  const { t } = useI18n();
   if (state === "active") {
     return (
       <Pin
         className="inline h-3.5 w-3.5 mr-1.5 -mt-0.5 text-primary"
-        aria-label="Fijado: lo tenés asignado"
+        aria-label={t("ui.pin.active")}
       >
-        <title>Fijado: lo tenés asignado</title>
+        <title>{t("ui.pin.active")}</title>
       </Pin>
     );
   }
@@ -29,9 +32,9 @@ export function PinMark({ state }: { state: PinState }) {
     return (
       <BellRing
         className="inline h-3.5 w-3.5 mr-1.5 -mt-0.5 text-amber-500"
-        aria-label="Fijado: tenés un aviso sin ver"
+        aria-label={t("ui.pin.notice")}
       >
-        <title>Fijado: tenés un aviso sin ver</title>
+        <title>{t("ui.pin.notice")}</title>
       </BellRing>
     );
   }
@@ -42,13 +45,14 @@ export function PinMark({ state }: { state: PinState }) {
 export function noticeText(notice: Pick<Notice, "entityType" | "kind" | "by">): string {
   return NOTICE_KIND_LABELS[notice.kind]
     .replace("{o}", NOTICE_ENTITY_GENDER[notice.entityType])
-    .replace("{by}", notice.by?.name ?? "el sistema");
+    .replace("{by}", notice.by?.name ?? translateNow("ui.notice.system"));
 }
 
 // Que paso y el boton para marcarlo como visto. Hasta entonces la fila sigue
 // fijada arriba de todo
 export function NoticeLine({ notice }: { notice: Notice }) {
   const { acknowledge } = useNotices();
+  const { t } = useI18n();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -58,7 +62,7 @@ export function NoticeLine({ notice }: { notice: Notice }) {
     try {
       await acknowledge(notice.id);
     } catch (err) {
-      setError(errorMessage(err, "No se pudo marcar como visto"));
+      setError(errorMessage(err, t("ui.notice.markFailed")));
       setSaving(false);
     }
   };
@@ -74,11 +78,11 @@ export function NoticeLine({ notice }: { notice: Notice }) {
         type="button"
         onClick={markSeen}
         disabled={saving}
-        aria-label={`Marcar como visto: ${text} (${notice.entityId})`}
+        aria-label={t("ui.notice.markSeenLabel", { text, id: notice.entityId })}
         className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 px-1.5 py-0.5 font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-500/15 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
       >
         <Check className="h-3 w-3" />
-        {saving ? "Marcando..." : "Marcar como visto"}
+        {saving ? t("ui.notice.marking") : t("ui.notice.markSeen")}
       </button>
       {error && <span className="text-destructive">{error}</span>}
     </div>

@@ -128,6 +128,9 @@ describe("diccionarios", () => {
       "field.partNumber",
       "error.http",
       "common.no",
+      "app.name",
+      "nav.tickets",
+      "admin.brand",
     ]);
     const same = keys.filter((k) => en[k] === es[k] && !SAME.has(k));
     expect(same).toEqual([]);

@@ -2,10 +2,14 @@ import { useRef, useState, type ReactNode } from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { useI18n } from "@/hooks/useI18n";
 
 // "salon" encuentra "Salón": se compara sin mayusculas ni tildes
 export function normalize(text: string): string {
-  return text.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
 }
 
 export interface SearchSelectProps<T> {
@@ -43,13 +47,14 @@ export function SearchSelect<T>({
   getLabel,
   getSearchText = getLabel,
   renderOption,
-  placeholder = "Buscar...",
+  placeholder,
   direction = "down",
   maxResults = 8,
   listClassName,
   disabled,
   "aria-invalid": ariaInvalid,
 }: SearchSelectProps<T>) {
+  const { t } = useI18n();
   // null = no se esta buscando: el campo muestra lo elegido
   const [query, setQuery] = useState<string | null>(null);
   const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
@@ -57,7 +62,9 @@ export function SearchSelect<T>({
   const selected = items.find((item) => getKey(item) === value) ?? null;
 
   // Cada palabra tiene que aparecer, en cualquier orden: "lab 2" encuentra "Laboratorio 2"
-  const words = normalize(query ?? "").split(/\s+/).filter(Boolean);
+  const words = normalize(query ?? "")
+    .split(/\s+/)
+    .filter(Boolean);
   const matches = words.length
     ? items.filter((item) => {
         const text = normalize(getSearchText(item));
@@ -93,7 +100,7 @@ export function SearchSelect<T>({
             aria-autocomplete="list"
             aria-invalid={ariaInvalid}
             autoComplete="off"
-            placeholder={placeholder}
+            placeholder={placeholder ?? t("ui.search")}
             disabled={disabled}
             value={query ?? (selected ? getLabel(selected) : "")}
             onChange={(e) => setQuery(e.target.value)}
@@ -140,7 +147,7 @@ export function SearchSelect<T>({
           )}
         >
           {matches.length === 0 ? (
-            <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
+            <p className="px-3 py-2 text-sm text-muted-foreground">{t("ui.noResults")}</p>
           ) : (
             matches.slice(0, maxResults).map((item) => (
               <button

@@ -1,8 +1,15 @@
 import { useEffect, useRef, useCallback } from "react";
 import jsQR from "jsqr";
 import { Camera, X } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/hooks/useI18n";
 
 interface QrScannerProps {
   open: boolean;
@@ -11,6 +18,7 @@ interface QrScannerProps {
 }
 
 export function QrScanner({ open, onOpenChange, onScan }: QrScannerProps) {
+  const { t } = useI18n();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -19,7 +27,7 @@ export function QrScanner({ open, onOpenChange, onScan }: QrScannerProps) {
 
   const stopCamera = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     scannedRef.current = false;
   }, []);
@@ -61,7 +69,7 @@ export function QrScanner({ open, onOpenChange, onScan }: QrScannerProps) {
       .getUserMedia({ video: { facingMode: "environment" } })
       .then((stream) => {
         if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
+          stream.getTracks().forEach((track) => track.stop());
           return;
         }
         streamRef.current = stream;
@@ -85,28 +93,23 @@ export function QrScanner({ open, onOpenChange, onScan }: QrScannerProps) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Camera className="h-4 w-4" />
-            Escanear QR del equipo
+            {t("ui.qr.title")}
           </DialogTitle>
-          <DialogDescription>Apuntá la cámara al código QR pegado en el equipo.</DialogDescription>
+          <DialogDescription>{t("ui.qr.description")}</DialogDescription>
         </DialogHeader>
         <div className="relative rounded-xl overflow-hidden bg-black aspect-square">
-          <video
-            ref={videoRef}
-            className="w-full h-full object-cover"
-            muted
-            playsInline
-          />
+          <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
           <canvas ref={canvasRef} className="hidden" />
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="w-48 h-48 border-2 border-white/70 rounded-xl" />
           </div>
           <p className="absolute bottom-3 left-0 right-0 text-center text-xs text-white/80">
-            Apuntá la cámara al código QR del equipo
+            {t("ui.qr.hint")}
           </p>
         </div>
         <Button className="mt-5" variant="secondary" onClick={() => onOpenChange(false)}>
           <X className="h-3.5 w-3.5" />
-          Cancelar
+          {t("common.cancel")}
         </Button>
       </DialogContent>
     </Dialog>

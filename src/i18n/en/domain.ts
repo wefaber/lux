@@ -72,9 +72,9 @@ export const domain: Translation<typeof es> = {
   "equipmentKind.Auriculares": "Headset",
   "equipmentKind.Otro": "Other",
   // {o} (vocal del elemento en espanol) no se usa en ingles
-  "notice.assigned": "{by} assigned it to you",
-  "notice.unassigned": "{by} removed it from you",
-  "notice.taken": "{by} is now handling it",
+  "notice.assigned": "Assigned to you by {by}",
+  "notice.unassigned": "Removed from you by {by}",
+  "notice.taken": "Now handled by {by}",
   "notice.approved": "Approved by {by}",
   "notice.rejected": "Rejected by {by}",
   "notice.in_resolution": "Moved to resolution by {by}",

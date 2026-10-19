@@ -1,4 +1,5 @@
 import { useTheme } from "@/hooks/useTheme";
+import { useI18n } from "@/hooks/useI18n";
 import { Button } from "@/components/ui/button";
 import type { FontSize } from "@/lib/types";
 
@@ -11,13 +12,14 @@ const sizes: { label: string; value: FontSize }[] = [
 
 export function FontSizeControl() {
   const { fontSize, setFontSize } = useTheme();
+  const { t } = useI18n();
   return (
     <div className="flex items-center gap-1">
       {sizes.map((s, i) => (
         <button
           key={s.value}
           onClick={() => setFontSize(s.value)}
-          aria-label={`Tamaño de fuente ${s.value}`}
+          aria-label={t(`a11y.fontSize.${s.value}`)}
           className={`rounded-lg px-2 py-1 transition-colors cursor-pointer ${
             fontSize === s.value
               ? "bg-black/10 dark:bg-white/15 text-foreground"

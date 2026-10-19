@@ -2,9 +2,11 @@ import { Link } from "react-router-dom";
 import { motion } from "motion/react";
 import { ArrowLeft, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/hooks/useI18n";
 import { ROUTES, SPRING_TRANSITION } from "@/lib/constants";
 
 export function ServerErrorPage() {
+  const { t } = useI18n();
   return (
     <div className="min-h-screen flex items-center justify-center bg-app-light dark:bg-app-dark">
       <motion.div
@@ -22,15 +24,13 @@ export function ServerErrorPage() {
           500
         </p>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          Error del servidor
+          {t("errorPage.500.title")}
         </h1>
-        <p className="text-sm text-muted-foreground max-w-xs">
-          Ocurrió un error inesperado. Por favor, intentá de nuevo.
-        </p>
+        <p className="text-sm text-muted-foreground max-w-xs">{t("errorPage.500.text")}</p>
         <Button asChild variant="secondary">
           <Link to={ROUTES.DASHBOARD}>
             <ArrowLeft className="h-4 w-4" />
-            Volver al inicio
+            {t("errorPage.backHome")}
           </Link>
         </Button>
       </motion.div>

@@ -1,6 +1,8 @@
 import { Link, useNavigate } from "react-router-dom";
 import { LogOut, Settings, Shield } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useI18n } from "@/hooks/useI18n";
+import { LanguageSwitcher } from "@/components/accessibility/LanguageSwitcher";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ThemeSwitcher } from "@/components/accessibility/ThemeSwitcher";
 import { FontSizeControl } from "@/components/accessibility/FontSizeControl";
@@ -18,6 +20,7 @@ import { initials } from "@/lib/utils";
 
 export function Topbar() {
   const { user, logout, hasRole } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -30,6 +33,7 @@ export function Topbar() {
       <div />
       <div className="flex items-center gap-3">
         <FontSizeControl />
+        <LanguageSwitcher />
         <ThemeSwitcher />
         {user && (
           <DropdownMenu>
@@ -61,14 +65,14 @@ export function Topbar() {
               <DropdownMenuItem asChild>
                 <Link to={ROUTES.PROFILE} className="flex items-center gap-2">
                   <Settings className="h-4 w-4" />
-                  Perfil
+                  {t("topbar.profile")}
                 </Link>
               </DropdownMenuItem>
               {hasRole(...ADMIN_ROLES) && (
                 <DropdownMenuItem asChild>
                   <Link to={ROUTES.ADMIN} className="flex items-center gap-2">
                     <Shield className="h-4 w-4" />
-                    Panel Admin
+                    {t("topbar.admin")}
                   </Link>
                 </DropdownMenuItem>
               )}
@@ -78,7 +82,7 @@ export function Topbar() {
                 className="text-destructive hover:text-destructive focus:text-destructive"
               >
                 <LogOut className="h-4 w-4" />
-                Cerrar sesión
+                {t("topbar.logout")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
