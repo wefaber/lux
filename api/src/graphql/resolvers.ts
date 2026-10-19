@@ -983,6 +983,9 @@ const Mutation = {
     const user = ctx.state.users.find((u) => u.id === args.id);
     if (!user) throw notFound("Usuario no encontrado");
     if (user.role === "root_admin") throw forbidden("No se puede eliminar este usuario");
+    // Mismas reglas que updateUser(isActive: false): nadie se da de baja a si mismo
+    const blocked = activationError(ctx.caller!, user);
+    if (blocked) throw forbidden(blocked);
     user.isActive = false;
     user.updatedAt = nowIso();
     await db
