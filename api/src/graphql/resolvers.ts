@@ -105,6 +105,17 @@ function activationError(caller: User, user: User): string | null {
   return FORBIDDEN_MESSAGE;
 }
 
+// Un tecnico no toca el trabajo de otro: si el ticket o la solicitud tiene a otra
+// persona asignada, solo la puede modificar un administrador. Lo que esta sin
+// asignar (recien creado o devuelto a la cola) lo puede trabajar cualquier
+// tecnico, que es como se reclama (claim*). El asignado conserva el control.
+function assertCanWorkOn(caller: User, assignedTo: User | null, what: string): void {
+  if (caller.role !== "tecnico") return;
+  if (assignedTo && assignedTo.id !== caller.id) {
+    throw forbidden(`${what} está asignado a otro técnico`);
+  }
+}
+
 function filterByStatus<T extends { status: string }>(items: T[], status?: string | null): T[] {
   if (!status) return items;
   return items.filter((i) => i.status === status);
@@ -1339,9 +1350,10 @@ const Mutation = {
     args: { id: string; input: Partial<Record<string, unknown>> },
     ctx: Ctx,
   ) => {
-    requireRole(ctx, STAFF_ROLES);
+    const caller = requireRole(ctx, STAFF_ROLES);
     const ticket = ctx.state.tickets.find((t) => t.id === args.id);
     if (!ticket) throw notFound("Ticket no encontrado");
+    assertCanWorkOn(caller, ticket.assignedTo, "El ticket");
     const input = args.input as Partial<{
       title: string;
       description: string;
@@ -1381,6 +1393,7 @@ const Mutation = {
     const caller = requireRole(ctx, STAFF_ROLES);
     const ticket = ctx.state.tickets.find((t) => t.id === args.id);
     if (!ticket) throw notFound("Ticket no encontrado");
+    assertCanWorkOn(caller, ticket.assignedTo, "El ticket");
     const { status } = args;
     if (!(status in TICKET_STATUS_CONFIG)) throw invalid("Estado inválido");
     if (status === "resolved") {
@@ -1419,6 +1432,7 @@ const Mutation = {
     const caller = requireRole(ctx, STAFF_ROLES);
     const ticket = ctx.state.tickets.find((t) => t.id === args.id);
     if (!ticket) throw notFound("Ticket no encontrado");
+    assertCanWorkOn(caller, ticket.assignedTo, "El ticket");
     if (!canTransitionTicket(ticket, "resolved")) {
       throw conflict(invalidTicketTransition(ticket, "resolved"));
     }
@@ -1468,6 +1482,7 @@ const Mutation = {
     const ticket = ctx.state.tickets.find((t) => t.id === args.id);
     const tech = ctx.state.users.find((u) => u.id === args.technicianId && u.isActive);
     if (!ticket || !tech) throw notFound("No encontrado");
+    assertCanWorkOn(caller, ticket.assignedTo, "El ticket");
     if (!isStaff(tech)) throw invalid("Solo se puede asignar a personal técnico");
     if (ticket.status === "resolved") throw conflict("No se puede reasignar un ticket resuelto");
     await handOver(ctx.state, "ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, tech, caller);
@@ -1701,6 +1716,7 @@ const Mutation = {
     const caller = requireRole(ctx, STAFF_ROLES);
     const service = ctx.state.services.find((s) => s.id === args.id);
     if (!service) throw notFound("Solicitud no encontrada");
+    assertCanWorkOn(caller, service.assignedTo, "La solicitud");
     const { input } = args;
     const previousStatus = service.status;
     if (input.status) assertOneOf(input.status, SERVICE_STATUSES, "Estado de solicitud inválido");
@@ -1752,6 +1768,7 @@ const Mutation = {
     const service = ctx.state.services.find((s) => s.id === args.id);
     const tech = ctx.state.users.find((u) => u.id === args.technicianId && u.isActive);
     if (!service || !tech) throw notFound("No encontrado");
+    assertCanWorkOn(caller, service.assignedTo, "La solicitud");
     if (!isStaff(tech)) throw invalid("Solo se puede asignar a personal técnico");
     if (CLOSED_SERVICE_STATUSES.has(service.status)) throw conflict("La solicitud ya está cerrada");
     await handOver(ctx.state, "service_request", service.id, service.requestedBy, service.assignedTo, tech, caller);

@@ -94,4 +94,56 @@ export const securityCases: TestCase[] = [
       check(mine.ticket.assignedTo?.dni === null && mine.ticket.assignedTo?.email === null, "el solicitante ve el dni o email del técnico");
     },
   },
+  {
+    id: "CP-SEG-03",
+    cu: "RNF",
+    title: "Un técnico no modifica el trabajo asignado a otro técnico",
+    rf: [],
+    kind: "negativo",
+    actor: "tecnico",
+    priority: "alta",
+    precondition: "Dos técnicos descartables; una incidencia tomada por el primero; una solicitud de servicio sin asignar.",
+    steps: [
+      "El técnico B intenta cambiar estado, editar, completar y reasignar la incidencia del técnico A",
+      "El técnico A y el administrador sí pueden operarla",
+      "El técnico B toma la solicitud sin asignar y el técnico A intenta modificarla",
+    ],
+    expected: "Las cuatro operaciones del técnico B devuelven FORBIDDEN; el asignado y el administrador conservan el control; lo que está sin asignar se reclama.",
+    api: async (t) => {
+      const a = await t.newUser("tecnico");
+      const b = await t.newUser("tecnico");
+      const tecA = await t.login(a.dni, a.password);
+      const tecB = await t.login(b.dni, b.password);
+      const admin = await t.as("admin");
+
+      const ticket = await t.newTicket();
+      await tecA.ok(`mutation($id: ID!) { claimTicket(id: $id) { id } }`, { id: ticket });
+
+      await tecB.failsWith(`mutation($id: ID!) { changeTicketStatus(id: $id, status: "in_resolution") { id } }`, { id: ticket }, "FORBIDDEN", 403);
+      await tecB.failsWith(`mutation($id: ID!) { updateTicket(id: $id, input: { title: "Cambiado por otro técnico" }) { id } }`, { id: ticket }, "FORBIDDEN", 403);
+      await tecB.failsWith(
+        `mutation($id: ID!) { completeTicket(id: $id, input: { diagnosis: "x", corrected: true, actionsTaken: "y" }) { id } }`,
+        { id: ticket },
+        "FORBIDDEN",
+        403,
+      );
+      await tecB.failsWith(`mutation($id: ID!, $t: ID!) { assignTicket(id: $id, technicianId: $t) { id } }`, { id: ticket, t: b.id }, "FORBIDDEN", 403);
+
+      const untouched = await tecA.ok<{ ticket: { assignedTo: { id: string }; status: string } }>(
+        `query($id: ID!) { ticket(id: $id) { status assignedTo { id } } }`,
+        { id: ticket },
+      );
+      check(untouched.ticket.assignedTo.id === a.id && untouched.ticket.status === "in_progress", "el ticket cambió pese al rechazo");
+
+      await tecA.ok(`mutation($id: ID!) { changeTicketStatus(id: $id, status: "in_resolution") { id } }`, { id: ticket });
+      await admin.ok(`mutation($id: ID!, $t: ID!) { assignTicket(id: $id, technicianId: $t) { id } }`, { id: ticket, t: b.id });
+      await tecB.ok(`mutation($id: ID!) { updateTicket(id: $id, input: { title: "Ahora lo atiende B" }) { id } }`, { id: ticket });
+
+      // Solicitud sin asignar: cualquiera la reclama, después queda del que la tomó
+      const service = await t.newService();
+      await tecB.ok(`mutation($id: ID!) { updateServiceRequest(id: $id, input: { status: "in_progress" }) { id assignedTo { id } } }`, { id: service });
+      await tecA.failsWith(`mutation($id: ID!) { updateServiceRequest(id: $id, input: { status: "in_progress" }) { id } }`, { id: service }, "FORBIDDEN", 403);
+      await tecA.failsWith(`mutation($id: ID!, $t: ID!) { assignServiceRequest(id: $id, technicianId: $t) { id } }`, { id: service, t: a.id }, "FORBIDDEN", 403);
+    },
+  },
 ];
