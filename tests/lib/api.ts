@@ -105,6 +105,46 @@ export class Client {
   }
 }
 
+export interface RestResponse<T = unknown> {
+  http: number;
+  headers: Headers;
+  body: { status: number; message: string; data: T; code?: string };
+}
+
+// Cliente de las rutas REST /api/v1 (adaptador sobre los mismos resolvers).
+export class RestClient {
+  constructor(
+    private readonly base: string,
+    readonly token: string | null,
+  ) {}
+
+  async req<T = unknown>(method: string, path: string, body?: unknown, rawBody?: string): Promise<RestResponse<T>> {
+    const res = await fetch(`${this.base}${path}`, {
+      method,
+      headers: {
+        ...(body !== undefined || rawBody !== undefined ? { "content-type": "application/json" } : {}),
+        ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
+      },
+      body: rawBody ?? (body === undefined ? undefined : JSON.stringify(body)),
+    });
+    const parsed = (await res.json().catch(() => null)) as RestResponse<T>["body"] | null;
+    if (!parsed) throw new AssertionError(`${method} ${path} no devolvió JSON (HTTP ${res.status})`);
+    return { http: res.status, headers: res.headers, body: parsed };
+  }
+
+  // Exige un status HTTP y devuelve el cuerpo; el envelope debe repetir ese status.
+  async expect<T = unknown>(status: number, method: string, path: string, body?: unknown): Promise<RestResponse<T>> {
+    const r = await this.req<T>(method, path, body);
+    if (r.http !== status) {
+      throw new AssertionError(`${method} ${path}: se esperaba HTTP ${status} y fue ${r.http} ("${r.body.message}")`);
+    }
+    if (r.body.status !== status) {
+      throw new AssertionError(`${method} ${path}: el envelope dice status ${r.body.status} y el HTTP fue ${status}`);
+    }
+    return r;
+  }
+}
+
 export class ApiCtx {
   private tokens = new Map<Role, string>();
   private cache = new Map<string, unknown>();
@@ -115,6 +155,17 @@ export class ApiCtx {
 
   anon(): Client {
     return new Client(this.endpoint, null);
+  }
+
+  // Cliente REST con la sesión del rol (o sin sesión si no se indica).
+  async rest(role?: Role): Promise<RestClient> {
+    const base = new URL("/api/v1", this.endpoint).toString().replace(/\/$/, "");
+    if (!role) return new RestClient(base, null);
+    return new RestClient(base, (await this.as(role)).token);
+  }
+
+  restWith(token: string | null): RestClient {
+    return new RestClient(new URL("/api/v1", this.endpoint).toString().replace(/\/$/, ""), token);
   }
 
   withToken(token: string): Client {

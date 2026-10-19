@@ -4,6 +4,7 @@ import { authCases } from "./auth";
 import { crudCases } from "./crud";
 import { inventoryCases } from "./inventory";
 import { loanCases } from "./loans";
+import { restCases } from "./rest";
 import { rnfCases } from "./rnf";
 import { serviceCases } from "./services";
 import { ticketCases } from "./tickets";
@@ -22,6 +23,7 @@ export const CASES: TestCase[] = [
   ...rnfCases,
   ...apiCases,
   ...crudCases,
+  ...restCases,
 ];
 
 const ids = new Set<string>();

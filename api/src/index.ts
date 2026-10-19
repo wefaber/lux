@@ -1,11 +1,12 @@
 import { Elysia } from "elysia";
-import { GraphQLError, NoSchemaIntrospectionCustomRule } from "graphql";
+import { NoSchemaIntrospectionCustomRule } from "graphql";
 import { createSchema, createYoga, type Plugin } from "graphql-yoga";
 import { createContext } from "./context";
 import { pool } from "./db/client";
+import { restPlugin } from "./rest/plugin";
 import { loadEnv, serverHost, serverPort } from "./env";
 import { clientIp } from "./net";
-import { classifyUnexpected, ERROR_STATUS } from "./errors";
+import { classifyUnexpected, ERROR_STATUS, isCatalogError } from "./errors";
 import { resolvers } from "./graphql/resolvers";
 import { typeDefs } from "./graphql/schema";
 
@@ -36,13 +37,6 @@ function addMissingCodes(result: unknown): void {
       };
     }
   }
-}
-
-// Un GraphQLError lanzado a proposito por un resolver (cadena de originalError
-// compuesta solo por GraphQLError) es un error del catalogo y sale tal cual.
-function isCatalogError(error: unknown): boolean {
-  if (!(error instanceof GraphQLError)) return false;
-  return error.originalError ? isCatalogError(error.originalError) : true;
 }
 
 const errorCodes: Plugin = {
@@ -124,10 +118,11 @@ const app = new Elysia()
     if (!ok) set.status = 503;
     return { status: ok ? "ready" : "not-ready", ok };
   })
+  .use(restPlugin({ schema, createContext: (request, ip) => createContext(request, ip) }))
   .all("/graphql", ({ request, server }) =>
     yoga.fetch(request, { ip: clientIp(request, server) }),
   );
 
-app.listen({ hostname: serverHost(), port: serverPort() });
+app.listen({ hostname: serverHost(), port: serverPort(), maxRequestBodySize: 1024 * 1024 });
 
 console.log(`Lux API escuchando en http://${serverHost()}:${serverPort()}/graphql`);

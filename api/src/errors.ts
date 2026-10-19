@@ -91,3 +91,48 @@ export function codeOf(error: unknown): ErrorCode {
   const code = (error as { extensions?: { code?: unknown } } | null)?.extensions?.code;
   return typeof code === "string" && code in ERROR_STATUS ? (code as ErrorCode) : "INTERNAL_ERROR";
 }
+
+/**
+ * Un GraphQLError lanzado a proposito por un resolver (toda la cadena de
+ * `originalError` son GraphQLError) o generado por graphql-js al validar o
+ * coercionar variables. Cualquier otra cosa es un error inesperado.
+ */
+export function isCatalogError(error: unknown): boolean {
+  if (!(error instanceof GraphQLError)) return false;
+  return error.originalError ? isCatalogError(error.originalError) : true;
+}
+
+/** Codigo del catalogo que lleva un error, o `null` si no trae uno (p. ej. los de graphql-js). */
+export function catalogCodeOf(error: unknown): ErrorCode | null {
+  const code = (error as { extensions?: { code?: unknown } } | null)?.extensions?.code;
+  return typeof code === "string" && code in ERROR_STATUS ? (code as ErrorCode) : null;
+}
+
+/** Un error ya clasificado, listo para serializar en una respuesta. */
+export interface ErrorDescription {
+  code: ErrorCode;
+  status: number;
+  message: string;
+  retryAfterSeconds?: number;
+}
+
+/**
+ * Lo que ve el cliente de cualquier error: los del catalogo salen tal cual, los
+ * de graphql-js (query o variables invalidas) pasan a BAD_REQUEST y los
+ * inesperados a INTERNAL_ERROR sin su texto original.
+ */
+export function describeError(error: GraphQLError): ErrorDescription {
+  if (!isCatalogError(error)) {
+    console.error("[api] error inesperado:", error.originalError ?? error);
+    const masked = classifyUnexpected(error.originalError ?? error);
+    return describeError(masked);
+  }
+  const code = catalogCodeOf(error) ?? "BAD_REQUEST";
+  const retry = error.extensions?.retryAfterSeconds;
+  return {
+    code,
+    status: ERROR_STATUS[code],
+    message: error.message,
+    ...(typeof retry === "number" ? { retryAfterSeconds: retry } : {}),
+  };
+}
