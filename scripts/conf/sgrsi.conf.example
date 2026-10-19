@@ -1,4 +1,4 @@
-# /etc/sgrsi/sgrsi.conf (ejemplo). Copiar con: install -m 640 -o root -g sgrsi sgrsi.conf.example /etc/sgrsi/sgrsi.conf
+# /etc/sgrsi/sgrsi.conf (ejemplo). Copiar con: install -m 644 -o root -g root sgrsi.conf.example /etc/sgrsi/sgrsi.conf
 #
 # Se carga con `source` al inicio de admin.sh y backup.sh, y se rechaza si es
 # escribible por otros o no pertenece a root. NO PONER CLAVES ACA: las
