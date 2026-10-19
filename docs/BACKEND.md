@@ -49,6 +49,10 @@ estan en las rutas `/api/v1`.
 | `LOGIN_MAX_ATTEMPTS` | fallos de login por documento antes del bloqueo (default 5) | entorno |
 | `LOGIN_LOCK_MINUTES` | minutos de bloqueo y de ventana de conteo (default 15) | entorno |
 | `LOGIN_IP_MAX_ATTEMPTS` | fallos de login por IP antes del bloqueo (default 50) | entorno |
+| `CORS_ORIGINS` | origenes del navegador que pueden llamar a la API, separados por coma (default: `https://lux.eternum.lat`, `https://dev.eternum.lat`, `http://localhost:5173`, `http://127.0.0.1:5173`). Un `*` se ignora | entorno |
+| `MAX_BODY_BYTES` | tamano maximo del cuerpo de un request (default 262144, 256 KiB); mas da HTTP 413 | entorno |
+| `GRAPHQL_MAX_DEPTH` | profundidad maxima de una operacion GraphQL (default 10) | entorno |
+| `GRAPHQL_MAX_ROOT_FIELDS` | campos raiz maximos por operacion, alias incluidos (default 12) | entorno |
 
 No hay credenciales en el repo. La unit de systemd ya exporta `lux-dev.env`; el
 codigo ademas lee esos archivos al arrancar (`api/src/env.ts`, override con
@@ -87,7 +91,7 @@ como `String`; el frontend los ordena con `localeCompare` y los parsea con
 
 | Tabla | Columnas principales |
 | --- | --- |
-| `users` | id, name, dni (unique), email, role, is_active, password_hash (argon2id) |
+| `users` | id, name, dni (unique), email, role, is_active, password_hash (argon2id), token_version |
 | `locations` | id, kind, number, name, code, created_at, updated_at, deleted_at |
 | `products` | id, machine_id, kind, brand, model, serial_number, part_number, status, issues, location_id, location, deleted_at |
 | `components` | id, name, model, manufacturer, serial_number, part_number, is_factory, is_working, product_id, deleted_at |
@@ -111,6 +115,7 @@ como `String`; el frontend los ordena con `localeCompare` y los parsea con
 | `0001_soft_delete_columns` | `deleted_at` en tickets, loans, service_requests, interventions y comments |
 | `0002_revoked_tokens` | tabla `revoked_tokens` (logout) |
 | `0003_integrity_fk_check` | 26 claves foraneas y 16 CHECK |
+| `0004_token_version` | `users.token_version` (default 0), para invalidar sesiones al cambiar la contrasena |
 
 Las migraciones se aplican en orden y no se reescriben. Antes de aplicar la 0003 a
 una base con datos viejos (dev, produccion) correr `scripts/preflight-integrity.ts`:
@@ -172,19 +177,27 @@ la mantiene sincronizada). Con eso el esquema no llega a 3FN estricta.
 
 - `login(dni, password)` (GraphQL) o `POST /api/v1/auth/login` valida contra
   `users.password_hash` (argon2id via `Bun.password.verify`) y devuelve un JWT HS256
-  firmado con `AUTH_SECRET`. El token trae `sub`, `role`, `jti` y `exp`.
+  firmado con `AUTH_SECRET`. El token trae `sub`, `role`, `ver` (version de credenciales), `jti` y `exp`.
 - **Vigencia: 8 horas** absolutas desde el login (no hay renovacion ni expiracion por
   inactividad: el caso CP-27-02 sigue marcado como falla conocida).
 - El frontend manda el token en `Authorization: Bearer <token>`. En cada request el
   backend lo verifica (firma, algoritmo, vencimiento), comprueba que su `jti` no este
-  en `revoked_tokens` y carga al usuario (debe seguir activo): de ahi sale `caller`.
+  en `revoked_tokens` y carga al usuario (debe seguir activo y su `token_version` tiene
+  que coincidir con la `ver` del token): de ahi sale `caller`.
+- **Cambio de contrasena**: `changePassword` (o el restablecimiento por un administrador
+  con `updateUser` y `password`) sube `users.token_version`. Todos los tokens emitidos
+  antes, la sesion que hizo el cambio incluida, dejan de autenticar (`me` devuelve
+  `null`, el resto responde `UNAUTHENTICATED`) y hay que volver a iniciar sesion. Queda
+  pendiente que el frontend, tras `changePassword`, lleve a la pantalla de login.
 - **Logout**: la mutation `logout` / `POST /api/v1/auth/logout` guarda el `jti` en
   `revoked_tokens` hasta que el token venza. Desde ese momento el token da 401. Deja
   `LOGOUT` en la auditoria. Queda pendiente que el frontend llame a `logout` al
   cerrar sesion (hoy solo borra el token del navegador).
 - **Bloqueo por intentos fallidos**: 5 fallos por documento en 15 minutos bloquean ese
   documento 15 minutos (`TOO_MANY_ATTEMPTS`, HTTP 429, cabecera `Retry-After`); la
-  respuesta ya bloqueada es igual exista o no la cuenta, y un login correcto limpia el
+  respuesta ya bloqueada es igual exista o no la cuenta, y su mensaje es el mismo
+  "Credenciales inválidas" de una clave erronea: el bloqueo se reconoce por `code`,
+  `status` y `retryAfterSeconds`, no por el texto. Un login correcto limpia el
   contador de ese documento. Ademas hay un umbral por IP (50 fallos en 15 minutos) contra
   el rociado de contrasenas. Cada fallo deja `LOGIN_FAILED` y el bloqueo `ACCOUNT_LOCKED`.
   **Limitacion**: el contador vive en la memoria del proceso; se pierde al reiniciar y
@@ -199,6 +212,21 @@ la mantiene sincronizada). Con eso el esquema no llega a 3FN estricta.
     ubicaciones, intervenciones, reservas (gestionar).
   - `solicitante`: solo ve lo suyo (tickets, prestamos, solicitudes, reservas) y
     crea pedidos.
+- **Trabajo de otro tecnico**: un `tecnico` no puede cambiar de estado, editar,
+  completar ni reasignar (`updateTicket`, `changeTicketStatus`, `completeTicket`,
+  `assignTicket`, `updateServiceRequest`, `assignServiceRequest`) un ticket o una
+  solicitud asignados a otro tecnico (`FORBIDDEN`); los administradores si. Lo que esta
+  **sin asignar** lo puede trabajar cualquier tecnico: `claimTicket` /
+  `claimServiceRequest` lo toman, y `updateServiceRequest` con estado `in_progress` o
+  `completed` sobre una solicitud sin asignar la reclama para quien la actualiza. Una vez
+  asignado, solo el asignado y los administradores la operan. No se aplica todavia a las
+  intervenciones (ver "Limitaciones").
+- **Datos de contacto (protocolo 8.1)**: `User.dni` y `User.email` ahora son opcionales
+  en el SDL y salen `null` cuando quien consulta no tiene relacion con la persona. Los
+  ven: el propio usuario, los administradores y, para el tecnico, quienes pidieron un
+  ticket o una solicitud que tiene asignados o un prestamo que entrego o aprobo. El
+  nombre, el rol y el resto de los campos no cambian. El `AuthUser` del login siempre
+  trae los datos propios.
 
 ## Codigos de error
 
@@ -215,7 +243,7 @@ castellano que ya consumia el frontend en `errors[0].message`.
 | `NOT_FOUND` | 404 | el recurso no existe o no es visible para quien pregunta |
 | `CONFLICT` | 409 | choca con el estado actual: duplicado, transicion invalida, recurso en uso, superposicion |
 | `VALIDATION_ERROR` | 422 | los datos no cumplen las reglas de negocio (formato, referencia inexistente, valor fuera de lista) |
-| `TOO_MANY_ATTEMPTS` | 429 | documento o IP bloqueados por intentos de login fallidos |
+| `TOO_MANY_ATTEMPTS` | 429 | documento o IP bloqueados por intentos de login fallidos (el mensaje es el de una clave erronea) |
 | `INTERNAL_ERROR` | 500 | error inesperado: el detalle queda en el log del servidor y no sale en la respuesta |
 
 Ademas, en REST el metodo no admitido responde 405 con `Allow` y `code: BAD_REQUEST`.
@@ -232,6 +260,32 @@ Los errores inesperados (caida de la base, bug) salen como `INTERNAL_ERROR` con 
 mensaje generico "Error interno del servidor". Las violaciones de restriccion de
 PostgreSQL se traducen sin exponer el nombre de la restriccion: UNIQUE a `CONFLICT`,
 FK y CHECK a `VALIDATION_ERROR`.
+
+## Endurecimiento HTTP
+
+- **CORS** con lista de origenes (`CORS_ORIGINS`, `api/src/cors.ts`): solo esos origenes
+  reciben `Access-Control-Allow-Origin` (con credenciales). Un origen ajeno recibe 403 en
+  el preflight y las respuestas sin cabeceras CORS. Se desactivo el CORS por defecto de
+  Yoga, que devolvia cualquier `Origin` recibido. Sin cabecera `Origin` (curl, servidor a
+  servidor) no se agrega nada. Si el frontend se sirve del mismo origen que la API
+  (nginx), CORS no interviene.
+- **GraphiQL e introspeccion** solo fuera de produccion (`NODE_ENV=production` los
+  cierra; una consulta `__schema` falla con `BAD_REQUEST`).
+- **Forma de la operacion** (`api/src/graphql/limits.ts`): hasta 10 niveles de
+  profundidad, 12 campos raiz (alias incluidos) y 3 repeticiones del mismo campo raiz;
+  `login` y `changePassword` una sola vez por request. Antes se podian hacer 15 logins en
+  un POST. Las 125 operaciones del frontend caben con holgura (profundidad maxima 4). El
+  rechazo es `BAD_REQUEST` y no ejecuta ningun resolver. No se aceptan arreglos de
+  operaciones (batching).
+- **Tamano del body**: 256 KiB (`MAX_BODY_BYTES`); mas devuelve HTTP 413 sin cuerpo, lo
+  corta el servidor antes de llegar a la aplicacion.
+- **Cabeceras** (`api/src/security-headers.ts`) en toda respuesta: `X-Content-Type-Options:
+  nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` y
+  `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none';
+  form-action 'none'` (la API no sirve HTML). `Strict-Transport-Security` (1 anio,
+  `includeSubDomains`) solo con `TRUST_PROXY=1`, o sea cuando hay nginx adelante
+  terminando TLS. Fuera de produccion la pagina de GraphiQL no lleva CSP. Las respuestas
+  413 las genera el servidor y no llevan estas cabeceras.
 
 ## Rutas REST (`/api/v1`)
 
@@ -506,7 +560,7 @@ curl -s -X POST localhost:4111/graphql -H 'Content-Type: application/json' -H "A
 ```
 api/
   drizzle.config.ts        config de drizzle-kit
-  drizzle/                 migraciones SQL (0001 a 0003) y meta; se commitean
+  drizzle/                 migraciones SQL (0001 a 0004) y meta; se commitean
   scripts/
     check-frontend-docs.ts valida los documentos GraphQL de src/
     preflight-integrity.ts busca filas que violarian las FK/CHECK antes de migrar
@@ -517,12 +571,16 @@ api/
     sessions.ts            tokens revocados (logout)
     login-guard.ts         bloqueo por intentos fallidos (en memoria)
     net.ts                 IP del cliente (respeta TRUST_PROXY)
+    cors.ts                CORS con lista de origenes (CORS_ORIGINS)
+    security-headers.ts    cabeceras de seguridad de toda respuesta
     errors.ts              catalogo de errores (code, status) y clasificacion de errores inesperados
     audit.ts               escritura de activity_logs dentro de la transaccion
     context.ts             contexto por pedido (usuario autenticado, IP)
     state.ts               carga la base (sin filas dadas de baja) y arma los objetos del dominio
     graphql/schema.ts      SDL (contrato del frontend)
     graphql/resolvers.ts   queries y mutations (espejo de src/mocks/handlers.ts)
+    graphql/limits.ts      limites de profundidad, campos raiz y alias por operacion
+    graphql/privacy.ts     dni/email de User visibles solo con relacion (protocolo 8.1)
     graphql/wrap.ts        withState (queries) y withTransaction (mutations, auditoria, rollback)
     graphql/server.ts      configuracion de Yoga (maskedErrors, graphiql, codigos para errores de graphql-js)
     rest/routes.ts         tabla de rutas /api/v1 y su operacion GraphQL
@@ -536,7 +594,8 @@ api/
     db/fixtures/           dataset del branch dev (copia de src/mocks/data)
     **/*.test.ts           pruebas unitarias y de integracion (`cd api && bun test`)
 tests/
-  cases/                   casos de QA por CU, RNF y REST (`bun run qa:api`)
+  cases/                   casos de QA por CU, RNF, REST y seguridad (`bun run qa:api`)
+  security/run.ts          runner de ataques de Ciberseguridad (`bun tests/security/run.ts --target ...`)
   lib/api.ts               clientes GraphQL y REST para los casos
 ```
 
@@ -558,6 +617,16 @@ tests/
   campos mas anidados se piden por GraphQL.
 - No hay rate limit general (solo el de login), ni refresh token: al vencer las 8 h hay
   que volver a iniciar sesion.
+- Sin limite de tasa general: solo el bloqueo de login y el tope de forma/tamano de cada
+  request. Un limite por IP (`limit_req` de nginx) es la capa adecuada y depende de
+  umbrales que decide el equipo; el runner de seguridad lo sigue marcando parcial (AT-07).
+- Las intervenciones y los comentarios no tienen aun la regla de "no tocar lo de otro
+  tecnico": cualquier tecnico puede editar una intervencion ajena.
+- El almacenamiento de texto es tal cual (no se sanitiza HTML en el servidor): la
+  defensa contra XSS es el escape de React y la CSP. El respaldo con `pg_dump` sin cifrar
+  (`scripts/backup.sh`) queda fuera de `api/` y sigue marcado vulnerable en AT-08.
+- Tras `changePassword` la sesion actual tambien se invalida; el frontend tiene que
+  llevar a la pantalla de login (pendiente en `src/`).
 - La rubrica de Programacion habla de PHP; el stack real es Bun + Elysia (ADR-002).
   La equivalencia esta documentada arriba.
 
