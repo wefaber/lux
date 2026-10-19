@@ -1,4 +1,4 @@
-/* oxlint-disable no-await-in-loop */
+/* oxlint-disable no-await-in-loop, consistent-function-scoping */
 // Sondeo de reglas de negocio y comportamientos HTTP que ningún caso de tests/cases
 // verifica. Es evidencia complementaria de la matriz RN/RNF (no reemplaza a la suite).
 // Solo lee y crea datos de prueba con el prefijo "[SONDEO ...]" en la base indicada.
@@ -66,20 +66,39 @@ try {
   rec("RN-18 (devolución real >= entrega)", ok, `issueDate=${ret.returnLoan.issueDate}, actualReturnDate=${ret.returnLoan.actualReturnDate} (la fecha real la fija el servidor, returnLoan no la recibe)`);
 }
 
-// HTTP: E2 prometía 401/403/400 con extensions.codigo
+// HTTP: E2 prometía 401/403/400 con un código de error. GraphQL responde 200 y deja el estado en
+// extensions.status; las rutas REST /api/v1 usan el código HTTP real.
 {
-  const raw = async (body: string, token?: string) => {
-    const res = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) }, body });
+  const raw = async (url: string, init: RequestInit) => {
+    const res = await fetch(url, init);
     return { status: res.status, body: await res.text() };
   };
-  const noAuth = await raw(JSON.stringify({ query: "{ tickets { id } }" }));
-  rec("HTTP sin sesión devuelve 401", noAuth.status === 401, `status=${noAuth.status} body=${noAuth.body.slice(0, 120)}`);
+  const post = (body: string, token?: string) =>
+    raw(endpoint, { method: "POST", headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) }, body });
+  const ext = (body: string) => {
+    try {
+      const e = JSON.parse(body).errors?.[0]?.extensions;
+      return `${e?.code}/${e?.status}`;
+    } catch {
+      return "sin extensions";
+    }
+  };
   const sol = await t.as("solicitante");
-  const forbidden = await raw(JSON.stringify({ query: "{ users { id } }" }), sol.token ?? undefined);
-  rec("HTTP rol sin permiso devuelve 403", forbidden.status === 403, `status=${forbidden.status} body=${forbidden.body.slice(0, 140)}`);
-  const badJson = await raw("{malformado");
-  rec("HTTP JSON inválido devuelve 400", badJson.status === 400, `status=${badJson.status}`);
-  rec("Errores de negocio con extensions.codigo", /"codigo"/.test(forbidden.body), `body (sin permiso)=${forbidden.body.slice(0, 160)}`);
+  const noAuth = await post(JSON.stringify({ query: "{ tickets { id } }" }));
+  rec("GraphQL sin sesión: HTTP 200 con extensions.code y status 401", noAuth.status === 200 && ext(noAuth.body) === "UNAUTHENTICATED/401", `http=${noAuth.status} extensions=${ext(noAuth.body)}`);
+  const forbidden = await post(JSON.stringify({ query: "{ users { id } }" }), sol.token ?? undefined);
+  rec("GraphQL rol sin permiso: extensions.code y status 403", ext(forbidden.body) === "FORBIDDEN/403", `http=${forbidden.status} extensions=${ext(forbidden.body)}`);
+  const badJson = await post("{malformado");
+  rec("GraphQL JSON inválido devuelve HTTP 400", badJson.status === 400, `status=${badJson.status}`);
+  const base = `${target}/api/v1`;
+  const restNoAuth = await raw(`${base}/tickets`, {});
+  rec("REST sin sesión devuelve HTTP 401", restNoAuth.status === 401, `status=${restNoAuth.status} body=${restNoAuth.body.slice(0, 100)}`);
+  const restForbidden = await raw(`${base}/users`, { headers: { authorization: `Bearer ${sol.token}` } });
+  rec("REST rol sin permiso devuelve HTTP 403", restForbidden.status === 403, `status=${restForbidden.status}`);
+  const restMissing = await raw(`${base}/tickets/tkt-no-existe`, { headers: { authorization: `Bearer ${sol.token}` } });
+  rec("REST recurso inexistente devuelve HTTP 404", restMissing.status === 404, `status=${restMissing.status}`);
+  const restMethod = await raw(`${base}/tickets`, { method: "PATCH", headers: { authorization: `Bearer ${sol.token}` } });
+  rec("REST método no admitido devuelve HTTP 405", restMethod.status === 405, `status=${restMethod.status}`);
 }
 
 // Concurrencia: ids correlativos calculados desde un snapshot (riesgo de ID duplicado)
