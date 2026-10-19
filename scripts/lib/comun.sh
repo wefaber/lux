@@ -408,13 +408,21 @@ podman_stack() {
 }
 
 # comando_compose
-# Imprime el comando de composicion disponible: `podman compose` (delegado a
-# un proveedor) o `podman-compose` como alternativa. Devuelve 1 si no hay ninguno.
+# Imprime el proveedor de compose. `podman compose` es solo un envoltorio que
+# delega en "docker-compose" si esta instalado (y ese necesita el socket de la
+# API de Podman) o, si no, en podman-compose. Para que el resultado no dependa
+# de que paquetes haya, se prefiere llamar a podman-compose directamente.
+# SGRSI_COMPOSE_PROVEEDOR ("podman-compose" o "podman compose") lo fuerza.
 comando_compose() {
-    if podman compose version >/dev/null 2>&1; then
-        echo "podman compose"
-    elif command -v podman-compose >/dev/null 2>&1; then
+    case "${SGRSI_COMPOSE_PROVEEDOR:-}" in
+        "podman-compose"|"podman compose") echo "$SGRSI_COMPOSE_PROVEEDOR"; return 0 ;;
+        "") ;;
+        *) log ERROR "SGRSI_COMPOSE_PROVEEDOR invalido: '$SGRSI_COMPOSE_PROVEEDOR' (podman-compose o 'podman compose')."; return "$SGRSI_EX_CONFIG" ;;
+    esac
+    if command -v podman-compose >/dev/null 2>&1; then
         echo "podman-compose"
+    elif podman compose version >/dev/null 2>&1; then
+        echo "podman compose"
     else
         log ERROR "No hay proveedor de compose. Instalar con: apt install podman-compose"
         return 1

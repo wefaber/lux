@@ -86,6 +86,10 @@ services:
     restart: unless-stopped
     environment: *api_env
     networks: [lux_internal]
+    # Bun no instala un manejador de SIGTERM y, como PID 1, el nucleo ignora la
+    # senal: sin init, `stop` espera 10 s y termina en SIGKILL (comprobado con
+    # podman-compose 1.0.6). Con init (catatonit) el cierre es inmediato.
+    init: true
     # No depende de `migrate` a proposito: un servicio que termina (exit 0) no
     # sirve como dependencia en podman-compose (traduce depends_on a --requires,
     # que exige el contenedor corriendo). La API arranca igual y /ready responde

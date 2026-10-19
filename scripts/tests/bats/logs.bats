@@ -3,7 +3,7 @@ load helpers
 
 setup() {
     setup_entorno
-    export SGRSI_STACK_USUARIO=""
+    export SGRSI_STACK_USUARIO="" SGRSI_COMPOSE_PROVEEDOR="podman compose"
     export SGRSI_LOGROTATE_DESTINO="$TMP/logrotate-sgrsi"
 }
 teardown() { teardown_entorno; }

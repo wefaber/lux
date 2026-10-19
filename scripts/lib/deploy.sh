@@ -267,6 +267,23 @@ deploy_fijar_variable() {
     fi
 }
 
+# deploy_quitar_sobrantes <n>
+# Al bajar el numero de replicas, podman-compose 1.0.x no elimina las que
+# sobran (comprobado en la prueba real): se detienen y borran aca. Los nombres
+# son lux_api_N (podman-compose) o lux-api-N (docker-compose).
+deploy_quitar_sobrantes() {
+    local n="$1" nombre num
+    es_dry_run && return 0
+    while IFS= read -r nombre; do
+        [[ "$nombre" =~ ^lux[_-]api[_-]([0-9]+)$ ]] || continue
+        num="${BASH_REMATCH[1]}"
+        if (( num > n )); then
+            log INFO "Quitando la replica sobrante $nombre."
+            podman_stack rm -f "$nombre" >/dev/null || log WARN "No se pudo quitar $nombre."
+        fi
+    done < <(podman_stack ps -a --format '{{.Names}}' 2>/dev/null)
+}
+
 # deploy_escalar <n>
 # Replicas de la API por LUX_API_REPLICAS (deploy.replicas del compose). El
 # contenedor web resuelve `api` por DNS en cada pedido (resolver dinamico en
@@ -281,6 +298,7 @@ deploy_escalar() {
     deploy_preflight || return $?
     deploy_fijar_variable "$SGRSI_STACK_ENV" LUX_API_REPLICAS "$n" || return 1
     ejecutar deploy_compose up -d
+    deploy_quitar_sobrantes "$n"
     log INFO "API escalada a $n replica(s) (LUX_API_REPLICAS=$n queda en $SGRSI_STACK_ENV)."
 }
 

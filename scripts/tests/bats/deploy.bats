@@ -7,7 +7,7 @@ load helpers
 
 setup() {
     setup_entorno
-    export SGRSI_STACK_USUARIO=""
+    export SGRSI_STACK_USUARIO="" SGRSI_COMPOSE_PROVEEDOR="podman compose"
     export SGRSI_STACK_ENV="$TMP/lux.env"
     printf 'POSTGRES_PASSWORD=x\nLUX_WEB_PORT=8099\n' > "$SGRSI_STACK_ENV"
     chmod 600 "$SGRSI_STACK_ENV"
@@ -148,4 +148,26 @@ teardown() { teardown_entorno; }
 @test "subcomando desconocido sale con error" {
     run "$ADMIN" deploy volar
     [ "$status" -ne 0 ]
+}
+
+@test "escalar a menos replicas quita las sobrantes (nombres lux_api_N)" {
+    # podman simulado que lista tres replicas
+    mkdir -p "$TMP/bin"
+    cat > "$TMP/bin/podman" <<'FIN'
+#!/usr/bin/env bash
+echo "podman[tag=${LUX_IMAGE_TAG:-}] $*" >> "$STUB_LOG"
+case "$1" in
+  info) echo true ;;
+  compose) [[ "$2" == version ]] && echo stub ;;
+  ps) printf 'lux-db\nlux_api_1\nlux_api_2\nlux_api_3\nlux_web_1\n' ;;
+esac
+exit 0
+FIN
+    chmod +x "$TMP/bin/podman"
+    PATH="$TMP/bin:$PATH" run "$ADMIN" deploy escalar 1
+    [ "$status" -eq 0 ]
+    grep -q 'rm -f lux_api_2' "$STUB_LOG"
+    grep -q 'rm -f lux_api_3' "$STUB_LOG"
+    ! grep -q 'rm -f lux_api_1' "$STUB_LOG"
+    ! grep -q 'rm -f lux-db' "$STUB_LOG"
 }

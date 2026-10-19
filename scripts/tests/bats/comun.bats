@@ -165,3 +165,11 @@ cargar() { source "$SCRIPTS_DIR/lib/comun.sh"; }
     run hecho "creado"
     [ -z "$output" ]
 }
+
+@test "comando_compose respeta SGRSI_COMPOSE_PROVEEDOR y rechaza valores raros" {
+    run bash -c "source '$SCRIPTS_DIR/lib/comun.sh'; SGRSI_COMPOSE_PROVEEDOR='podman compose' comando_compose"
+    [ "$status" -eq 0 ]
+    [ "$output" = "podman compose" ]
+    run bash -c "source '$SCRIPTS_DIR/lib/comun.sh'; SGRSI_COMPOSE_PROVEEDOR='docker-compose' comando_compose"
+    [ "$status" -eq 78 ]
+}
