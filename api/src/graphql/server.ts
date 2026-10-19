@@ -54,6 +54,8 @@ export function createGraphqlServer({ schema, production, createContext }: Serve
     schema,
     graphqlEndpoint: "/graphql",
     graphiql: !production,
+    // CORS lo resuelve src/cors.ts con lista de origenes; Yoga por defecto refleja cualquiera
+    cors: false,
     plugins: [errorCodes, hardening],
     // Un error que no es del catalogo (bug, caida de la base) no devuelve su texto
     // al cliente: Yoga lo loguea completo en el servidor y sale como INTERNAL_ERROR.

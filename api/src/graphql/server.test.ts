@@ -87,4 +87,13 @@ describe("servidor GraphQL", () => {
     const body = await run(false, "{ __schema { queryType { name } } }");
     expect(body.errors).toBeUndefined();
   });
+
+  test("Yoga no refleja el Origin: CORS lo decide src/cors.ts", async () => {
+    const res = await server(true).fetch("http://api/graphql", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://sitio-ajeno.example" },
+      body: JSON.stringify({ query: "{ ok }" }),
+    }, { ip: "test" });
+    expect(res.headers.get("access-control-allow-origin")).toBeNull();
+  });
 });

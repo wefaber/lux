@@ -94,3 +94,42 @@ export function trustProxy(): boolean {
   loadEnv();
   return process.env.TRUST_PROXY === "1";
 }
+
+// Origenes del frontend que el navegador puede usar para llamar a la API. En el
+// despliegue normal el frontend y la API comparten origen (nginx), asi que CORS
+// solo interviene en desarrollo o si el frontend se sirve desde otro dominio.
+const DEFAULT_CORS_ORIGINS = [
+  "https://lux.eternum.lat",
+  "https://dev.eternum.lat",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+];
+
+/** Lista de origenes permitidos: `CORS_ORIGINS` (separados por coma) o los conocidos del repo. */
+export function corsOrigins(): string[] {
+  loadEnv();
+  const raw = process.env.CORS_ORIGINS;
+  if (raw === undefined) return DEFAULT_CORS_ORIGINS;
+  return raw
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/$/, ""))
+    .filter((origin) => origin !== "" && origin !== "*");
+}
+
+/** Tamano maximo del cuerpo de un request en bytes (`MAX_BODY_BYTES`, default 256 KiB). */
+export function maxBodyBytes(): number {
+  loadEnv();
+  return positiveInt("MAX_BODY_BYTES", 256 * 1024);
+}
+
+/** Profundidad maxima de una operacion GraphQL (`GRAPHQL_MAX_DEPTH`, default 10). */
+export function graphqlMaxDepth(): number {
+  loadEnv();
+  return positiveInt("GRAPHQL_MAX_DEPTH", 10);
+}
+
+/** Campos raiz maximos por operacion, alias incluidos (`GRAPHQL_MAX_ROOT_FIELDS`, default 12). */
+export function graphqlMaxRootFields(): number {
+  loadEnv();
+  return positiveInt("GRAPHQL_MAX_ROOT_FIELDS", 12);
+}

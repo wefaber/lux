@@ -1,6 +1,7 @@
 import { Elysia } from "elysia";
 import { createSchema } from "graphql-yoga";
 import { createContext } from "./context";
+import { corsPlugin } from "./cors";
 import { pool } from "./db/client";
 import { restPlugin } from "./rest/plugin";
 import { loadEnv, serverHost, serverPort } from "./env";
@@ -59,6 +60,7 @@ async function readiness(): Promise<boolean> {
 }
 
 const app = new Elysia()
+  .use(corsPlugin())
   .get("/health", () => ({ status: "ok" }))
   .get("/ready", async ({ set }) => {
     // El detalle (tablas faltantes, texto de la base) queda en el log del servidor:
