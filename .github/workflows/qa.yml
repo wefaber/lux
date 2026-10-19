@@ -57,9 +57,11 @@ jobs:
           QA_MAX_USD: "0.50"
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          # Por env y no interpolado en el script: un input no puede inyectar comandos de shell.
+          QA_PROVIDER: ${{ inputs.provider }}
         run: |
           /opt/bun/bunx playwright install --with-deps chromium
-          /opt/bun/bun run qa:agent --provider "${{ inputs.provider }}"
+          /opt/bun/bun run qa:agent --provider "$QA_PROVIDER"
 
       - name: Documento de casos y resultados
         if: always()
