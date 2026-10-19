@@ -3,3 +3,6 @@
 # la primera linea rompe el shebang con "bad interpreter: /usr/bin/env^M".
 *.sh    text eol=lf
 scripts/cron/*  text eol=lf
+ops/**/*.sh     text eol=lf
+ops/backup-server/cron/*  text eol=lf
+ops/containers/web/default.conf.template  text eol=lf

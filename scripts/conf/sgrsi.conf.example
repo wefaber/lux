@@ -1,0 +1,44 @@
+# /etc/sgrsi/sgrsi.conf (ejemplo). Copiar con: install -m 640 -o root -g sgrsi sgrsi.conf.example /etc/sgrsi/sgrsi.conf
+#
+# Se carga con `source` al inicio de admin.sh y backup.sh, y se rechaza si es
+# escribible por otros o no pertenece a root. NO PONER CLAVES ACA: las
+# contrasenas van en archivos de modo 600 fuera del repo (DB_PASSWORD_FILE, etc.).
+#
+# Los valores marcados [COMPLETAR] dependen de la maquina virtual real.
+# Las direcciones de ejemplo siguen el esquema propuesto en 05-ADMIN-SO/E3/RedYPuertos.md.
+
+# --- Red (admin.sh red) ---
+SGRSI_RED_IFACE=""                          # vacio: se detecta la interfaz de la ruta por defecto
+SGRSI_RED_IP="192.168.50.10"                # [COMPLETAR] IP real del servidor de produccion
+SGRSI_RED_PREFIJO="24"
+SGRSI_RED_GATEWAY="192.168.50.1"            # [COMPLETAR]
+SGRSI_RED_DNS="192.168.50.1 9.9.9.9"        # [COMPLETAR]
+SGRSI_RED_BACKEND="auto"                    # auto | ifupdown | networkd
+
+# --- SSH y firewall ---
+SGRSI_SSH_PUERTO="52205"
+SGRSI_SSH_GRUPO="sgrsi-tecnicos"
+SGRSI_FW_SSH_ORIGEN=""                      # [COMPLETAR] CIDR de administracion (ej. 192.168.50.0/24); vacio: cualquier origen con limite de intentos
+
+# --- Base de datos ---
+SGRSI_DB_MODO="auto"                        # auto | contenedor | host
+DB_NAME="lux"
+DB_USER="lux_app"
+DB_PASSWORD_FILE="/etc/sgrsi/secrets/db_password"   # archivo modo 600; no existe en el repo
+
+# --- Despliegue ---
+SGRSI_STACK_ENV="/etc/sgrsi/lux.env"        # ver ops/env/lux.env.example
+
+# --- Respaldos ---
+SGRSI_BACKUP_DIR="/var/backups/sgrsi"
+SGRSI_BACKUP_DIARIOS="7"
+SGRSI_BACKUP_SEMANAS="4"
+SGRSI_BACKUP_CLAVE_ARCHIVO="/etc/sgrsi/secrets/backup_passphrase"   # frase de cifrado de secretos (modo 600); si falta, los secretos no se respaldan
+
+# --- Cliente de respaldo remoto ---
+SGRSI_RESPALDO_HOST="192.168.50.20"         # [COMPLETAR] IP del servidor de respaldo
+SGRSI_RESPALDO_HOST_ALT=""                  # destino alterno opcional
+SGRSI_RESPALDO_PUERTO="52205"
+SGRSI_RESPALDO_USUARIO="sgrsi_backup"
+SGRSI_RESPALDO_LLAVE="/var/lib/sgrsi/.ssh/id_ed25519_respaldo"
+SGRSI_RESPALDO_KNOWN_HOSTS="/var/lib/sgrsi/.ssh/known_hosts_respaldo"
