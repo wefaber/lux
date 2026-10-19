@@ -190,4 +190,46 @@ export const securityCases: TestCase[] = [
       check((await fresh.ok<{ me: unknown }>(ME)).me === null, "el restablecimiento del administrador no cortó la sesión");
     },
   },
+  {
+    id: "CP-SEG-05",
+    cu: "RNF",
+    title: "El login responde igual para cuenta inexistente, clave errónea y cuenta bloqueada",
+    rf: ["RF-AUTH-007"],
+    kind: "negativo",
+    actor: "anonimo",
+    priority: "alta",
+    precondition: "Usuario descartable y un documento que no existe.",
+    steps: [
+      "Fallar el login con una cuenta existente y con un documento inexistente",
+      "Repetir hasta el bloqueo en ambos",
+      "Comparar mensajes, códigos y status, por GraphQL y por REST",
+    ],
+    expected: "Mismo mensaje en los cuatro casos; los dos bloqueos son TOO_MANY_ATTEMPTS / 429 (con Retry-After por REST) sin importar si la cuenta existe.",
+    api: async (t) => {
+      const real = await t.newUser("solicitante");
+      const ghost = String(80000000 + Math.floor(Math.random() * 9999999));
+      const LOGIN = `query($d: String!, $p: String!) { login(dni: $d, password: $p) { token } }`;
+      const attempt = async (dni: string) => (await t.anon().gql(LOGIN, { d: dni, p: "mala-clave-qa" })).errors[0];
+
+      const wrong = await attempt(real.dni);
+      const missing = await attempt(ghost);
+      check(wrong?.message === missing?.message, `mensajes distintos: "${wrong?.message}" vs "${missing?.message}"`);
+      check(wrong?.extensions?.code === "INVALID_CREDENTIALS" && missing?.extensions?.code === "INVALID_CREDENTIALS", "los dos deberían ser INVALID_CREDENTIALS");
+
+      for (let i = 0; i < 5; i++) {
+        await attempt(real.dni);
+        await attempt(ghost);
+      }
+      const lockedReal = await attempt(real.dni);
+      const lockedGhost = await attempt(ghost);
+      check(lockedReal?.extensions?.code === "TOO_MANY_ATTEMPTS" && lockedReal.extensions.status === 429, "la cuenta real no quedó bloqueada con 429");
+      check(lockedGhost?.extensions?.code === "TOO_MANY_ATTEMPTS" && lockedGhost.extensions.status === 429, "el documento inexistente no se bloquea igual");
+      check(lockedReal.message === wrong.message && lockedGhost.message === wrong.message, "el mensaje del bloqueo delata el estado de la cuenta");
+
+      const viaRest = await (await t.rest()).req("POST", "/auth/login", { dni: real.dni, password: real.password });
+      check(viaRest.http === 429 && viaRest.body.status === 429, `por REST se esperaba 429 y fue ${viaRest.http}`);
+      check(Number(viaRest.headers.get("retry-after")) > 0, "falta Retry-After en el 429");
+      check(viaRest.body.message === wrong.message, "el mensaje por REST es distinto");
+    },
+  },
 ];

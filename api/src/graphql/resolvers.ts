@@ -46,6 +46,7 @@ import {
   FORBIDDEN_MESSAGE,
   forbidden,
   invalid,
+  INVALID_CREDENTIALS_MESSAGE,
   invalidCredentials,
   notFound,
   tooManyAttempts,
@@ -525,11 +526,10 @@ const Query = {
   login: async (_p: unknown, args: { dni: string; password: string }, ctx: Ctx) => {
     const lock = loginGuard.check(args.dni, ctx.ip);
     if (lock.locked) {
-      const minutes = Math.ceil(lock.retryAfterSeconds / 60);
-      throw tooManyAttempts(
-        `Demasiados intentos fallidos. Probá de nuevo en ${minutes} ${minutes === 1 ? "minuto" : "minutos"}`,
-        lock.retryAfterSeconds,
-      );
+      // Mismo texto que una clave erronea: el mensaje no delata si la cuenta existe ni
+      // si esta bloqueada. El bloqueo se distingue por `code` (TOO_MANY_ATTEMPTS), el
+      // status 429 y `retryAfterSeconds`, y se cuenta igual para documentos que no existen.
+      throw tooManyAttempts(INVALID_CREDENTIALS_MESSAGE, lock.retryAfterSeconds);
     }
     const [row] = await db.select().from(t.users).where(eq(t.users.dni, args.dni)).limit(1);
     // Se verifica siempre contra algun hash (el real o uno de relleno) para que el

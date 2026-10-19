@@ -34,7 +34,8 @@ export function apiError(
 export const badRequest = (message: string) => apiError("BAD_REQUEST", message);
 export const unauthenticated = (message = UNAUTHENTICATED_MESSAGE) =>
   apiError("UNAUTHENTICATED", message);
-export const invalidCredentials = (message = "Credenciales inválidas") =>
+export const INVALID_CREDENTIALS_MESSAGE = "Credenciales inválidas";
+export const invalidCredentials = (message = INVALID_CREDENTIALS_MESSAGE) =>
   apiError("INVALID_CREDENTIALS", message);
 export const forbidden = (message = FORBIDDEN_MESSAGE) => apiError("FORBIDDEN", message);
 export const notFound = (message: string) => apiError("NOT_FOUND", message);
