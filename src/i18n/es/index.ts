@@ -2,6 +2,7 @@ import { app } from "./app";
 import { core } from "./core";
 import { domain } from "./domain";
 import { errors } from "./errors";
+import { comments } from "./comments";
 import { admin } from "./admin";
 import { locations } from "./locations";
 import { reservations } from "./reservations";
@@ -20,6 +21,7 @@ export const es = {
   ...app,
   ...domain,
   ...errors,
+  ...comments,
   ...admin,
   ...locations,
   ...reservations,
