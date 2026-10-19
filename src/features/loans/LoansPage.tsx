@@ -3,6 +3,7 @@ import { Plus, RotateCcw, CheckCircle, XCircle, PackageCheck, Search } from "luc
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotices } from "@/hooks/useNotices";
+import { useI18n } from "@/hooks/useI18n";
 import { gql, formatDate, cn, errorMessage } from "@/lib/utils";
 import { LOAN_STATUS_CONFIG, RETURNABLE_LOAN_STATUSES } from "@/lib/constants";
 import type { Loan, LoanStatus } from "@/lib/types";
@@ -56,6 +57,7 @@ const PAGE_SIZE = 10;
 const FINISHED_STATUSES = new Set<LoanStatus>(["returned", "rejected"]);
 
 export function LoansPage() {
+  const { t } = useI18n();
   const [statusFilter, setStatusFilter] = useState<LoanStatus | "">("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
@@ -128,7 +130,7 @@ export function LoansPage() {
       await gql(mutation, { id });
       refetch();
     } catch (err) {
-      setActionError(errorMessage(err, "Error al actualizar el préstamo"));
+      setActionError(errorMessage(err, t("loans.updateFailed")));
     } finally {
       setBusyId(null);
     }
@@ -148,14 +150,16 @@ export function LoansPage() {
     <div className="space-y-8 max-w-full">
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Préstamos</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {t("loans.title")}
+          </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {isStaff ? "Gestión de préstamos de equipos" : "Tus solicitudes de préstamo"}
+            {isStaff ? t("loans.subtitle.staff") : t("loans.subtitle.requester")}
           </p>
         </div>
         <Button size="sm" onClick={() => setCreateOpen(true)}>
           <Plus className="h-3.5 w-3.5" />
-          {isStaff ? "Registrar préstamo" : "Solicitar préstamo"}
+          {isStaff ? t("loans.register") : t("loans.request")}
         </Button>
       </div>
 
@@ -173,10 +177,10 @@ export function LoansPage() {
           )}
         >
           {[
-            { label: "Activos", value: activeCount, color: "rgb(0,122,255)" },
-            { label: "Vencidos", value: overdueCount, color: "rgb(255,69,58)" },
+            { label: t("loans.metric.active"), value: activeCount, color: "rgb(0,122,255)" },
+            { label: t("loans.metric.overdue"), value: overdueCount, color: "rgb(255,69,58)" },
             {
-              label: "Tasa de devolución a tiempo",
+              label: t("loans.metric.onTime"),
               value: `${onTimeRate}%`,
               color: "rgb(52,199,89)",
             },
@@ -201,12 +205,8 @@ export function LoansPage() {
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute z-10 left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder={
-                isStaff
-                  ? "Buscar por equipo, usuario o ID (loan-004)..."
-                  : "Buscar por equipo o ID (loan-004)..."
-              }
-              aria-label="Buscar préstamos por equipo, usuario o ID"
+              placeholder={isStaff ? t("loans.search.staff") : t("loans.search.requester")}
+              aria-label={t("loans.searchLabel")}
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -217,14 +217,14 @@ export function LoansPage() {
           </div>
           <StatusFilter
             section="loan"
-            aria-label="Filtrar por estado"
+            aria-label={t("overview.filterStatus")}
             value={statusFilter}
             onValueChange={(v) => {
               setStatusFilter(v as LoanStatus | "");
               setPage(0);
             }}
             options={[
-              { value: "", label: "Todos los estados" },
+              { value: "", label: t("common.allStatuses") },
               ...LOAN_STATUSES.map((s) => ({ value: s, label: LOAN_STATUS_CONFIG[s].label })),
             ]}
           />
@@ -232,10 +232,7 @@ export function LoansPage() {
 
         {hiddenFinished > 0 && (
           <p className="text-xs text-muted-foreground">
-            {hiddenFinished === 1
-              ? "1 préstamo devuelto o rechazado no se muestra."
-              : `${hiddenFinished} préstamos devueltos o rechazados no se muestran.`}{" "}
-            Para verlos, filtrá por estado o buscalos por su ID.
+            {t("loans.hiddenFinished", { count: hiddenFinished })} {t("loans.hiddenFinishedHelp")}
           </p>
         )}
       </div>
@@ -247,7 +244,7 @@ export function LoansPage() {
           <TableSkeleton rows={8} cols={isStaff ? 7 : 5} />
         ) : listed.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground text-sm font-medium">
-            {hiddenFinished > 0 ? "No hay préstamos en curso" : "No hay préstamos"}
+            {hiddenFinished > 0 ? t("loans.emptyOpen") : t("loans.empty")}
           </div>
         ) : (
           <div
@@ -259,20 +256,22 @@ export function LoansPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  {[
-                    "Equipo",
-                    ...(isStaff ? ["Usuario"] : []),
-                    "Estado",
-                    "Aprobado por",
-                    "Vencimiento",
-                    "Alta",
-                    ...(isStaff ? ["Acciones"] : []),
-                  ].map((h) => (
+                  {(
+                    [
+                      "label.equipment",
+                      ...(isStaff ? (["label.user"] as const) : []),
+                      "label.status",
+                      "loans.col.approvedBy",
+                      "loans.col.due",
+                      "loans.col.created",
+                      ...(isStaff ? (["label.actions"] as const) : []),
+                    ] as const
+                  ).map((h) => (
                     <th
                       key={h}
                       className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                     >
-                      {h}
+                      {t(h)}
                     </th>
                   ))}
                 </tr>
@@ -318,7 +317,10 @@ export function LoansPage() {
                         )}
                         {l.deliveredBy && l.deliveredAt && l.status !== "returned" && (
                           <p className="text-xs text-muted-foreground mt-1 max-w-44">
-                            Entregado por {l.deliveredBy.name} el {formatDate(l.deliveredAt)}
+                            {t("loans.deliveredBy", {
+                              name: l.deliveredBy.name,
+                              date: formatDate(l.deliveredAt),
+                            })}
                           </p>
                         )}
                         {notice && <NoticeLine notice={notice} />}
@@ -344,7 +346,7 @@ export function LoansPage() {
                                   onClick={() => runAction(l.id, APPROVE_MUTATION)}
                                 >
                                   <CheckCircle className="h-3.5 w-3.5" />
-                                  Aprobar
+                                  {t("loans.approve")}
                                 </Button>
                                 <Button
                                   size="sm"
@@ -353,7 +355,7 @@ export function LoansPage() {
                                   onClick={() => setRejecting(l)}
                                 >
                                   <XCircle className="h-3.5 w-3.5" />
-                                  Rechazar
+                                  {t("loans.reject")}
                                 </Button>
                               </>
                             )}
@@ -365,7 +367,7 @@ export function LoansPage() {
                                 onClick={() => runAction(l.id, DELIVER_MUTATION)}
                               >
                                 <PackageCheck className="h-3.5 w-3.5" />
-                                Registrar entrega
+                                {t("loans.deliver")}
                               </Button>
                             )}
                             {RETURNABLE_LOAN_STATUSES.includes(l.status) && (
@@ -376,7 +378,7 @@ export function LoansPage() {
                                 onClick={() => setReturning(l)}
                               >
                                 <RotateCcw className="h-3.5 w-3.5" />
-                                Devolver
+                                {t("loans.return")}
                               </Button>
                             )}
                           </div>
@@ -401,11 +403,9 @@ export function LoansPage() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{isStaff ? "Registrar préstamo" : "Solicitar préstamo"}</DialogTitle>
+            <DialogTitle>{isStaff ? t("loans.register") : t("loans.request")}</DialogTitle>
             <DialogDescription>
-              {isStaff
-                ? "El equipo queda a nombre del usuario hasta que lo devuelva."
-                : "El staff revisa el pedido antes de entregarte el equipo."}
+              {isStaff ? t("loans.dialog.staff") : t("loans.dialog.requester")}
             </DialogDescription>
           </DialogHeader>
           <LoanForm

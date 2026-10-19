@@ -4,6 +4,7 @@ import { ArrowLeft, UserCheck } from "lucide-react";
 import { useState } from "react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
+import { useI18n } from "@/hooks/useI18n";
 import { gql, formatDate, errorMessage } from "@/lib/utils";
 import {
   SERVICE_STATUS_CONFIG,
@@ -64,6 +65,7 @@ const STAFF_USERS_QUERY = `
 export function ServiceDetail() {
   const { id } = useParams<{ id: string }>(); // Variable constante ID con parametros String
   const { hasRole } = useAuth(); // Verificacion de roles con Auth
+  const { t } = useI18n();
   const [saving, setSaving] = useState(false);
   const [newStatus, setNewStatus] = useState<ServiceStatus | "">(""); // Actualizacion de Estatus con parametro de estado de servicio
   const [resolution, setResolution] = useState(""); // Setear resolucion y establecer
@@ -109,7 +111,7 @@ export function ServiceDetail() {
       refetch();
     } catch (err) {
       setPendingAssignee(null);
-      setAssignError(errorMessage(err, "Error al asignar"));
+      setAssignError(errorMessage(err, t("services.detail.assignFailed")));
     }
   };
 
@@ -126,7 +128,7 @@ export function ServiceDetail() {
       setNewStatus("");
       setResolution("");
     } catch (err) {
-      setUpdateError(errorMessage(err, "No se pudo actualizar el estado"));
+      setUpdateError(errorMessage(err, t("services.detail.updateFailed")));
     } finally {
       setSaving(false);
     }
@@ -141,7 +143,7 @@ export function ServiceDetail() {
           </Link>
         </Button>
         <h1 className="text-xl font-semibold tracking-tight text-foreground flex-1 min-w-[12rem]">
-          Solicitud de servicio
+          {t("services.detail.title")}
         </h1>
         {canManage && service && !service.assignedTo && !isClosed && (
           <Button
@@ -150,14 +152,14 @@ export function ServiceDetail() {
             onClick={() => assign(CLAIM_SERVICE_MUTATION, { id })}
           >
             <UserCheck className="h-3.5 w-3.5" />
-            Tomar solicitud
+            {t("services.detail.claim")}
           </Button>
         )}
       </div>
 
       <ErrorAlert>{assignError}</ErrorAlert>
 
-      {error && <ErrorAlert>Error: {error}</ErrorAlert>}
+      {error && <ErrorAlert>{t("common.error", { error })}</ErrorAlert>}
 
       {service && (
         <motion.div
@@ -182,13 +184,13 @@ export function ServiceDetail() {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
-                      Solicitante
+                      {t("label.requester")}
                     </p>
                     <p className="text-foreground">{service.requestedBy.name}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
-                      Fecha
+                      {t("label.date")}
                     </p>
                     <p className="text-foreground">{formatDate(service.createdAt)}</p>
                   </div>
@@ -198,7 +200,7 @@ export function ServiceDetail() {
                         htmlFor="service-assignee"
                         className="block text-xs text-muted-foreground uppercase tracking-widest mb-0.5"
                       >
-                        Asignado a
+                        {t("label.assignedTo")}
                       </label>
                       <div className="max-w-60">
                         {/* No se puede dejar sin responsable: borrar el campo y salir
@@ -220,23 +222,25 @@ export function ServiceDetail() {
                   ) : (
                     <div>
                       <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
-                        Asignado a
+                        {t("label.assignedTo")}
                       </p>
-                      <p className="text-foreground">{assignee?.name ?? "Sin asignar"}</p>
+                      <p className="text-foreground">{assignee?.name ?? t("common.unassigned")}</p>
                     </div>
                   )}
                   {service.labNumber && (
                     <div>
                       <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
-                        Laboratorio
+                        {t("services.detail.lab")}
                       </p>
-                      <p className="text-foreground">N° {service.labNumber}</p>
+                      <p className="text-foreground">
+                        {t("services.detail.labNumber", { number: service.labNumber })}
+                      </p>
                     </div>
                   )}
                   {service.softwareName && (
                     <div>
                       <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
-                        Software
+                        {t("services.detail.software")}
                       </p>
                       <p className="text-foreground">{service.softwareName}</p>
                     </div>
@@ -244,14 +248,14 @@ export function ServiceDetail() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1.5">
-                    Descripción
+                    {t("label.description")}
                   </p>
                   <p className="text-sm text-foreground leading-relaxed">{service.description}</p>
                 </div>
                 {service.resolutionText && (
                   <div>
                     <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1.5">
-                      Resolución
+                      {t("services.detail.resolution")}
                     </p>
                     <p className="text-sm text-foreground leading-relaxed">
                       {service.resolutionText}
@@ -264,17 +268,17 @@ export function ServiceDetail() {
             {canManage && !isClosed && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Actualizar estado</CardTitle>
+                  <CardTitle>{t("services.detail.updateTitle")}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-1.5">
-                    <Label>Nuevo estado</Label>
+                    <Label>{t("services.detail.newStatus")}</Label>
                     <Select
                       value={newStatus}
                       onValueChange={(v) => setNewStatus(v as ServiceStatus)}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar estado..." />
+                        <SelectValue placeholder={t("services.detail.selectStatus")} />
                       </SelectTrigger>
                       <SelectContent>
                         {nextStatuses.map((s) => (
@@ -287,11 +291,11 @@ export function ServiceDetail() {
                   </div>
                   {needsResolution && (
                     <div className="space-y-1.5">
-                      <Label>Texto de resolución</Label>
+                      <Label>{t("services.detail.resolutionText")}</Label>
                       <Textarea
                         value={resolution}
                         onChange={(e) => setResolution(e.target.value)}
-                        placeholder="Describí la resolución o motivo de rechazo..."
+                        placeholder={t("services.detail.resolutionPlaceholder")}
                         className="h-24"
                       />
                     </div>
@@ -299,7 +303,7 @@ export function ServiceDetail() {
                   <ErrorAlert>{updateError}</ErrorAlert>
                   <div className="flex justify-end">
                     <Button size="sm" onClick={handleUpdate} disabled={saving || !newStatus}>
-                      {saving ? "Guardando..." : "Actualizar"}
+                      {saving ? t("common.saving") : t("services.detail.update")}
                     </Button>
                   </div>
                 </CardContent>

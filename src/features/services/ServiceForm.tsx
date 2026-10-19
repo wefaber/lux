@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useLocations } from "@/hooks/useLocations";
+import { useI18n } from "@/hooks/useI18n";
 import { gql, errorMessage } from "@/lib/utils";
 import { SERVICE_TYPE_LABELS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ interface ServiceFormProps {
 }
 
 export function ServiceForm({ onSuccess }: ServiceFormProps) {
+  const { t } = useI18n();
   const [type, setType] = useState<ServiceType>("lab_preparation"); // constante para tipos de service en base a ServiceType
   const [description, setDescription] = useState("");
   const [labNumber, setLabNumber] = useState("");
@@ -62,7 +64,7 @@ export function ServiceForm({ onSuccess }: ServiceFormProps) {
       }); // Entrada a la base de datos
       onSuccess();
     } catch (err) {
-      setError(errorMessage(err, "Error al crear solicitud")); // Disparador de error en caso de datos erroneos
+      setError(errorMessage(err, t("services.form.failed"))); // Disparador de error en caso de datos erroneos
     } finally {
       setSaving(false);
     }
@@ -71,20 +73,20 @@ export function ServiceForm({ onSuccess }: ServiceFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4 pt-2">
       <div className="space-y-1.5">
-        <Label>Tipo de solicitud</Label>
+        <Label>{t("services.form.type")}</Label>
         <div className="grid grid-cols-2 gap-2">
-          {(Object.keys(SERVICE_TYPE_LABELS) as ServiceType[]).map((t) => (
+          {(Object.keys(SERVICE_TYPE_LABELS) as ServiceType[]).map((kind) => (
             <button
-              key={t}
+              key={kind}
               type="button"
-              onClick={() => setType(t)}
+              onClick={() => setType(kind)}
               className={`rounded-xl border py-2.5 px-3 text-sm text-left transition-all cursor-pointer ${
-                type === t
+                type === kind
                   ? "border-[rgba(0,122,255,0.3)] bg-info-bg text-primary"
                   : "border-border bg-card/40 text-muted-foreground hover:bg-muted/50"
               }`}
             >
-              {SERVICE_TYPE_LABELS[t]}
+              {SERVICE_TYPE_LABELS[kind]}
             </button>
           ))}
         </div>
@@ -92,7 +94,7 @@ export function ServiceForm({ onSuccess }: ServiceFormProps) {
 
       {type === "lab_preparation" && (
         <div className="space-y-1.5">
-          <Label htmlFor="lab-number">Laboratorio</Label>
+          <Label htmlFor="lab-number">{t("services.form.lab")}</Label>
           <LabSearchSelect
             id="lab-number"
             items={locations}
@@ -104,19 +106,19 @@ export function ServiceForm({ onSuccess }: ServiceFormProps) {
 
       {type === "software_installation" && (
         <div className="space-y-1.5">
-          <Label htmlFor="software">Nombre del software</Label>
+          <Label htmlFor="software">{t("services.form.software")}</Label>
           <Input
             id="software"
             value={softwareName}
             onChange={(e) => setSoftwareName(e.target.value)}
-            placeholder="Ej: AutoCAD 2024"
+            placeholder={t("services.form.softwarePlaceholder")}
           />
         </div>
       )}
 
       {type === "equipment_setup" && (
         <div className="space-y-1.5">
-          <Label htmlFor="eq-id">Equipo</Label>
+          <Label htmlFor="eq-id">{t("label.equipment")}</Label>
           <EquipmentSearchSelect
             id="eq-id"
             items={products}
@@ -127,12 +129,12 @@ export function ServiceForm({ onSuccess }: ServiceFormProps) {
       )}
 
       <div className="space-y-1.5">
-        <Label htmlFor="description">Descripción</Label>
+        <Label htmlFor="description">{t("label.description")}</Label>
         <Textarea
           id="description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Describí lo que necesitás en detalle..."
+          placeholder={t("services.form.descriptionPlaceholder")}
           className="h-32"
           required
         />
@@ -142,7 +144,7 @@ export function ServiceForm({ onSuccess }: ServiceFormProps) {
 
       <div className="flex justify-end">
         <Button type="submit" disabled={saving}>
-          {saving ? "Enviando..." : "Enviar solicitud"}
+          {saving ? t("services.form.sending") : t("services.form.submit")}
         </Button>
       </div>
     </form>

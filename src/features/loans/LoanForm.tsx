@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
+import { useI18n } from "@/hooks/useI18n";
 import { gql, errorMessage } from "@/lib/utils";
 import type { Product, User } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ interface LoanFormProps {
 }
 
 export function LoanForm({ onSuccess }: LoanFormProps) {
+  const { t } = useI18n();
   const [equipmentId, setEquipmentId] = useState("");
   const [userId, setUserId] = useState("");
   const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 16));
@@ -61,7 +63,7 @@ export function LoanForm({ onSuccess }: LoanFormProps) {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!equipmentId || (isStaff && !userId) || !returnDate) {
-      setError("Completá todos los campos requeridos.");
+      setError(t("loans.form.required"));
       return;
     }
     setSaving(true);
@@ -72,7 +74,7 @@ export function LoanForm({ onSuccess }: LoanFormProps) {
       });
       onSuccess();
     } catch (err) {
-      setError(errorMessage(err, "Error al registrar"));
+      setError(errorMessage(err, t("loans.form.failed")));
     } finally {
       setSaving(false);
     }
@@ -81,7 +83,7 @@ export function LoanForm({ onSuccess }: LoanFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4 pt-2">
       <div className="space-y-1.5">
-        <Label htmlFor="loan-equipment">Equipo</Label>
+        <Label htmlFor="loan-equipment">{t("loans.form.equipment")}</Label>
         <OptionSelect
           id="loan-equipment"
           className="w-full"
@@ -90,28 +92,28 @@ export function LoanForm({ onSuccess }: LoanFormProps) {
           disabled={loadingProducts || products.length === 0}
           placeholder={
             loadingProducts
-              ? "Cargando equipos..."
+              ? t("loans.form.loading")
               : products.length === 0
-                ? "No hay equipos disponibles"
-                : "Seleccioná un equipo"
+                ? t("loans.form.none")
+                : t("loans.form.pick")
           }
           options={products.map((p) => ({
             value: p.id,
             label: `${p.machineId} · ${p.brand} ${p.model} (${p.location})`,
           }))}
         />
-        <p className="text-xs text-muted-foreground">Solo se listan los equipos disponibles</p>
+        <p className="text-xs text-muted-foreground">{t("loans.form.availableOnly")}</p>
       </div>
       {isStaff && (
         <div className="space-y-1.5">
-          <Label htmlFor="loan-user">Usuario</Label>
+          <Label htmlFor="loan-user">{t("loans.form.user")}</Label>
           {/* Se busca por nombre o cedula, como el equipo al crear un ticket */}
           <UserSearchSelect id="loan-user" items={users} value={userId} onChange={setUserId} />
         </div>
       )}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label htmlFor="loan-issue">Fecha de entrega</Label>
+          <Label htmlFor="loan-issue">{t("loans.form.issueDate")}</Label>
           <Input
             id="loan-issue"
             type="datetime-local"
@@ -121,7 +123,7 @@ export function LoanForm({ onSuccess }: LoanFormProps) {
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="loan-return">Fecha de devolución</Label>
+          <Label htmlFor="loan-return">{t("loans.form.returnDate")}</Label>
           <Input
             id="loan-return"
             type="datetime-local"
@@ -136,7 +138,7 @@ export function LoanForm({ onSuccess }: LoanFormProps) {
 
       <div className="flex gap-2 justify-end">
         <Button type="submit" disabled={saving}>
-          {saving ? "Enviando..." : isStaff ? "Registrar préstamo" : "Solicitar préstamo"}
+          {saving ? t("loans.form.sending") : isStaff ? t("loans.register") : t("loans.request")}
         </Button>
       </div>
     </form>
