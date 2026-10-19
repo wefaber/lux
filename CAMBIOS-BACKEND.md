@@ -140,7 +140,7 @@ Aclaraciones para no sobreestimar el resultado:
 
 - Re-sembrar la base fue necesario porque el chequeo "los fallos de login quedan en activity_logs" compara
   `activityLogs { id }`, que la API topa en 1000 filas; con la base acumulada de QA daba 1000 antes y 1000 despues
-  aunque `LOGIN_FAILED` se escribe (CP-R-02 lo prueba). Es un artefacto de la medicion, no del control.
+  aunque `LOGIN_FAILED` se escribe (con la base re-sembrada el mismo chequeo pasa; no hay un caso de QA propio que lo cubra, queda como pendiente). Es un artefacto de la medicion, no del control.
 - Se corrigieron tres chequeos del runner (commit 511c8b4) porque median algo distinto del control: AT-06 contaba
   filas devueltas en vez de dni/email visibles; AT-04 (e) tomaba `{data:{me:null}}` como sesion valida (el chequeo (f)
   del mismo runner ya leia `me`); y AT-03 no tenia estado pass para un request rechazado entero. Corriendo el runner
