@@ -96,4 +96,27 @@ describe("servidor GraphQL", () => {
     }, { ip: "test" });
     expect(res.headers.get("access-control-allow-origin")).toBeNull();
   });
+
+  test("15 alias en un request devuelven BAD_REQUEST sin ejecutar ninguno", async () => {
+    const fields = Array.from({ length: 15 }, (_, i) => `a${i}: ok`).join(" ");
+    const body = await run(true, `{ ${fields} }`);
+    expect(body.data).toBeUndefined();
+    expect(body.errors?.[0]?.extensions).toMatchObject({ code: "BAD_REQUEST", status: 400 });
+  });
+
+  test("un arreglo de operaciones (batching) no se acepta", async () => {
+    const res = await server(true).fetch("http://api/graphql", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify([{ query: "{ ok }" }, { query: "{ ok }" }]),
+    }, { ip: "test" });
+    const body = (await res.json()) as { data?: unknown };
+    expect(Array.isArray(body)).toBe(false);
+    expect(body.data).toBeUndefined();
+  });
+
+  test("en produccion GraphiQL no se sirve", async () => {
+    const res = await server(true).fetch("http://api/graphql", { headers: { accept: "text/html" } }, { ip: "test" });
+    expect(await res.text()).not.toContain("GraphiQL");
+  });
 });

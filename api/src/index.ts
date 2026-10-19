@@ -4,7 +4,7 @@ import { createContext } from "./context";
 import { corsPlugin } from "./cors";
 import { pool } from "./db/client";
 import { restPlugin } from "./rest/plugin";
-import { loadEnv, serverHost, serverPort } from "./env";
+import { loadEnv, maxBodyBytes, serverHost, serverPort } from "./env";
 import { clientIp } from "./net";
 import { resolvers } from "./graphql/resolvers";
 import { createGraphqlServer } from "./graphql/server";
@@ -74,6 +74,6 @@ const app = new Elysia()
     yoga.fetch(request, { ip: clientIp(request, server) }),
   );
 
-app.listen({ hostname: serverHost(), port: serverPort(), maxRequestBodySize: 1024 * 1024 });
+app.listen({ hostname: serverHost(), port: serverPort(), maxRequestBodySize: maxBodyBytes() });
 
 console.log(`Lux API escuchando en http://${serverHost()}:${serverPort()}/graphql`);

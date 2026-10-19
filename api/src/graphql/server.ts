@@ -2,6 +2,8 @@ import { NoSchemaIntrospectionCustomRule, type GraphQLSchema } from "graphql";
 import { createYoga, type Plugin } from "graphql-yoga";
 import type { Ctx } from "../context";
 import { classifyUnexpected, ERROR_STATUS, isCatalogError } from "../errors";
+import { graphqlMaxDepth, graphqlMaxRootFields } from "../env";
+import { operationLimitsRule } from "./limits";
 
 // Configuracion del servidor GraphQL. Vive aparte de index.ts (que abre el puerto
 // y la base) para poder probarla: errores con codigo, enmascarado de errores
@@ -46,6 +48,13 @@ export function createGraphqlServer({ schema, production, createContext }: Serve
   // La superficie que ve un atacante es solo la de las operaciones que el cliente ya conoce.
   const hardening: Plugin = {
     onValidate({ addValidationRule }) {
+      addValidationRule(
+        operationLimitsRule({
+          maxDepth: graphqlMaxDepth(),
+          maxRootFields: graphqlMaxRootFields(),
+          maxRepeatedRootField: 3,
+        }),
+      );
       if (production) addValidationRule(NoSchemaIntrospectionCustomRule);
     },
   };
