@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+echo "ping $*" >> "${STUB_LOG:-/dev/null}"
+exit "${STUB_PING_RC:-0}"

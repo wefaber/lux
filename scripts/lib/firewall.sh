@@ -16,7 +16,7 @@
 
 SGRSI_SSH_PUERTO="${SGRSI_SSH_PUERTO:-52205}"
 SGRSI_FW_PUERTOS_WEB="${SGRSI_FW_PUERTOS_WEB:-80 443}"
-SGRSI_FW_SSH_ORIGEN="${SGRSI_FW_SSH_ORIGEN:-}"      # CIDR opcional que puede entrar por SSH
+SGRSI_FW_SSH_ORIGEN="${SGRSI_FW_SSH_ORIGEN:-}"      # CIDR(s) opcionales (separados por espacio) que pueden entrar por SSH
 SGRSI_FW_PROHIBIDOS="${SGRSI_FW_PROHIBIDOS:-5432 3306 4111 8080}"  # nunca deben estar abiertos al exterior
 
 firewall_descripcion() { echo "UFW: politica base, reglas por puerto y verificacion"; }
@@ -83,7 +83,14 @@ firewall_aplicar_base() {
 
     # 1) SSH primero. `limit` frena fuerza bruta (6 conexiones por 30 s por origen).
     if [[ -n "$SGRSI_FW_SSH_ORIGEN" ]]; then
-        ejecutar ufw limit from "$SGRSI_FW_SSH_ORIGEN" to any port "$SGRSI_SSH_PUERTO" proto tcp comment 'SSH administrativo (origen restringido)'
+        local origen
+        for origen in $SGRSI_FW_SSH_ORIGEN; do
+            if [[ ! "$origen" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?$ ]]; then
+                log ERROR "Origen SSH invalido: '$origen' (usar 192.0.2.10 o 192.0.2.0/24)."
+                return "$SGRSI_EX_CONFIG"
+            fi
+            ejecutar ufw limit from "$origen" to any port "$SGRSI_SSH_PUERTO" proto tcp comment 'SSH administrativo (origen restringido)'
+        done
     else
         ejecutar ufw limit "$SGRSI_SSH_PUERTO/tcp" comment 'SSH administrativo'
     fi

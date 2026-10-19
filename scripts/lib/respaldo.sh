@@ -182,7 +182,8 @@ rr_enviar_id() {
 rr_verificar_destino() {
     local host="$1" id="$2" stage="$3"
     local diferencias
-    if ! diferencias="$(rr_rsync "$SGRSI_RESPALDO_LLAVE" -c -n --itemize-changes "$stage/" "${SGRSI_RESPALDO_USUARIO}@${host}:${id}/" 2>&1)"; then
+    # -O: ignora la hora de los directorios (cambia al agregar archivos y no dice nada del contenido)
+    if ! diferencias="$(rr_rsync "$SGRSI_RESPALDO_LLAVE" -c -n -O --itemize-changes "$stage/" "${SGRSI_RESPALDO_USUARIO}@${host}:${id}/" 2>&1)"; then
         log ERROR "No se pudo verificar la corrida $id en $host: $diferencias"
         return 1
     fi

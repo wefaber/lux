@@ -24,10 +24,14 @@ rotacion_ids_a_borrar() {
     local diarios="${2:-7}"
     local semanas="${3:-4}"
 
-    local hoy_epoch limite_diario
+    local hoy_epoch limite_diario limite_semanal
     hoy_epoch="$(date -u -d "${hoy:0:4}-${hoy:4:2}-${hoy:6:2}" +%s)"
     # Ventana diaria: hoy y los (diarios - 1) dias anteriores.
     limite_diario=$((hoy_epoch - (diarios - 1) * 86400))
+    # Ventana semanal: `semanas` semanas calendario antes del fin de la diaria.
+    # Sin este limite, una corrida de hace años sobreviviria como "semanal" si
+    # fuera la unica que queda. Ademas se conservan como maximo `semanas`.
+    limite_semanal=$((limite_diario - semanas * 7 * 86400))
 
     local id fecha epoch semana
     local -A mejor_por_semana=()
@@ -47,6 +51,9 @@ rotacion_ids_a_borrar() {
         }
         if ((epoch >= limite_diario)); then
             continue  # dentro de la ventana diaria: se conserva
+        fi
+        if ((epoch < limite_semanal)); then
+            continue  # fuera de la ventana semanal: se elimina
         fi
         semana="$(date -u -d "${fecha:0:4}-${fecha:4:2}-${fecha:6:2}" +%G-W%V)"
         # Candidato semanal: el mas reciente de cada semana ISO (comparacion

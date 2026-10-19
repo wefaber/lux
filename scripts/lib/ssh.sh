@@ -88,7 +88,7 @@ FIN_CONFIG
 # llave en authorized_keys. Si no, el endurecimiento deja el servidor sin acceso.
 ssh_hay_llave_para_acceso() {
     local grupo usuario home miembros
-    for grupo in "$SGRSI_SSH_GRUPO" sudo; do
+    for grupo in $SGRSI_SSH_GRUPO sudo; do
         miembros="$(getent group "$grupo" 2>/dev/null | cut -d: -f4 | tr ',' ' ')"
         for usuario in $miembros; do
             home="$(getent passwd "$usuario" | cut -d: -f6)"
@@ -149,10 +149,15 @@ ssh_aplicar() {
     # Un AllowGroups que apunte a un grupo inexistente deja fuera a todo el
     # mundo salvo a los miembros de sudo: se avisa antes de escribir, porque
     # el error solo se descubriria al perder el acceso.
-    if ! existe_grupo "$SGRSI_SSH_GRUPO"; then
-        log WARN "El grupo '$SGRSI_SSH_GRUPO' no existe todavia. Crearlo con: admin.sh grupos alta $SGRSI_SSH_GRUPO"
-        confirmar "Aplicar igualmente la configuracion" || { log INFO "Operacion cancelada."; return 0; }
-    fi
+    # SGRSI_SSH_GRUPO puede traer varios grupos separados por espacio.
+    local grupo_ssh
+    for grupo_ssh in $SGRSI_SSH_GRUPO; do
+        if ! existe_grupo "$grupo_ssh"; then
+            log WARN "El grupo '$grupo_ssh' no existe todavia. Crearlo con: admin.sh grupos alta $grupo_ssh"
+            confirmar "Aplicar igualmente la configuracion" || { log INFO "Operacion cancelada."; return 0; }
+            break
+        fi
+    done
 
     # Salvaguardas contra el bloqueo (R5 de la auditoria de E2).
     if ! es_dry_run && [[ -z "$forzar" ]]; then
