@@ -3,6 +3,10 @@ import { app } from "./app";
 import { core } from "./core";
 import { domain } from "./domain";
 import { errors } from "./errors";
+import { inventory } from "./inventory";
+import { tickets } from "./tickets";
+import { dashboard } from "./dashboard";
+import { profile } from "./profile";
 import { validation } from "./validation";
 
 // Ingles: tiene que tener exactamente las claves del espanol
@@ -11,5 +15,9 @@ export const en: Record<MessageKey, string> = {
   ...app,
   ...domain,
   ...errors,
+  ...inventory,
+  ...tickets,
+  ...dashboard,
+  ...profile,
   ...validation,
 };

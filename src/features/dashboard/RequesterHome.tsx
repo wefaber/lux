@@ -2,6 +2,8 @@ import { Link } from "react-router-dom";
 import { Ticket, Wrench, CalendarClock, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAsync } from "@/hooks/useSkeleton";
+import { useI18n } from "@/hooks/useI18n";
+import type { MessageKey } from "@/i18n";
 import { gql } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
 import type { DashboardStats } from "@/lib/types";
@@ -16,25 +18,31 @@ const MY_STATS_QUERY = `
   }
 `;
 
-const QUICK_ACTIONS = [
+const QUICK_ACTIONS: Array<{
+  icon: typeof Ticket;
+  title: MessageKey;
+  detail: MessageKey;
+  to: string;
+  color: string;
+}> = [
   {
     icon: Ticket,
-    title: "Reportar un problema",
-    detail: "Abrir un ticket a la mesa de ayuda",
+    title: "home.quick.ticket",
+    detail: "home.quick.ticketDetail",
     to: `${ROUTES.TICKETS}?nuevo=1`,
     color: "rgb(255,159,10)",
   },
   {
     icon: Wrench,
-    title: "Pedir un servicio",
-    detail: "Equipos, software o preparación de laboratorio",
+    title: "home.quick.service",
+    detail: "home.quick.serviceDetail",
     to: `${ROUTES.SERVICES}?nuevo=1`,
     color: "rgb(0,122,255)",
   },
   {
     icon: CalendarClock,
-    title: "Reservar un equipo o espacio",
-    detail: "Un proyector, una PC o un laboratorio para una fecha",
+    title: "home.quick.reservation",
+    detail: "home.quick.reservationDetail",
     to: `${ROUTES.RESERVATIONS}?nuevo=1`,
     color: "rgb(52,199,89)",
   },
@@ -44,6 +52,7 @@ const QUICK_ACTIONS = [
 // partida. Arriba lo que va a hacer y lo suyo; abajo, el estado de los equipos.
 export function RequesterHome() {
   const { user } = useAuth();
+  const { t } = useI18n();
   const { data, isLoading, error } = useAsync<{ dashboardStats: DashboardStats }>(
     () => gql(MY_STATS_QUERY),
     [],
@@ -54,14 +63,15 @@ export function RequesterHome() {
     <div className="space-y-8 max-w-full">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          Buenos días, {user?.name.split(" ")[0]}
+          {t("dashboard.greeting", { name: user?.name.split(" ")[0] ?? "" })}
         </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Tus pedidos y el estado de los equipos · ITI CETP
-        </p>
+        <p className="text-sm text-muted-foreground mt-0.5">{t("home.subtitle")}</p>
       </div>
 
-      <section aria-label="Accesos rápidos" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <section
+        aria-label={t("home.quick")}
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+      >
         {QUICK_ACTIONS.map(({ icon: Icon, title, detail, to, color }) => (
           <Link
             key={title}
@@ -75,8 +85,8 @@ export function RequesterHome() {
               <Icon className="h-5 w-5" style={{ color }} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-foreground">{title}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{detail}</p>
+              <p className="text-sm font-semibold text-foreground">{t(title)}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t(detail)}</p>
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
           </Link>
@@ -87,20 +97,20 @@ export function RequesterHome() {
         <CardSkeleton count={2} />
       ) : error ? (
         <div className="rounded-2xl border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
-          Error al cargar tu actividad: {error}
+          {t("home.loadError", { error })}
         </div>
       ) : (
-        <section aria-label="Tu actividad" className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <section aria-label={t("home.activity")} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <MetricCard
             icon={Ticket}
-            label="Mis tickets abiertos"
+            label={t("home.myTickets")}
             value={stats?.openTickets ?? 0}
             color="rgb(255,159,10)"
             to={ROUTES.TICKETS}
           />
           <MetricCard
             icon={Wrench}
-            label="Mis solicitudes pendientes"
+            label={t("home.myServices")}
             value={stats?.pendingServices ?? 0}
             color="rgb(255,69,58)"
             to={ROUTES.SERVICES}

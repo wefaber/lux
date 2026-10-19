@@ -1,6 +1,7 @@
 import type { Ticket } from "@/lib/types";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useI18n } from "@/hooks/useI18n";
 
 interface DiagnosisStepProps {
   ticket: Ticket;
@@ -19,10 +20,13 @@ export function DiagnosisStep({
   onCorrectedChange,
   readOnly = false,
 }: DiagnosisStepProps) {
+  const { t } = useI18n();
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-foreground mb-1">Diagnóstico</h2>
+        <h2 className="text-base font-semibold text-foreground mb-1">
+          {t("tickets.diagnosis.title")}
+        </h2>
         {ticket.equipment && (
           <p className="text-xs text-muted-foreground">
             {ticket.equipment.location} · {ticket.equipment.serialNumber}
@@ -31,11 +35,11 @@ export function DiagnosisStep({
       </div>
 
       <div className="space-y-1.5">
-        <Label>Descripción del diagnóstico</Label>
+        <Label>{t("tickets.diagnosis.label")}</Label>
         <Textarea
           value={diagnosis}
           onChange={(e) => onDiagnosisChange(e.target.value)}
-          placeholder="Describí el diagnóstico técnico..."
+          placeholder={t("tickets.diagnosis.placeholder")}
           className="h-36"
           readOnly={readOnly}
           disabled={readOnly}
@@ -43,11 +47,11 @@ export function DiagnosisStep({
       </div>
 
       <div className="space-y-2">
-        <Label>¿Se corrigió el problema?</Label>
+        <Label>{t("tickets.diagnosis.fixed")}</Label>
         <div className="flex gap-3">
           {[
-            { label: "Sí", value: true },
-            { label: "No", value: false },
+            { label: t("common.yes"), value: true },
+            { label: t("common.no"), value: false },
           ].map((opt) => (
             <button
               key={String(opt.value)}
@@ -71,7 +75,7 @@ export function DiagnosisStep({
       {ticket.actionsTaken && (
         <div>
           <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium block mb-1.5">
-            Acciones previas tomadas
+            {t("tickets.diagnosis.previousActions")}
           </span>
           <p className="text-sm text-foreground leading-relaxed bg-black/3 rounded-xl p-3">
             {ticket.actionsTaken}

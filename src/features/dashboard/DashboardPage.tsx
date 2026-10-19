@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Package, Ticket, BookOpen, Wrench, TrendingUp, Download } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAsync } from "@/hooks/useSkeleton";
+import { useI18n } from "@/hooks/useI18n";
 import { gql, cn } from "@/lib/utils";
 import { downloadCsv } from "@/lib/csv";
 import {
@@ -45,6 +46,7 @@ export function DashboardPage() {
 
 function StaffDashboard() {
   const { user, hasRole } = useAuth();
+  const { t } = useI18n();
   const [period, setPeriod] = useState<DashboardPeriod>("7d"); // Periodo del grafico de solicitudes
   const { data, isLoading, error } = useAsync<{ dashboardStats: DashboardStats }>(
     () => gql(DASHBOARD_QUERY, { period }),
@@ -54,10 +56,10 @@ function StaffDashboard() {
   const stats = data?.dashboardStats; // Seteo de variable con informacion de estadisticas del dashboard (si existe)
 
   const pieData =
-    stats?.ticketsByStatus.map((t) => ({
-      name: TICKET_STATUS_CONFIG[t.status as TicketStatus].label,
-      value: t.count,
-      color: STATUS_COLOR_VAR[TICKET_STATUS_CONFIG[t.status as TicketStatus].color],
+    stats?.ticketsByStatus.map((ts) => ({
+      name: TICKET_STATUS_CONFIG[ts.status as TicketStatus].label,
+      value: ts.count,
+      color: STATUS_COLOR_VAR[TICKET_STATUS_CONFIG[ts.status as TicketStatus].color],
     })) ?? []; // Informacion de la grafica Pie
 
   const barData =
@@ -69,17 +71,20 @@ function StaffDashboard() {
   const handleExport = () => {
     if (!stats) return;
     const today = new Date().toISOString().slice(0, 10);
-    downloadCsv(`lux-dashboard-${period}-${today}.csv`, [
-      ["Métrica", "Valor"],
-      ["Equipos totales", stats.totalEquipment],
-      ["Tickets abiertos", stats.openTickets],
-      ["Préstamos activos", stats.activeLoans],
-      ["Solicitudes pendientes", stats.pendingServices],
+    downloadCsv(`${t("dashboard.csv.file")}-${period}-${today}.csv`, [
+      [t("dashboard.csv.metric"), t("dashboard.csv.value")],
+      [t("dashboard.metric.equipment"), stats.totalEquipment],
+      [t("dashboard.metric.openTickets"), stats.openTickets],
+      [t("dashboard.metric.activeLoans"), stats.activeLoans],
+      [t("dashboard.metric.pendingServices"), stats.pendingServices],
       [],
-      ["Tickets por estado", "Cantidad"],
-      ...stats.ticketsByStatus.map((t) => [TICKET_STATUS_CONFIG[t.status].label, t.count]),
+      [t("dashboard.csv.ticketsByStatus"), t("dashboard.csv.count")],
+      ...stats.ticketsByStatus.map((ts) => [TICKET_STATUS_CONFIG[ts.status].label, ts.count]),
       [],
-      [`Solicitudes de servicio (${DASHBOARD_PERIOD_LABELS[period]})`, "Cantidad"],
+      [
+        t("dashboard.csv.services", { period: DASHBOARD_PERIOD_LABELS[period] }),
+        t("dashboard.csv.count"),
+      ],
       ...stats.servicesByPeriod.map((s) => [s.date, s.count]),
     ]);
   };
@@ -92,13 +97,13 @@ function StaffDashboard() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Buenos días, {user?.name.split(" ")[0]}
+            {t("dashboard.greeting", { name: user?.name.split(" ")[0] ?? "" })}
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Resumen del sistema · ITI CETP</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("dashboard.staff.subtitle")}</p>
         </div>
         <div className="flex gap-2">
           <OptionSelect
-            aria-label="Período"
+            aria-label={t("dashboard.period")}
             size="sm"
             value={period}
             onValueChange={(v) => setPeriod(v as DashboardPeriod)}
@@ -110,7 +115,7 @@ function StaffDashboard() {
           {hasRole(...ADMIN_ROLES) && (
             <Button variant="secondary" size="sm" onClick={handleExport} disabled={!stats}>
               <Download className="h-3.5 w-3.5" />
-              Exportar CSV
+              {t("dashboard.exportCsv")}
             </Button>
           )}
         </div>
@@ -122,7 +127,7 @@ function StaffDashboard() {
         <CardSkeleton count={4} />
       ) : error ? (
         <div className="rounded-2xl border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
-          Error al cargar estadísticas: {error}
+          {t("dashboard.loadError", { error })}
         </div>
       ) : (
         <div
@@ -133,25 +138,25 @@ function StaffDashboard() {
         >
           <MetricCard
             icon={Package}
-            label="Equipos totales"
+            label={t("dashboard.metric.equipment")}
             value={stats?.totalEquipment ?? 0}
             color="rgb(0,122,255)"
           />
           <MetricCard
             icon={Ticket}
-            label="Tickets abiertos"
+            label={t("dashboard.metric.openTickets")}
             value={stats?.openTickets ?? 0}
             color="rgb(255,159,10)"
           />
           <MetricCard
             icon={BookOpen}
-            label="Préstamos activos"
+            label={t("dashboard.metric.activeLoans")}
             value={stats?.activeLoans ?? 0}
             color="rgb(52,199,89)"
           />
           <MetricCard
             icon={Wrench}
-            label="Solicitudes pendientes"
+            label={t("dashboard.metric.pendingServices")}
             value={stats?.pendingServices ?? 0}
             color="rgb(255,69,58)"
           />
@@ -172,10 +177,10 @@ function StaffDashboard() {
               isLoading && "opacity-75 blur-xs pointer-events-none",
             )}
           >
-            <LuxPieChart data={pieData} title="Tickets por estado" />
+            <LuxPieChart data={pieData} title={t("dashboard.chart.ticketsByStatus")} />
             <LuxBarChart
               data={barData}
-              title={`Solicitudes de servicio · ${DASHBOARD_PERIOD_LABELS[period]}`}
+              title={t("dashboard.chart.services", { period: DASHBOARD_PERIOD_LABELS[period] })}
               color="rgb(0,122,255)"
             />
           </div>
@@ -191,7 +196,7 @@ function StaffDashboard() {
         >
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp className="h-4 w-4 text-primary" />
-            <p className="text-sm font-semibold text-foreground">Estado del sistema</p>
+            <p className="text-sm font-semibold text-foreground">{t("dashboard.systemState")}</p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {pieData.map((item) => (

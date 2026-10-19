@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { Lock, Type } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
+import { useI18n } from "@/hooks/useI18n";
 import { gql, initials, errorMessage } from "@/lib/utils";
 import { ROLE_CONFIG, ROLE_LABELS, SPRING_TRANSITION } from "@/lib/constants";
 import { validatePassword } from "@/lib/validation";
@@ -13,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { LanguageSwitcher } from "@/components/accessibility/LanguageSwitcher";
 import { ThemeSwitcher } from "@/components/accessibility/ThemeSwitcher";
 import { FontSizeControl } from "@/components/accessibility/FontSizeControl";
 import { HighContrastToggle } from "@/components/accessibility/HighContrastToggle";
@@ -27,11 +29,12 @@ const CHANGE_PASSWORD_MUTATION = `
 
 // Datos de la cuenta: se muestran a la derecha en escritorio y debajo en el telefono
 function ProfileFields({ user }: { user: User }) {
+  const { t } = useI18n();
   const fields = [
-    { label: "Nombre completo", value: user.name },
-    { label: "Cédula", value: user.dni },
-    { label: "Email", value: user.email },
-    { label: "Rol", value: ROLE_LABELS[user.role] },
+    { label: t("profile.field.name"), value: user.name },
+    { label: t("profile.field.dni"), value: user.dni },
+    { label: t("profile.field.email"), value: user.email },
+    { label: t("profile.field.role"), value: ROLE_LABELS[user.role] },
   ];
   return (
     <>
@@ -47,6 +50,7 @@ function ProfileFields({ user }: { user: User }) {
 
 export function ProfilePage() {
   const { user } = useAuth();
+  const { t } = useI18n();
   const { dyslexicFont, toggleDyslexicFont } = useTheme();
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -62,7 +66,7 @@ export function ProfilePage() {
     setPwError("");
     setPwSuccess(false);
     if (newPw !== confirmPw) {
-      setPwError("Las contraseñas no coinciden.");
+      setPwError(t("profile.password.mismatch"));
       return;
     }
     const invalid = validatePassword(newPw);
@@ -78,7 +82,7 @@ export function ProfilePage() {
       setNewPw("");
       setConfirmPw("");
     } catch (err) {
-      setPwError(errorMessage(err, "Error al cambiar contraseña"));
+      setPwError(errorMessage(err, t("profile.password.failed")));
     } finally {
       setSaving(false);
     }
@@ -87,8 +91,10 @@ export function ProfilePage() {
   return (
     <div className="flex flex-col space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Perfil</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Tu información y preferencias</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          {t("profile.title")}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-0.5">{t("profile.subtitle")}</p>
       </div>
 
       <motion.div
@@ -128,14 +134,14 @@ export function ProfilePage() {
               <CardTitle>
                 <div className="flex items-center gap-2">
                   <Lock className="h-4 w-4" />
-                  Cambiar contraseña
+                  {t("profile.password.title")}
                 </div>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleChangePassword} className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="current-pw">Contraseña actual</Label>
+                  <Label htmlFor="current-pw">{t("profile.password.current")}</Label>
                   <Input
                     id="current-pw"
                     type="password"
@@ -145,7 +151,7 @@ export function ProfilePage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="new-pw">Nueva contraseña</Label>
+                  <Label htmlFor="new-pw">{t("profile.password.new")}</Label>
                   <Input
                     id="new-pw"
                     type="password"
@@ -155,7 +161,7 @@ export function ProfilePage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="confirm-pw">Confirmar nueva contraseña</Label>
+                  <Label htmlFor="confirm-pw">{t("profile.password.confirm")}</Label>
                   <Input
                     id="confirm-pw"
                     type="password"
@@ -167,12 +173,12 @@ export function ProfilePage() {
                 <ErrorAlert>{pwError}</ErrorAlert>
                 {pwSuccess && (
                   <div className="rounded-xl bg-[rgba(52,199,89,0.08)] border border-success-border p-3 text-sm text-success">
-                    Contraseña actualizada correctamente.
+                    {t("profile.password.success")}
                   </div>
                 )}
                 <div className="flex justify-end">
                   <Button type="submit" size="sm" disabled={saving}>
-                    {saving ? "Guardando..." : "Actualizar contraseña"}
+                    {saving ? t("common.saving") : t("profile.password.submit")}
                   </Button>
                 </div>
               </form>
@@ -184,39 +190,55 @@ export function ProfilePage() {
               <CardTitle>
                 <div className="flex items-center gap-2">
                   <Type className="h-4 w-4" />
-                  Accesibilidad
+                  {t("profile.a11y.title")}
                 </div>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-foreground">Tema</p>
-                  <p className="text-xs text-muted-foreground">Claro u oscuro</p>
+                  <p className="text-sm font-medium text-foreground">{t("profile.a11y.theme")}</p>
+                  <p className="text-xs text-muted-foreground">{t("profile.a11y.themeHelp")}</p>
                 </div>
                 <ThemeSwitcher />
               </div>
               <Separator />
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-foreground">Tamaño de fuente</p>
-                  <p className="text-xs text-muted-foreground">S · M · L · XL</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {t("profile.a11y.language")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{t("profile.a11y.languageHelp")}</p>
+                </div>
+                <LanguageSwitcher />
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    {t("profile.a11y.fontSize")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{t("profile.a11y.fontSizeHelp")}</p>
                 </div>
                 <FontSizeControl />
               </div>
               <Separator />
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-foreground">Alto contraste</p>
-                  <p className="text-xs text-muted-foreground">Mayor visibilidad de bordes</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {t("profile.a11y.contrast")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{t("profile.a11y.contrastHelp")}</p>
                 </div>
                 <HighContrastToggle />
               </div>
               <Separator />
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-foreground">Fuente OpenDyslexic</p>
-                  <p className="text-xs text-muted-foreground">Mayor legibilidad para dislexia</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {t("profile.a11y.dyslexic")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{t("profile.a11y.dyslexicHelp")}</p>
                 </div>
                 <button
                   onClick={toggleDyslexicFont}

@@ -4,7 +4,8 @@ import { ArrowLeft } from "lucide-react";
 import { gql, errorMessage } from "@/lib/utils";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useLocations } from "@/hooks/useLocations";
-import { ROUTES, EQUIPMENT_KINDS } from "@/lib/constants";
+import { useI18n } from "@/hooks/useI18n";
+import { ROUTES, EQUIPMENT_KINDS, equipmentKindLabel } from "@/lib/constants";
 import {
   suggestMachineId,
   validateComponent,
@@ -98,6 +99,7 @@ interface EquipmentFormProps {
 
 // Con :id en la ruta edita el registro existente; sin :id da de alta uno nuevo
 export function EquipmentForm({ mode }: EquipmentFormProps) {
+  const { t } = useI18n();
   const { id } = useParams<{ id: string }>();
 
   const { data, isLoading, error } = useAsync<{
@@ -117,9 +119,7 @@ export function EquipmentForm({ mode }: EquipmentFormProps) {
   if (isLoading && !data) return <TableSkeleton rows={4} cols={2} />;
   if (error || !record || record.deletedAt) {
     return (
-      <div className="text-center py-16 text-muted-foreground">
-        {error ?? "El equipo no existe o fue dado de baja"}
-      </div>
+      <div className="text-center py-16 text-muted-foreground">{error ?? t("form.missing")}</div>
     );
   }
 
@@ -139,6 +139,7 @@ interface EquipmentFormFieldsProps {
 }
 
 function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -173,12 +174,12 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
         ? (validateProduct({ ...form, location }) as FieldErrors<keyof FormState>)
         : validateComponent(form);
     if (mode === "product" && takenIds.includes(form.machineId.trim().toUpperCase())) {
-      errors.machineId = `Ya existe un equipo con ID ${form.machineId.trim().toUpperCase()}`;
+      errors.machineId = t("error.product.dupId", { id: form.machineId.trim().toUpperCase() });
     }
     // Sin ubicacion, el error va en su campo y no como "ID invalido"
     if (mode === "product" && !location) {
-      errors.locationId = "Elegí la ubicación";
-      if (errors.machineId === "Ubicación inválida") delete errors.machineId;
+      errors.locationId = t("form.pickLocation");
+      if (errors.machineId === t("validation.locationInvalid")) delete errors.machineId;
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
@@ -216,7 +217,7 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
       }
       navigate(isEdit ? detailRoute : ROUTES.INVENTORY);
     } catch (err) {
-      setError(errorMessage(err, "Error al guardar"));
+      setError(errorMessage(err, t("form.saveFailed")));
     } finally {
       setSaving(false);
     }
@@ -243,11 +244,11 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
 
   const title = isEdit
     ? mode === "product"
-      ? "Editar equipo"
-      : "Editar componente"
+      ? t("form.title.editProduct")
+      : t("form.title.editComponent")
     : mode === "product"
-      ? "Nuevo equipo"
-      : "Nuevo componente";
+      ? t("form.title.newProduct")
+      : t("form.title.newComponent");
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -262,7 +263,9 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle>{mode === "product" ? "Datos del equipo" : "Datos del componente"}</CardTitle>
+          <CardTitle>
+            {mode === "product" ? t("form.card.product") : t("form.card.component")}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5" noValidate>
@@ -270,17 +273,20 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <Label htmlFor="kind">Tipo</Label>
+                    <Label htmlFor="kind">{t("label.type")}</Label>
                     <OptionSelect
                       id="kind"
                       className="w-full"
                       value={form.kind}
                       onValueChange={(v) => update("kind", v)}
-                      options={EQUIPMENT_KINDS.map((k) => ({ value: k, label: k }))}
+                      options={EQUIPMENT_KINDS.map((k) => ({
+                        value: k,
+                        label: equipmentKindLabel(k),
+                      }))}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="location">Ubicación</Label>
+                    <Label htmlFor="location">{t("label.location")}</Label>
                     <LocationSearchSelect
                       id="location"
                       items={locations}
@@ -294,11 +300,10 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  {field("machineId", "ID de máquina", { mono: true, upper: true })}
+                  {field("machineId", t("label.machineId"), { mono: true, upper: true })}
                   {suggestion && (
                     <p className="text-xs text-muted-foreground">
-                      Formato: ubicación, tipo y número (L1-PC3 = PC 3 del Laboratorio 1). Próximo
-                      libre:{" "}
+                      {t("form.machineIdHelp")}{" "}
                       <button
                         type="button"
                         className="font-mono text-primary font-semibold hover:underline cursor-pointer"
@@ -310,33 +315,33 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  {field("brand", "Marca")}
-                  {field("model", "Modelo")}
+                  {field("brand", t("label.brand"))}
+                  {field("model", t("label.model"))}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  {field("serialNumber", "N° de serie", { mono: true, upper: true })}
-                  {field("partNumber", "Part number", { mono: true, upper: true })}
+                  {field("serialNumber", t("label.serialNumber"), { mono: true, upper: true })}
+                  {field("partNumber", t("label.partNumber"), { mono: true, upper: true })}
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="issues">Fallas / Observaciones</Label>
+                  <Label htmlFor="issues">{t("inventory.detail.issues")}</Label>
                   <Textarea
                     id="issues"
                     value={form.issues}
                     onChange={(e) => update("issues", e.target.value)}
-                    placeholder="Opcional"
+                    placeholder={t("form.issuesPlaceholder")}
                   />
                 </div>
               </>
             ) : (
               <>
                 <div className="grid grid-cols-2 gap-4">
-                  {field("name", "Nombre del componente")}
-                  {field("model", "Modelo")}
+                  {field("name", t("form.componentName"))}
+                  {field("model", t("label.model"))}
                 </div>
-                {field("manufacturer", "Fabricante")}
+                {field("manufacturer", t("label.manufacturer"))}
                 <div className="grid grid-cols-2 gap-4">
-                  {field("serialNumber", "N° de serie", { mono: true, upper: true })}
-                  {field("partNumber", "Part number", { mono: true, upper: true })}
+                  {field("serialNumber", t("label.serialNumber"), { mono: true, upper: true })}
+                  {field("partNumber", t("label.partNumber"), { mono: true, upper: true })}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <label className="flex items-center gap-3 cursor-pointer">
@@ -346,7 +351,7 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
                       onChange={(e) => update("isFactory", e.target.checked)}
                       className="h-4 w-4 rounded"
                     />
-                    <span className="text-sm text-foreground">¿Es de fábrica?</span>
+                    <span className="text-sm text-foreground">{t("form.isFactory")}</span>
                   </label>
                   <label className="flex items-center gap-3 cursor-pointer">
                     <input
@@ -355,7 +360,7 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
                       onChange={(e) => update("isWorking", e.target.checked)}
                       className="h-4 w-4 rounded"
                     />
-                    <span className="text-sm text-foreground">¿Está funcionando?</span>
+                    <span className="text-sm text-foreground">{t("form.isWorking")}</span>
                   </label>
                 </div>
               </>
@@ -365,10 +370,10 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
 
             <div className="flex gap-2 justify-end pt-2">
               <Button type="button" variant="secondary" asChild>
-                <Link to={backRoute}>Cancelar</Link>
+                <Link to={backRoute}>{t("common.cancel")}</Link>
               </Button>
               <Button type="submit" disabled={saving}>
-                {saving ? "Guardando..." : isEdit ? "Guardar cambios" : "Guardar"}
+                {saving ? t("common.saving") : isEdit ? t("form.saveChanges") : t("common.save")}
               </Button>
             </div>
           </form>

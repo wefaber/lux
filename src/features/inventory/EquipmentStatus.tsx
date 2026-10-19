@@ -1,8 +1,9 @@
 import { motion } from "motion/react";
 import { useAsync } from "@/hooks/useSkeleton";
-import { gql } from "@/lib/utils";
+import { gql, formatDate } from "@/lib/utils";
+import { useI18n } from "@/hooks/useI18n";
 import { useLocations } from "@/hooks/useLocations";
-import { EQUIPMENT_STATUS_CONFIG, SPRING_TRANSITION } from "@/lib/constants";
+import { EQUIPMENT_STATUS_CONFIG, SPRING_TRANSITION, equipmentKindLabel } from "@/lib/constants";
 import type { Product } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { LuxPieChart } from "@/components/charts/PieChart";
@@ -27,6 +28,7 @@ const LOCATION_PALETTE = [
 ];
 
 export function EquipmentStatus() {
+  const { t } = useI18n();
   const { data, isLoading } = useAsync<{ products: Product[] }>(() => gql(PRODUCTS_QUERY), []);
   const products = data?.products ?? [];
   const { locations } = useLocations();
@@ -45,10 +47,10 @@ export function EquipmentStatus() {
   return (
     <div className="space-y-8 max-w-6xl">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Estado de Equipos</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Distribución y estado de equipos por ubicación
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          {t("equipmentStatus.title")}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-0.5">{t("equipmentStatus.subtitle")}</p>
       </div>
 
       {isLoading ? (
@@ -58,10 +60,10 @@ export function EquipmentStatus() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <LuxPieChart data={byLocation} title="Equipos por ubicación" />
+          <LuxPieChart data={byLocation} title={t("equipmentStatus.byLocation")} />
           <LuxBarChart
             data={incidentsByLocation}
-            title="Incidentes por ubicación"
+            title={t("equipmentStatus.incidents")}
             color="rgb(255,159,10)"
           />
         </div>
@@ -79,16 +81,23 @@ export function EquipmentStatus() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border">
-                {["Ubicación", "N° Equipo", "Estado", "Última actualización", "Tipo", "Fallas"].map(
-                  (h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
-                    >
-                      {h}
-                    </th>
-                  ),
-                )}
+                {(
+                  [
+                    "label.location",
+                    "equipmentStatus.col.number",
+                    "label.status",
+                    "equipmentStatus.col.lastUpdate",
+                    "label.type",
+                    "equipmentStatus.col.faults",
+                  ] as const
+                ).map((h) => (
+                  <th
+                    key={h}
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                  >
+                    {t(h)}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -110,16 +119,20 @@ export function EquipmentStatus() {
                       <Badge color={statusConf.color}>{statusConf.label}</Badge>
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {new Date(p.updatedAt).toLocaleDateString("es-UY")}
+                      {formatDate(p.updatedAt)}
                     </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">{p.kind}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                      {equipmentKindLabel(p.kind)}
+                    </td>
                     <td className="px-4 py-3">
                       {p.issues ? (
                         <span className="text-xs text-warning block min-w-40 max-w-xs whitespace-normal">
                           {p.issues}
                         </span>
                       ) : (
-                        <span className="text-xs text-muted-foreground">Sin fallas</span>
+                        <span className="text-xs text-muted-foreground">
+                          {t("equipmentStatus.noFaults")}
+                        </span>
                       )}
                     </td>
                   </motion.tr>

@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { ArrowLeft, Edit2, Trash2 } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
+import { useI18n } from "@/hooks/useI18n";
 import { gql, formatDate } from "@/lib/utils";
 import { ROUTES, SPRING_TRANSITION } from "@/lib/constants";
 import type { Component } from "@/lib/types";
@@ -26,6 +27,7 @@ const COMPONENT_QUERY = `
 export function ComponentDetail() {
   const { id } = useParams<{ id: string }>();
   const { hasRole } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [retireOpen, setRetireOpen] = useState(false);
   const { data, isLoading, error } = useAsync<{ component: Component | null }>(
@@ -49,19 +51,19 @@ export function ComponentDetail() {
             ? "..."
             : component
               ? `${component.name} — ${component.model}`
-              : "Componente no encontrado"}
+              : t("component.detail.notFound")}
         </h1>
         {canEdit && component && (
           <div className="flex gap-2">
             <Button variant="secondary" size="sm" asChild>
               <Link to={`${ROUTES.INVENTORY}/componente/${id}/editar`}>
                 <Edit2 className="h-3.5 w-3.5" />
-                Editar
+                {t("inventory.detail.edit")}
               </Link>
             </Button>
             <Button variant="destructive" size="sm" onClick={() => setRetireOpen(true)}>
               <Trash2 className="h-3.5 w-3.5" />
-              Dar de baja
+              {t("inventory.detail.retire")}
             </Button>
           </div>
         )}
@@ -78,7 +80,7 @@ export function ComponentDetail() {
         />
       )}
 
-      {error && <ErrorAlert>Error: {error}</ErrorAlert>}
+      {error && <ErrorAlert>{t("common.error", { error })}</ErrorAlert>}
 
       {component && (
         <motion.div
@@ -89,33 +91,43 @@ export function ComponentDetail() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Información del componente</CardTitle>
+                <CardTitle>{t("component.detail.info")}</CardTitle>
                 <div className="flex gap-2">
                   <Badge color={component.isFactory ? "info" : "muted"}>
-                    {component.isFactory ? "De fábrica" : "Reemplazo"}
+                    {component.isFactory
+                      ? t("component.detail.factory")
+                      : t("component.detail.replacement")}
                   </Badge>
                   <Badge color={component.isWorking ? "success" : "destructive"}>
-                    {component.isWorking ? "Funcionando" : "Con falla"}
+                    {component.isWorking
+                      ? t("component.detail.working")
+                      : t("component.detail.faulty")}
                   </Badge>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-6">
-                <DetailRow label="Nombre" value={component.name} />
-                <DetailRow label="Modelo" value={component.model} />
-                <DetailRow label="Fabricante" value={component.manufacturer} />
+                <DetailRow label={t("label.name")} value={component.name} />
+                <DetailRow label={t("label.model")} value={component.model} />
+                <DetailRow label={t("label.manufacturer")} value={component.manufacturer} />
                 <DetailRow
-                  label="N° de serie"
+                  label={t("label.serialNumber")}
                   value={<span className="font-mono text-xs">{component.serialNumber}</span>}
                 />
                 <DetailRow
-                  label="Part number"
+                  label={t("label.partNumber")}
                   value={<span className="font-mono text-xs">{component.partNumber}</span>}
                 />
-                <DetailRow label="Equipo padre" value={component.productId ?? "Independiente"} />
-                <DetailRow label="Registrado" value={formatDate(component.createdAt)} />
-                <DetailRow label="Actualizado" value={formatDate(component.updatedAt)} />
+                <DetailRow
+                  label={t("component.detail.parent")}
+                  value={component.productId ?? t("component.detail.standalone")}
+                />
+                <DetailRow
+                  label={t("inventory.detail.registered")}
+                  value={formatDate(component.createdAt)}
+                />
+                <DetailRow label={t("label.updated")} value={formatDate(component.updatedAt)} />
               </div>
             </CardContent>
           </Card>
