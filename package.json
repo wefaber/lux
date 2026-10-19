@@ -1,6 +1,6 @@
 {
   "name": "lux",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,7 +13,12 @@
     "lint:fix": "oxlint . --fix",
     "format": "oxfmt .",
     "setup": "bunx msw init public/ --save",
-    "doctor": "npx react-doctor@latest"
+    "doctor": "bunx react-doctor@latest",
+    "qa:api": "bun tests/api/run.ts",
+    "qa:agent": "bun tests/agent/run.ts",
+    "qa:triage": "bun tests/report/triage.ts",
+    "qa:doc": "bun tests/report/doc.ts",
+    "qa:typecheck": "tsc -p tests --noEmit"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.10",
@@ -47,6 +52,7 @@
     "web-haptics": "^0.0.6"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
     "@babel/core": "^7.29.0",
     "@rolldown/plugin-babel": "^0.2.3",
     "@types/babel__core": "^7.20.5",
@@ -57,6 +63,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "babel-plugin-react-compiler": "^1.0.0",
     "oxlint": "^1.67.0",
+    "playwright": "^1.64.1",
     "react-doctor": "^0.2.8",
     "typescript": "~6.0.2",
     "vite": "^8.0.12"

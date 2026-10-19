@@ -39,6 +39,7 @@ import type {
   User,
   UserRole,
 } from "@/lib/types";
+import { ASSIGNABLE_ROLES, canEditUser, canToggleUserActive } from "@/lib/roles";
 import { signToken } from "../auth";
 import { db } from "../db/client";
 import * as t from "../db/schema";
@@ -68,6 +69,24 @@ function requireRole(ctx: Ctx, roles: UserRole[]): User {
   const caller = requireAuth(ctx);
   if (!roles.includes(caller.role)) throw new GraphQLError(FORBIDDEN);
   return caller;
+}
+
+// Mismas reglas que los mocks (src/mocks/handlers.ts): el rol del root_admin es
+// fijo, nadie se vuelve root_admin y nadie se cambia su propio rol.
+function roleChangeError(caller: User, user: User, role: string): string | null {
+  if (role === user.role) return null;
+  if (user.role === "root_admin") return "El rol del Super Admin no se puede cambiar";
+  if (!ASSIGNABLE_ROLES.includes(role as UserRole)) return "No se puede asignar el rol Super Admin";
+  if (user.id === caller.id) return "No podés cambiar tu propio rol";
+  return null;
+}
+
+// El root_admin no se desactiva y nadie se desactiva a sí mismo (RF-USR-005).
+function activationError(caller: User, user: User): string | null {
+  if (canToggleUserActive(caller, user)) return null;
+  if (user.role === "root_admin") return "El Super Admin no se puede desactivar";
+  if (user.id === caller.id) return "No podés desactivar tu propia cuenta";
+  return FORBIDDEN;
 }
 
 function filterByStatus<T extends { status: string }>(items: T[], status?: string | null): T[] {
@@ -774,6 +793,9 @@ const Mutation = {
   ) => {
     requireRole(ctx, ELEVATED_ROLES);
     const { input } = args;
+    if (!ASSIGNABLE_ROLES.includes(input.role as UserRole)) {
+      throw new GraphQLError("No se puede asignar el rol Super Admin");
+    }
     const user: User = {
       id: nextId(USER_ID_PREFIX[input.role as UserRole] ?? "u-", ctx.state.users),
       name: input.name,
@@ -798,10 +820,15 @@ const Mutation = {
     args: { id: string; input: Partial<Record<string, unknown>> & { password?: string } },
     ctx: Ctx,
   ) => {
-    requireRole(ctx, ELEVATED_ROLES);
+    const caller = requireRole(ctx, ELEVATED_ROLES);
     const user = ctx.state.users.find((u) => u.id === args.id);
     if (!user) throw new GraphQLError("Usuario no encontrado");
+    if (!canEditUser(caller, user)) throw new GraphQLError(FORBIDDEN);
     const { password, ...rest } = args.input;
+    const role = typeof rest.role === "string" ? rest.role : user.role;
+    const togglesActive = typeof rest.isActive === "boolean" && rest.isActive !== user.isActive;
+    const error = roleChangeError(caller, user, role) ?? (togglesActive ? activationError(caller, user) : null);
+    if (error) throw new GraphQLError(error);
     const next = { ...rest, updatedAt: nowIso() } as Partial<typeof t.users.$inferInsert>;
     const passwordHash = password
       ? await Bun.password.hash(String(password), { algorithm: "argon2id" })

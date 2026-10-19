@@ -1,0 +1,74 @@
+name: QA
+
+# Corre la suite de casos de prueba contra https://dev.eternum.lat despues de
+# cada deploy exitoso del preview. Nivel 1 (API) cuesta cero y bloquea; el
+# agente de interfaz (nivel 2) usa un modelo de bajo costo y solo corre si se
+# pide a mano o si hay clave cargada.
+on:
+  workflow_run:
+    workflows: ["Deploy dev preview"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      agent:
+        description: "Correr tambien el agente de interfaz (usa API de pago)"
+        type: boolean
+        default: false
+      provider:
+        description: "Modelo del agente"
+        type: choice
+        options: [deepseek, anthropic]
+        default: deepseek
+
+concurrency:
+  group: qa-lux-dev
+  cancel-in-progress: true
+
+jobs:
+  qa:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: self-hosted
+    timeout-minutes: 20
+    env:
+      QA_TARGET: https://dev.eternum.lat
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Si el deploy corrio sobre un commit, probamos ese mismo commit.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Instalar dependencias
+        run: /opt/bun/bun install --frozen-lockfile
+
+      - name: Tipos de la suite
+        run: /opt/bun/bun run qa:typecheck
+
+      - name: Nivel 1 - API
+        run: /opt/bun/bun run qa:api
+
+      - name: Borradores de issues
+        if: failure()
+        run: /opt/bun/bun run qa:triage
+
+      - name: Nivel 2 - agente de interfaz
+        if: github.event_name == 'workflow_dispatch' && inputs.agent
+        env:
+          QA_UI_TARGET: https://dev.eternum.lat
+          QA_MAX_USD: "0.50"
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          /opt/bun/bunx playwright install --with-deps chromium
+          /opt/bun/bun run qa:agent --provider "${{ inputs.provider }}"
+
+      - name: Documento de casos y resultados
+        if: always()
+        run: /opt/bun/bun run qa:doc --env "dev.eternum.lat" > tests/out/casos.md
+
+      - name: Guardar reportes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-${{ github.run_id }}
+          path: tests/out/
+          retention-days: 30
