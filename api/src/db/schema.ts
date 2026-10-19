@@ -1,5 +1,9 @@
 import { boolean, index, integer, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
 
+// Bajas logicas: `deleted_at` (texto ISO) en las tablas que acumulan historial.
+// La fila nunca se borra: la API deja de mostrarla, y la auditoria y la base
+// conservan el registro. En `users` la baja es `is_active = false`.
+
 // Timestamps: se guardan como texto ISO-8601 UTC. El contrato GraphQL los expone
 // como String y el frontend los ordena con localeCompare / los parsea con
 // new Date(); el texto ISO es ordenable y evita conversiones de zona horaria.
@@ -93,6 +97,7 @@ export const tickets = pgTable(
     createdAt,
     updatedAt,
     resolvedAt: text("resolved_at"),
+    deletedAt: text("deleted_at"),
   },
   (t) => [
     index("tickets_status_idx").on(t.status),
@@ -117,6 +122,7 @@ export const loans = pgTable(
     rejectionReason: text("rejection_reason"),
     createdAt,
     updatedAt,
+    deletedAt: text("deleted_at"),
   },
   (t) => [index("loans_user_idx").on(t.userId), index("loans_status_idx").on(t.status)],
 );
@@ -145,6 +151,7 @@ export const serviceRequests = pgTable(
     resolutionText: text("resolution_text"),
     createdAt,
     updatedAt,
+    deletedAt: text("deleted_at"),
   },
   (t) => [index("services_status_idx").on(t.status)],
 );
@@ -162,6 +169,7 @@ export const interventions = pgTable(
     performedAt: text("performed_at").notNull(),
     createdAt,
     updatedAt,
+    deletedAt: text("deleted_at"),
   },
   (t) => [index("interventions_equipment_idx").on(t.equipmentId)],
 );
@@ -175,6 +183,7 @@ export const comments = pgTable(
     authorId: text("author_id").notNull(),
     body: text("body").notNull(),
     createdAt,
+    deletedAt: text("deleted_at"),
   },
   (t) => [index("comments_entity_idx").on(t.entityType, t.entityId)],
 );

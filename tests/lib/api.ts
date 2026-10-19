@@ -180,6 +180,34 @@ export class ApiCtx {
     return d.createTicket.id;
   }
 
+  // Préstamo pendiente del solicitante sobre un equipo nuevo (o el indicado).
+  async newLoan(equipmentId?: string): Promise<{ id: string; equipmentId: string }> {
+    const eq = equipmentId ?? (await this.newProduct()).id;
+    const sol = await this.as("solicitante");
+    const day = 24 * 3600 * 1000;
+    const d = await sol.ok<{ createLoan: { id: string } }>(
+      `mutation QaCreateLoan($input: LoanInput!) { createLoan(input: $input) { id } }`,
+      {
+        input: {
+          equipmentId: eq,
+          issueDate: new Date(Date.now() + day).toISOString(),
+          returnDate: new Date(Date.now() + 2 * day).toISOString(),
+        },
+      },
+    );
+    return { id: d.createLoan.id, equipmentId: eq };
+  }
+
+  // Solicitud de servicio nueva del solicitante, pendiente.
+  async newService(): Promise<string> {
+    const sol = await this.as("solicitante");
+    const d = await sol.ok<{ createServiceRequest: { id: string } }>(
+      `mutation QaCreateService($input: ServiceRequestInput!) { createServiceRequest(input: $input) { id } }`,
+      { input: { type: "other", description: this.tag("Instalar un programa en el laboratorio") } },
+    );
+    return d.createServiceRequest.id;
+  }
+
   // Texto único por corrida, para que los datos que crea la suite se reconozcan.
   tag(label: string): string {
     this.seq += 1;

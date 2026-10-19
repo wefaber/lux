@@ -8,6 +8,13 @@
       "when": 1791780582577,
       "tag": "0000_uneven_proemial_gods",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792389878320,
+      "tag": "0001_soft_delete_columns",
+      "breakpoints": true
     }
   ]
 }

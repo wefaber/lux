@@ -107,8 +107,11 @@ function maxSuffix(prefix: string, items: Array<{ id: string }>): number {
   }, 0);
 }
 
-function nextId(prefix: string, items: Array<{ id: string }>, pad = 0): string {
-  return prefix + String(maxSuffix(prefix, items) + 1).padStart(pad, "0");
+// Las filas con baja logica no estan en `items` pero siguen ocupando su id.
+function nextId(state: State, prefix: string, items: Array<{ id: string }>, pad = 0): string {
+  const retired = Array.from(state.deletedIds, (id) => ({ id }));
+  const last = Math.max(maxSuffix(prefix, items), maxSuffix(prefix, retired));
+  return prefix + String(last + 1).padStart(pad, "0");
 }
 
 const USER_ID_PREFIX: Record<UserRole, string> = {
@@ -188,6 +191,31 @@ async function dropNotices(
       state.notices.splice(i, 1);
     }
   }
+}
+
+// Al dar de baja algo se retiran todos sus avisos pendientes.
+async function dropNoticesOf(
+  state: State,
+  entityType: NoticeEntity,
+  entityId: string,
+): Promise<void> {
+  await db
+    .delete(t.notices)
+    .where(and(eq(t.notices.entityType, entityType), eq(t.notices.entityId, entityId)));
+  state.notices = state.notices.filter(
+    (n) => !(n.entityType === entityType && n.entityId === entityId),
+  );
+}
+
+function removeFrom<T extends { id: string }>(items: T[], byId: Map<string, T>, id: string): T[] {
+  byId.delete(id);
+  return items.filter((item) => item.id !== id);
+}
+
+// Quien puede dar de baja algo ajeno: administradores. El dueño solo cancela lo
+// suyo mientras nadie lo tomo.
+function canRetire(caller: User, ownerId: string | undefined, ownerMayCancel: boolean): boolean {
+  return ELEVATED_ROLES.includes(caller.role) || (ownerId === caller.id && ownerMayCancel);
 }
 
 // Deja un aviso a `to` sobre algo que hizo `by` (null: el sistema).
@@ -735,6 +763,24 @@ const Query = {
       .limit(ACTIVITY_LOG_LIMIT);
   },
 
+  location: (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    requireAuth(ctx);
+    const location = activeLocation(ctx.state, args.id);
+    return location ? withProductCount(ctx.state, location) : null;
+  },
+
+  intervention: (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    requireRole(ctx, STAFF_ROLES);
+    return ctx.state.interventions.find((i) => i.id === args.id) ?? null;
+  },
+
+  comment: (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    const caller = requireAuth(ctx);
+    const comment = ctx.state.comments.find((c) => c.id === args.id) ?? null;
+    if (comment) assertCommentAccess(ctx.state, caller, comment.entityType, comment.entityId);
+    return comment;
+  },
+
   locations: (_p: unknown, _a: unknown, ctx: Ctx) => {
     requireAuth(ctx);
     return ctx.state.locations
@@ -821,7 +867,7 @@ const Mutation = {
       throw conflict("Ya existe un usuario con ese documento");
     }
     const user: User = {
-      id: nextId(USER_ID_PREFIX[input.role as UserRole] ?? "u-", ctx.state.users),
+      id: nextId(ctx.state, USER_ID_PREFIX[input.role as UserRole] ?? "u-", ctx.state.users),
       name: input.name,
       dni: input.dni,
       email: input.email,
@@ -914,7 +960,7 @@ const Mutation = {
     assertRules(firstError(validateProduct(fields)), () => duplicateProductError(ctx.state, fields));
     if (!location) throw invalid("Ubicación inválida");
     const product: Product = {
-      id: nextId("prod-", ctx.state.products),
+      id: nextId(ctx.state, "prod-", ctx.state.products),
       type: "product",
       machineId: fields.machineId,
       kind: fields.kind,
@@ -1074,7 +1120,7 @@ const Mutation = {
     const error = firstError(validateComponent(fields));
     if (error) throw invalid(error);
     const component = {
-      id: nextId("comp-", ctx.state.components),
+      id: nextId(ctx.state, "comp-", ctx.state.components),
       type: "component" as const,
       name: fields.name,
       model: fields.model,
@@ -1179,7 +1225,7 @@ const Mutation = {
       ? (ctx.state.products.find((p) => p.id === input.equipmentId) ?? null)
       : null;
     const ticket: Ticket = {
-      id: nextId("tkt-", ctx.state.tickets, 3),
+      id: nextId(ctx.state, "tkt-", ctx.state.tickets, 3),
       title: input.title,
       description: input.description,
       category: input.category as Ticket["category"],
@@ -1388,7 +1434,7 @@ const Mutation = {
       ? ctx.state.components.filter((c) => input.componentIds!.includes(c.id))
       : [];
     const loan: Loan = {
-      id: nextId("loan-", ctx.state.loans, 3),
+      id: nextId(ctx.state, "loan-", ctx.state.loans, 3),
       equipment,
       user: loanUser,
       status: "pending",
@@ -1537,7 +1583,7 @@ const Mutation = {
     const caller = requireAuth(ctx);
     const { input } = args;
     const service: ServiceRequest = {
-      id: nextId("svc-", ctx.state.services, 3),
+      id: nextId(ctx.state, "svc-", ctx.state.services, 3),
       type: input.type as ServiceRequest["type"],
       status: "pending",
       requestedBy: caller,
@@ -1639,6 +1685,98 @@ const Mutation = {
     return service;
   },
 
+  softDeleteTicket: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    const caller = requireAuth(ctx);
+    const { state } = ctx;
+    const ticket = state.tickets.find((t) => t.id === args.id);
+    if (!ticket) throw notFound("Ticket no encontrado");
+    const unclaimed = ticket.status === "pending" && !ticket.assignedTo;
+    if (!canRetire(caller, ticket.submittedBy.id, unclaimed)) throw forbidden();
+    const now = nowIso();
+    await db
+      .update(t.tickets)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(eq(t.tickets.id, ticket.id));
+    await dropNoticesOf(state, "ticket", ticket.id);
+    state.tickets = removeFrom(state.tickets, state.ticketsById, ticket.id);
+    state.deletedIds.add(ticket.id);
+    return true;
+  },
+
+  softDeleteLoan: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    const caller = requireAuth(ctx);
+    const { state } = ctx;
+    await syncOverdueLoans(state);
+    const loan = state.loans.find((l) => l.id === args.id);
+    if (!loan) throw notFound("Préstamo no encontrado");
+    if (!canRetire(caller, loan.user.id, loan.status === "pending")) throw forbidden();
+    if (loan.status === "active" || loan.status === "overdue") {
+      throw conflict("No se puede dar de baja un préstamo en curso: registrá la devolución primero");
+    }
+    const now = nowIso();
+    await db
+      .update(t.loans)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(eq(t.loans.id, loan.id));
+    await dropNoticesOf(state, "loan", loan.id);
+    state.loans = removeFrom(state.loans, state.loansById, loan.id);
+    state.deletedIds.add(loan.id);
+    return true;
+  },
+
+  softDeleteServiceRequest: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    const caller = requireAuth(ctx);
+    const { state } = ctx;
+    const service = state.services.find((s) => s.id === args.id);
+    if (!service) throw notFound("Solicitud no encontrada");
+    const unclaimed = service.status === "pending" && !service.assignedTo;
+    if (!canRetire(caller, service.requestedBy.id, unclaimed)) throw forbidden();
+    if (service.status === "in_progress") {
+      throw conflict("No se puede dar de baja una solicitud en curso");
+    }
+    const now = nowIso();
+    await db
+      .update(t.serviceRequests)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(eq(t.serviceRequests.id, service.id));
+    await dropNoticesOf(state, "service_request", service.id);
+    state.services = removeFrom(state.services, state.servicesById, service.id);
+    state.deletedIds.add(service.id);
+    return true;
+  },
+
+  softDeleteIntervention: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    const caller = requireRole(ctx, STAFF_ROLES);
+    const { state } = ctx;
+    const intervention = state.interventions.find((i) => i.id === args.id);
+    if (!intervention) throw notFound("Intervención no encontrada");
+    if (!canRetire(caller, intervention.technician.id, true)) throw forbidden();
+    const now = nowIso();
+    await db
+      .update(t.interventions)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(eq(t.interventions.id, intervention.id));
+    state.interventions = removeFrom(state.interventions, state.interventionsById, intervention.id);
+    state.deletedIds.add(intervention.id);
+    return true;
+  },
+
+  softDeleteComment: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    const caller = requireAuth(ctx);
+    const { state } = ctx;
+    const comment = state.comments.find((c) => c.id === args.id);
+    if (!comment) throw notFound("Comentario no encontrado");
+    assertCommentAccess(state, caller, comment.entityType, comment.entityId);
+    if (!canRetire(caller, comment.author.id, true)) throw forbidden();
+    await db
+      .update(t.comments)
+      .set({ deletedAt: nowIso() })
+      .where(eq(t.comments.id, comment.id));
+    state.comments = removeFrom(state.comments, state.commentsById, comment.id);
+    state.deletedIds.add(comment.id);
+    return true;
+  },
+
   changePassword: async (
     _p: unknown,
     args: { currentPassword: string; newPassword: string },
@@ -1670,7 +1808,7 @@ const Mutation = {
     assertRules(null, () => duplicateLocationError(ctx.state, { ...fields, code }));
     const now = nowIso();
     const location: Location = {
-      id: nextId("loc-", ctx.state.locations),
+      id: nextId(ctx.state, "loc-", ctx.state.locations),
       kind: fields.kind as Location["kind"],
       number: fields.number,
       name: fields.name,
@@ -1797,7 +1935,7 @@ const Mutation = {
       interventionTicketError(ctx.state, ticketId, product.id);
     if (error) throw invalid(error);
     const intervention = {
-      id: nextId("int-", ctx.state.interventions, 3),
+      id: nextId(ctx.state, "int-", ctx.state.interventions, 3),
       equipmentId: product.id,
       technician: caller,
       type: fields.type as (typeof ctx.state.interventions)[number]["type"],
@@ -1883,7 +2021,7 @@ const Mutation = {
     const error = validateComment(input.body);
     if (error) throw invalid(error);
     const comment: Comment = {
-      id: nextId("cmt-", ctx.state.comments, 3),
+      id: nextId(ctx.state, "cmt-", ctx.state.comments, 3),
       entityType,
       entityId: input.entityId,
       author: caller,
@@ -1943,7 +2081,7 @@ const Mutation = {
     );
     const now = nowIso();
     const reservation: Reservation = {
-      id: nextId("rsv-", ctx.state.reservations, 3),
+      id: nextId(ctx.state, "rsv-", ctx.state.reservations, 3),
       resourceType: input.resourceType,
       equipment,
       location,
@@ -2172,6 +2310,11 @@ const AUDIT: Record<keyof typeof Mutation, AuditSpec> = {
   updateServiceRequest: { entity: "ServiceRequest" },
   claimServiceRequest: { entity: "ServiceRequest" },
   assignServiceRequest: { entity: "ServiceRequest", details: (a) => `Asignado a ${a.technicianId}` },
+  softDeleteTicket: { entity: "Ticket", details: () => "Baja lógica (deleted_at)" },
+  softDeleteLoan: { entity: "Loan", details: () => "Baja lógica (deleted_at)" },
+  softDeleteServiceRequest: { entity: "ServiceRequest", details: () => "Baja lógica (deleted_at)" },
+  softDeleteIntervention: { entity: "Intervention", details: () => "Baja lógica (deleted_at)" },
+  softDeleteComment: { entity: "Comment", details: () => "Baja lógica (deleted_at)" },
   changePassword: { entity: "User", id: (_a, _r, ctx) => ctx.caller?.id ?? "-", details: () => null },
   createLocation: { entity: "Location" },
   updateLocation: { entity: "Location" },
