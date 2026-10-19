@@ -1,68 +1,59 @@
 import { motion } from "motion/react";
 import { Shield, CheckCircle2, XCircle } from "lucide-react";
+import { useI18n } from "@/hooks/useI18n";
 import { ROLE_LABELS, SPRING_TRANSITION } from "@/lib/constants";
 import type { UserRole } from "@/lib/types";
 import { ADMIN_ROLES, STAFF_ROLES, USER_ROLES } from "@/lib/roles";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
-const PERMISSIONS: Array<{ label: string; key: string; roles: UserRole[] }> = [
-  {
-    label: "Ver dashboard",
-    key: "view_dashboard",
-    roles: USER_ROLES,
-  },
-  {
-    label: "Ver inventario",
-    key: "view_inventory",
-    roles: USER_ROLES,
-  },
-  { label: "Editar inventario", key: "edit_inventory", roles: STAFF_ROLES },
-  {
-    label: "Ver tickets",
-    key: "view_tickets",
-    roles: USER_ROLES,
-  },
-  {
-    label: "Crear tickets",
-    key: "create_tickets",
-    roles: USER_ROLES,
-  },
-  { label: "Asignar tickets", key: "assign_tickets", roles: STAFF_ROLES },
-  { label: "Resolver tickets", key: "resolve_tickets", roles: STAFF_ROLES },
-  {
-    label: "Solicitar préstamos",
-    key: "request_loans",
-    roles: USER_ROLES,
-  },
-  {
-    label: "Ver todos los préstamos",
-    key: "view_loans",
-    roles: STAFF_ROLES,
-  },
-  { label: "Gestionar préstamos", key: "manage_loans", roles: STAFF_ROLES },
-  {
-    label: "Ver solicitudes",
-    key: "view_services",
-    roles: USER_ROLES,
-  },
-  {
-    label: "Gestionar solicitudes",
-    key: "manage_services",
-    roles: STAFF_ROLES,
-  },
-  { label: "Panel de admin", key: "admin_panel", roles: ADMIN_ROLES },
-  { label: "Gestionar usuarios", key: "manage_users", roles: ADMIN_ROLES },
-  { label: "Ver logs de actividad", key: "view_logs", roles: ADMIN_ROLES },
-  { label: "Ver reportes", key: "view_reports", roles: ADMIN_ROLES },
-  { label: "Exportar datos", key: "export_data", roles: ADMIN_ROLES },
+type PermissionKey =
+  | "view_dashboard"
+  | "view_inventory"
+  | "edit_inventory"
+  | "view_tickets"
+  | "create_tickets"
+  | "assign_tickets"
+  | "resolve_tickets"
+  | "request_loans"
+  | "view_loans"
+  | "manage_loans"
+  | "view_services"
+  | "manage_services"
+  | "admin_panel"
+  | "manage_users"
+  | "view_logs"
+  | "view_reports"
+  | "export_data";
+
+const PERMISSIONS: Array<{ key: PermissionKey; roles: UserRole[] }> = [
+  { key: "view_dashboard", roles: USER_ROLES },
+  { key: "view_inventory", roles: USER_ROLES },
+  { key: "edit_inventory", roles: STAFF_ROLES },
+  { key: "view_tickets", roles: USER_ROLES },
+  { key: "create_tickets", roles: USER_ROLES },
+  { key: "assign_tickets", roles: STAFF_ROLES },
+  { key: "resolve_tickets", roles: STAFF_ROLES },
+  { key: "request_loans", roles: USER_ROLES },
+  { key: "view_loans", roles: STAFF_ROLES },
+  { key: "manage_loans", roles: STAFF_ROLES },
+  { key: "view_services", roles: USER_ROLES },
+  { key: "manage_services", roles: STAFF_ROLES },
+  { key: "admin_panel", roles: ADMIN_ROLES },
+  { key: "manage_users", roles: ADMIN_ROLES },
+  { key: "view_logs", roles: ADMIN_ROLES },
+  { key: "view_reports", roles: ADMIN_ROLES },
+  { key: "export_data", roles: ADMIN_ROLES },
 ]; // Vista de permisos por roles
 
 export function RolesConfig() {
+  const { t } = useI18n();
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">Roles y Permisos</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Matriz de control de acceso por rol</p>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">
+          {t("admin.roles.title")}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-0.5">{t("admin.roles.subtitle")}</p>
       </div>
 
       <motion.div
@@ -74,7 +65,7 @@ export function RolesConfig() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Shield className="h-4 w-4" />
-              Matriz RBAC
+              {t("admin.roles.matrix")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -83,7 +74,7 @@ export function RolesConfig() {
                 <thead>
                   <tr className="border-b border-border">
                     <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground">
-                      Permiso
+                      {t("admin.roles.permission")}
                     </th>
                     {USER_ROLES.map((r) => (
                       <th
@@ -104,7 +95,9 @@ export function RolesConfig() {
                       transition={{ ...SPRING_TRANSITION, delay: i * 0.02 }}
                       className="border-b border-border last:border-0 hover:bg-black/2 dark:hover:bg-white/3 transition-colors"
                     >
-                      <td className="px-4 py-3 text-sm text-foreground">{perm.label}</td>
+                      <td className="px-4 py-3 text-sm text-foreground">
+                        {t(`admin.roles.perm.${perm.key}`)}
+                      </td>
                       {USER_ROLES.map((r) => (
                         <td key={r} className="px-4 py-3 text-center">
                           {perm.roles.includes(r) ? (
@@ -120,10 +113,7 @@ export function RolesConfig() {
               </table>
             </div>
 
-            <p className="text-xs text-muted-foreground mt-4">
-              Los cambios de permisos toman efecto en la próxima sesión del usuario. El rol
-              root_admin no puede ser modificado ni eliminado.
-            </p>
+            <p className="text-xs text-muted-foreground mt-4">{t("admin.roles.note")}</p>
           </CardContent>
         </Card>
       </motion.div>

@@ -3,6 +3,7 @@ import { app } from "./app";
 import { core } from "./core";
 import { domain } from "./domain";
 import { errors } from "./errors";
+import { admin } from "./admin";
 import { locations } from "./locations";
 import { reservations } from "./reservations";
 import { services } from "./services";
@@ -19,6 +20,7 @@ export const en: Record<MessageKey, string> = {
   ...app,
   ...domain,
   ...errors,
+  ...admin,
   ...locations,
   ...reservations,
   ...services,

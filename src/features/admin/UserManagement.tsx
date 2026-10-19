@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Plus, Search } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
+import { useI18n } from "@/hooks/useI18n";
 import { gql, cn, errorMessage } from "@/lib/utils";
 import { ROLE_CONFIG, USER_STATUS_CONFIG } from "@/lib/constants";
 import { USER_ROLES, canEditUser, canToggleUserActive } from "@/lib/roles";
@@ -28,6 +29,7 @@ const USERS_QUERY = `
 `;
 
 export function UserManagement() {
+  const { t } = useI18n();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<UserRole | "">("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -49,14 +51,15 @@ export function UserManagement() {
 
   const handleToggleActive = async (u: User) => {
     const isActive = !u.isActive;
-    if (!confirm(`¿${isActive ? "Activar" : "Desactivar"} a ${u.name}?`)) return;
+    const question = isActive ? "admin.users.confirmActivate" : "admin.users.confirmDeactivate";
+    if (!confirm(t(question, { name: u.name }))) return;
     setActionError("");
     try {
       // UserInput exige los datos de la persona: se mandan los actuales con el estado nuevo
       const { name, dni, email, role } = u;
       await gql(UPDATE_USER_MUTATION, { id: u.id, input: { name, dni, email, role, isActive } });
     } catch (err) {
-      setActionError(errorMessage(err, "No se pudo cambiar el estado"));
+      setActionError(errorMessage(err, t("admin.users.toggleFailed")));
     }
     refetch();
   }; // Alta / baja logica: un usuario inactivo no puede iniciar sesion
@@ -68,12 +71,14 @@ export function UserManagement() {
     <div className="space-y-6">
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">Usuarios</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Gestión de accesos al sistema</p>
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">
+            {t("admin.users.title")}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("admin.users.subtitle")}</p>
         </div>
         <Button size="sm" onClick={() => setCreateOpen(true)}>
           <Plus className="h-3.5 w-3.5" />
-          Nuevo usuario
+          {t("admin.users.new")}
         </Button>
       </div>
 
@@ -81,18 +86,19 @@ export function UserManagement() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nombre, cédula, email..."
+            placeholder={t("admin.users.search")}
+            aria-label={t("admin.users.search")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
           />
         </div>
         <OptionSelect
-          aria-label="Filtrar por rol"
+          aria-label={t("admin.users.filterRole")}
           value={roleFilter}
           onValueChange={(v) => setRoleFilter(v as UserRole | "")}
           options={[
-            { value: "", label: "Todos los roles" },
+            { value: "", label: t("admin.users.allRoles") },
             ...USER_ROLES.map((r) => ({ value: r, label: ROLE_CONFIG[r].label })),
           ]}
         />
@@ -104,7 +110,7 @@ export function UserManagement() {
         <TableSkeleton rows={8} cols={5} />
       ) : users.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground text-sm font-medium">
-          No se encontraron usuarios
+          {t("admin.users.empty")}
         </div>
       ) : (
         <div
@@ -116,7 +122,14 @@ export function UserManagement() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border">
-                {["Nombre", "Cédula", "Email", "Rol", "Estado", "Acciones"].map((h) => (
+                {[
+                  t("label.name"),
+                  t("label.dni"),
+                  t("label.email"),
+                  t("label.role"),
+                  t("label.status"),
+                  t("label.actions"),
+                ].map((h) => (
                   <th
                     key={h}
                     className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
@@ -149,7 +162,7 @@ export function UserManagement() {
                       <div className="flex gap-2">
                         {canEditUser(me, u) && (
                           <Button size="sm" variant="ghost" onClick={() => setEditUser(u)}>
-                            Editar
+                            {t("common.edit")}
                           </Button>
                         )}
                         {canToggleUserActive(me, u) && (
@@ -158,7 +171,7 @@ export function UserManagement() {
                             variant={u.isActive ? "destructive" : "success"}
                             onClick={() => handleToggleActive(u)}
                           >
-                            {u.isActive ? "Desactivar" : "Activar"}
+                            {u.isActive ? t("admin.users.deactivate") : t("admin.users.activate")}
                           </Button>
                         )}
                       </div>
@@ -174,10 +187,8 @@ export function UserManagement() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nuevo usuario</DialogTitle>
-            <DialogDescription>
-              Con su cédula y contraseña va a poder ingresar al sistema.
-            </DialogDescription>
+            <DialogTitle>{t("admin.users.new")}</DialogTitle>
+            <DialogDescription>{t("admin.users.createDescription")}</DialogDescription>
           </DialogHeader>
           <UserForm
             onSuccess={() => {
@@ -191,8 +202,8 @@ export function UserManagement() {
       <Dialog open={editUser !== null} onOpenChange={(open) => !open && setEditUser(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Editar usuario</DialogTitle>
-            <DialogDescription>Modificá los datos y el rol de la persona.</DialogDescription>
+            <DialogTitle>{t("admin.users.editTitle")}</DialogTitle>
+            <DialogDescription>{t("admin.users.editDescription")}</DialogDescription>
           </DialogHeader>
           {editUser && (
             <UserForm

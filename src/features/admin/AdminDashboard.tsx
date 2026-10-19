@@ -3,12 +3,14 @@ import { Users, Shield, ActivitySquare, ArrowRight, BarChart3 } from "lucide-rea
 import { Link } from "react-router-dom";
 import { ROUTES, SPRING_TRANSITION } from "@/lib/constants";
 import { useAsync } from "@/hooks/useSkeleton";
+import { useI18n } from "@/hooks/useI18n";
 import { gql } from "@/lib/utils";
 import type { User } from "@/lib/types";
 
 const USERS_QUERY = `query GetUsers { users { id isActive role } }`;
 
 export function AdminDashboard() {
+  const { t } = useI18n();
   const { data } = useAsync<{ users: Array<Pick<User, "id" | "isActive" | "role">> }>(
     () => gql(USERS_QUERY),
     [], // Solicitud a la API
@@ -20,29 +22,29 @@ export function AdminDashboard() {
   const cards = [
     {
       icon: Users,
-      title: "Gestión de Usuarios",
-      description: `${activeUsers} usuarios activos · ${users.length} total`,
+      title: t("admin.home.users"),
+      description: t("admin.home.usersDetail", { active: activeUsers, total: users.length }),
       to: ROUTES.ADMIN_USERS,
       color: "rgb(0,122,255)",
     },
     {
       icon: Shield,
-      title: "Roles y Permisos",
-      description: `Control de acceso basado en roles`,
+      title: t("admin.home.roles"),
+      description: t("admin.home.rolesDetail"),
       to: ROUTES.ADMIN_ROLES,
       color: "rgb(255,159,10)",
     },
     {
       icon: ActivitySquare,
-      title: "Registros de Actividad",
-      description: `Historial completo del sistema`,
+      title: t("admin.home.logs"),
+      description: t("admin.home.logsDetail"),
       to: ROUTES.ADMIN_LOGS,
       color: "rgb(52,199,89)",
     },
     {
       icon: BarChart3,
-      title: "Reportes",
-      description: `Préstamos vencidos, resolución e incidentes`,
+      title: t("admin.home.reports"),
+      description: t("admin.home.reportsDetail"),
       to: ROUTES.ADMIN_REPORTS,
       color: "rgb(175,82,222)",
     },
@@ -51,12 +53,8 @@ export function AdminDashboard() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          Panel de Administración
-        </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Configuración y supervisión del sistema
-        </p>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">{t("admin.panel")}</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">{t("admin.home.subtitle")}</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -80,7 +78,7 @@ export function AdminDashboard() {
               <h3 className="text-sm font-semibold text-foreground mb-1">{title}</h3>
               <p className="text-xs text-muted-foreground mb-4">{description}</p>
               <div className="flex items-center gap-1 text-xs text-primary group-hover:gap-2 transition-all">
-                Ir a {title.toLowerCase()}
+                {t("admin.home.goTo", { section: title.toLowerCase() })}
                 <ArrowRight className="h-3 w-3" />
               </div>
             </Link>
