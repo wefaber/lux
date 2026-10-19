@@ -5,6 +5,7 @@ export const errors: Translation<typeof es> = {
   "error.unauthenticated": "Not signed in",
   "error.forbidden": "You do not have permission for this action",
   "error.invalidCredentials": "Invalid credentials",
+  "error.tooManyAttempts": "Too many failed attempts. Wait a few minutes before trying again.",
   "error.notFound": "Not found",
   "error.notFound.user": "User not found",
   "error.notFound.product": "Product not found",

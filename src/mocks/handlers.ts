@@ -488,6 +488,10 @@ export const handlers = [
     });
   }),
 
+  graphql.mutation("Logout", () => {
+    return HttpResponse.json({ data: { logout: true } });
+  }),
+
   graphql.query("GetMe", ({ request }) => {
     return HttpResponse.json({ data: { me: getCaller(request) } });
   }),

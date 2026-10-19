@@ -49,7 +49,7 @@ function ProfileFields({ user }: { user: User }) {
 }
 
 export function ProfilePage() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { t } = useI18n();
   const { dyslexicFont, toggleDyslexicFont } = useTheme();
   const [currentPw, setCurrentPw] = useState("");
@@ -81,6 +81,8 @@ export function ProfilePage() {
       setCurrentPw("");
       setNewPw("");
       setConfirmPw("");
+      // La API revoca las sesiones previas al cambiar la clave: se vuelve a pedir el login
+      window.setTimeout(logout, 2500);
     } catch (err) {
       setPwError(errorMessage(err, t("profile.password.failed")));
     } finally {

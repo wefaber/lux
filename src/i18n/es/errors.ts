@@ -5,6 +5,7 @@ export const errors = {
   "error.unauthenticated": "No autenticado",
   "error.forbidden": "No tenés permisos para esta acción",
   "error.invalidCredentials": "Credenciales inválidas",
+  "error.tooManyAttempts": "Demasiados intentos fallidos. Esperá unos minutos antes de volver a intentar.",
   "error.notFound": "No encontrado",
   "error.notFound.user": "Usuario no encontrado",
   "error.notFound.product": "Producto no encontrado",

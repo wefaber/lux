@@ -21,6 +21,7 @@ export const ERROR_CODE_KEYS: Record<string, MessageKey> = {
   UNAUTHENTICATED: "error.unauthenticated",
   FORBIDDEN: "error.forbidden",
   INVALID_CREDENTIALS: "error.invalidCredentials",
+  TOO_MANY_ATTEMPTS: "error.tooManyAttempts",
 };
 
 const MESSAGE_PREFIXES = ["error.", "validation."];
