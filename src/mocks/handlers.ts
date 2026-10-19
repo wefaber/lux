@@ -12,10 +12,16 @@ import { mockNotices, mockPendingSeen } from "./data/notices";
 import { mockActivityLogs } from "./generators";
 import {
   firstError,
+  locationCode,
+  type UserFields,
+  type InterventionFields,
+  type LocationFields,
+} from "@/lib/validation";
+import {
+  spanishLabel,
   validateComment,
   validateComponent,
   validateIntervention,
-  locationCode,
   validateLocation,
   validateProduct,
   validateReservation,
@@ -23,10 +29,7 @@ import {
   validateTicket,
   validatePassword,
   validateUser,
-  type UserFields,
-  type InterventionFields,
-  type LocationFields,
-} from "@/lib/validation";
+} from "./spanish";
 import {
   CHANGEABLE_RESERVATION_STATUSES,
   CLOSED_SERVICE_STATUSES,
@@ -255,7 +258,7 @@ function canTransitionTicket(ticket: Ticket, to: TicketStatus): boolean {
 }
 
 function invalidTicketTransition(ticket: Ticket, to: TicketStatus): string {
-  return `No se puede pasar un ticket de "${TICKET_STATUS_CONFIG[ticket.status].label}" a "${TICKET_STATUS_CONFIG[to].label}"`;
+  return `No se puede pasar un ticket de "${spanishLabel(TICKET_STATUS_CONFIG[ticket.status])}" a "${spanishLabel(TICKET_STATUS_CONFIG[to])}"`;
 }
 
 // Equipo vigente por id: uno dado de baja no se vincula a tickets ni solicitudes nuevas
@@ -328,7 +331,7 @@ function reservationOverlapError(
 }
 
 function invalidReservationTransition(r: Reservation, action: string): string {
-  return `No se puede ${action} una reserva "${RESERVATION_STATUS_CONFIG[r.status].label}"`;
+  return `No se puede ${action} una reserva "${spanishLabel(RESERVATION_STATUS_CONFIG[r.status])}"`;
 }
 
 // Quien puede leer y escribir el hilo de un ticket o solicitud: el staff, o el
@@ -424,7 +427,7 @@ function averageResolutionHours(tickets: Ticket[]): number | null {
 }
 
 function invalidLoanTransition(loan: Loan, action: string): string {
-  return `No se puede ${action} un préstamo en estado "${LOAN_STATUS_CONFIG[loan.status].label}"`;
+  return `No se puede ${action} un préstamo en estado "${spanishLabel(LOAN_STATUS_CONFIG[loan.status])}"`;
 }
 
 function errorBody(message: string) {
@@ -1158,7 +1161,7 @@ export const handlers = [
         return HttpResponse.json({
           errors: [
             {
-              message: `No se puede pasar una solicitud de "${SERVICE_STATUS_CONFIG[previousStatus].label}" a "${SERVICE_STATUS_CONFIG[status].label}"`,
+              message: `No se puede pasar una solicitud de "${spanishLabel(SERVICE_STATUS_CONFIG[previousStatus])}" a "${spanishLabel(SERVICE_STATUS_CONFIG[status])}"`,
             },
           ],
         });
@@ -1655,7 +1658,7 @@ export const handlers = [
       if (!equipment) return HttpResponse.json({ errors: [{ message: "Equipo no encontrado" }] });
       // Hay equipos con estado "retired" sin deletedAt: tampoco se reservan
       if (UNRESERVABLE_EQUIPMENT_STATUSES.includes(equipment.status)) {
-        const state = EQUIPMENT_STATUS_CONFIG[equipment.status].label.toLowerCase();
+        const state = spanishLabel(EQUIPMENT_STATUS_CONFIG[equipment.status]).toLowerCase();
         return HttpResponse.json({
           errors: [{ message: `El equipo está ${state}: no se puede reservar` }],
         });

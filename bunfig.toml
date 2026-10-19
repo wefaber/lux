@@ -1,0 +1,4 @@
+[test]
+# Fija el idioma en espanol: los tests comparan textos y el idioma por defecto
+# sale del navegador (en bun, navigator.language puede ser ingles)
+preload = ["./src/test/setup.ts"]

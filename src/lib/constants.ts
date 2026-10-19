@@ -13,12 +13,40 @@ import type {
   ReservationResource,
   ReservationStatus,
 } from "./types";
+import { plain, type MessageKey } from "@/i18n";
 
 /** Colores de badge que usan las configuraciones de estados, roles, etc. */
 export type StatusColor = "success" | "warning" | "info" | "destructive" | "muted";
 export interface StatusConfig {
-  label: string;
+  /** Texto en el idioma activo (se resuelve al leerlo) */
+  readonly label: string;
+  /** Clave del diccionario, para generar el texto en un idioma fijo */
+  readonly labelKey: MessageKey;
   color: StatusColor;
+}
+
+// Los textos de dominio salen del diccionario (src/i18n) y siguen al idioma
+// activo: cada `label` (y cada valor de los mapas *_LABELS) es un getter que se
+// resuelve al leerlo, asi los consumidores de estas constantes no cambian.
+function statusConfig(labelKey: MessageKey, color: StatusColor): StatusConfig {
+  return {
+    labelKey,
+    color,
+    get label() {
+      return plain(labelKey);
+    },
+  };
+}
+
+function labels<K extends string>(keys: Record<K, MessageKey>): Record<K, string> {
+  const map = {} as Record<K, string>;
+  for (const value of Object.keys(keys) as K[]) {
+    Object.defineProperty(map, value, {
+      enumerable: true,
+      get: () => plain(keys[value]),
+    });
+  }
+  return map;
 }
 
 // Color de cada tono como variable CSS del tema (sigue el modo oscuro y el alto
@@ -57,10 +85,10 @@ export const ROUTES = {
 } as const; // Rutas de la aplicacion, constantes y de solo lectura
 
 export const TICKET_STATUS_CONFIG: Record<TicketStatus, StatusConfig> = {
-  pending: { label: "Pendiente", color: "warning" },
-  in_progress: { label: "En progreso", color: "info" },
-  in_resolution: { label: "En resolución", color: "warning" },
-  resolved: { label: "Resuelto", color: "success" },
+  pending: statusConfig("status.ticket.pending", "warning"),
+  in_progress: statusConfig("status.ticket.in_progress", "info"),
+  in_resolution: statusConfig("status.ticket.in_resolution", "warning"),
+  resolved: statusConfig("status.ticket.resolved", "success"),
 }; // Configuracion de estados de tickets, con etiquetas y colores para UI
 
 // Ciclo de vida del ticket: transiciones validas desde cada estado.
@@ -77,10 +105,10 @@ export const TICKET_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
 };
 
 export const EQUIPMENT_STATUS_CONFIG: Record<EquipmentStatus, StatusConfig> = {
-  available: { label: "Disponible", color: "success" },
-  in_use: { label: "En uso", color: "info" },
-  in_repair: { label: "En reparación", color: "warning" },
-  retired: { label: "Dado de baja", color: "destructive" },
+  available: statusConfig("status.equipment.available", "success"),
+  in_use: statusConfig("status.equipment.in_use", "info"),
+  in_repair: statusConfig("status.equipment.in_repair", "warning"),
+  retired: statusConfig("status.equipment.retired", "destructive"),
 }; // Configuracion de estados de equipos, con etiquetas y colores para UI
 
 // Con que estado se da de alta un equipo: "en uso" lo pone un prestamo y
@@ -91,23 +119,23 @@ export const INITIAL_EQUIPMENT_STATUSES: EquipmentStatus[] = ["available", "in_r
 export const UNRESERVABLE_EQUIPMENT_STATUSES: EquipmentStatus[] = ["in_repair", "retired"];
 
 export const LOAN_STATUS_CONFIG: Record<LoanStatus, StatusConfig> = {
-  pending: { label: "Pendiente", color: "warning" },
-  approved: { label: "Aprobado", color: "success" },
-  rejected: { label: "Rechazado", color: "destructive" },
-  active: { label: "Activo", color: "info" },
-  overdue: { label: "Vencido", color: "destructive" },
-  returned: { label: "Devuelto", color: "muted" },
+  pending: statusConfig("status.loan.pending", "warning"),
+  approved: statusConfig("status.loan.approved", "success"),
+  rejected: statusConfig("status.loan.rejected", "destructive"),
+  active: statusConfig("status.loan.active", "info"),
+  overdue: statusConfig("status.loan.overdue", "destructive"),
+  returned: statusConfig("status.loan.returned", "muted"),
 }; // Configuracion de estados de prestamos
 
 // Entregados y todavia sin devolver: son los que se pueden devolver
 export const RETURNABLE_LOAN_STATUSES: LoanStatus[] = ["active", "overdue"];
 
 export const SERVICE_STATUS_CONFIG: Record<ServiceStatus, StatusConfig> = {
-  pending: { label: "Pendiente", color: "warning" },
-  approved: { label: "Aprobado", color: "success" },
-  in_progress: { label: "En progreso", color: "info" },
-  completed: { label: "Completado", color: "success" },
-  rejected: { label: "Rechazado", color: "destructive" },
+  pending: statusConfig("status.service.pending", "warning"),
+  approved: statusConfig("status.service.approved", "success"),
+  in_progress: statusConfig("status.service.in_progress", "info"),
+  completed: statusConfig("status.service.completed", "success"),
+  rejected: statusConfig("status.service.rejected", "destructive"),
 }; // Configuracion de estado de servicios
 
 // Ciclo de vida de una solicitud: completada y rechazada la cierran
@@ -130,32 +158,32 @@ export const SERVICE_STATUSES_WITH_RESOLUTION: ServiceStatus[] = ["completed", "
 export const DASHBOARD_PERIODS = ["7d", "30d", "90d"] as const;
 export type DashboardPeriod = (typeof DASHBOARD_PERIODS)[number];
 
-export const DASHBOARD_PERIOD_LABELS: Record<DashboardPeriod, string> = {
-  "7d": "últimos 7 días",
-  "30d": "últimos 30 días",
-  "90d": "últimos 90 días",
-}; // Periodos del dashboard; 90 dias se agrupa por semana
+export const DASHBOARD_PERIOD_LABELS = labels<DashboardPeriod>({
+  "7d": "period.7d",
+  "30d": "period.30d",
+  "90d": "period.90d",
+}); // Periodos del dashboard; 90 dias se agrupa por semana
 
-export const SERVICE_TYPE_LABELS: Record<ServiceType, string> = {
-  lab_preparation: "Preparación de laboratorio",
-  software_installation: "Instalación de software",
-  equipment_setup: "Configuración de equipo",
-  other: "Otro",
-}; // Labels de tipos de servicios
+export const SERVICE_TYPE_LABELS = labels<ServiceType>({
+  lab_preparation: "serviceType.lab_preparation",
+  software_installation: "serviceType.software_installation",
+  equipment_setup: "serviceType.equipment_setup",
+  other: "serviceType.other",
+}); // Labels de tipos de servicios
 
-export const TICKET_CATEGORY_LABELS: Record<TicketCategory, string> = {
-  hardware: "Hardware",
-  software: "Software",
-  network: "Red",
-  other: "Otro",
-}; // Labels de categorias de ticket
+export const TICKET_CATEGORY_LABELS = labels<TicketCategory>({
+  hardware: "ticketCategory.hardware",
+  software: "ticketCategory.software",
+  network: "ticketCategory.network",
+  other: "ticketCategory.other",
+}); // Labels de categorias de ticket
 
-export const LOCATION_KIND_LABELS: Record<LocationKind, string> = {
-  laboratory: "Laboratorio",
-  classroom: "Salón",
-  administration: "Administración",
-  other: "Otro",
-}; // Tipos de ubicacion
+export const LOCATION_KIND_LABELS = labels<LocationKind>({
+  laboratory: "locationKind.laboratory",
+  classroom: "locationKind.classroom",
+  administration: "locationKind.administration",
+  other: "locationKind.other",
+}); // Tipos de ubicacion
 
 // Letra de cada tipo: L1 = Laboratorio 1, S2 = Salon 2, A1 = Administracion 1
 export const LOCATION_KIND_LETTER: Record<LocationKind, string> = {
@@ -166,39 +194,39 @@ export const LOCATION_KIND_LETTER: Record<LocationKind, string> = {
 };
 
 export const RESERVATION_STATUS_CONFIG: Record<ReservationStatus, StatusConfig> = {
-  pending: { label: "Pendiente", color: "warning" },
-  approved: { label: "Aprobada", color: "success" },
-  rejected: { label: "Rechazada", color: "destructive" },
-  active: { label: "En curso", color: "info" },
-  completed: { label: "Finalizada", color: "muted" },
-  cancelled: { label: "Cancelada", color: "muted" },
+  pending: statusConfig("status.reservation.pending", "warning"),
+  approved: statusConfig("status.reservation.approved", "success"),
+  rejected: statusConfig("status.reservation.rejected", "destructive"),
+  active: statusConfig("status.reservation.active", "info"),
+  completed: statusConfig("status.reservation.completed", "muted"),
+  cancelled: statusConfig("status.reservation.cancelled", "muted"),
 }; // Configuracion de estados de reservas
 
 // Las que todavia no empezaron ni se cerraron: se pueden modificar o cancelar
 export const CHANGEABLE_RESERVATION_STATUSES: ReservationStatus[] = ["pending", "approved"];
 
-export const RESERVATION_RESOURCE_LABELS: Record<ReservationResource, string> = {
-  equipment: "Equipo",
-  location: "Espacio",
-}; // Que se reserva
+export const RESERVATION_RESOURCE_LABELS = labels<ReservationResource>({
+  equipment: "resource.equipment",
+  location: "resource.location",
+}); // Que se reserva
 
 // Texto de un aviso. {o} es la vocal del elemento ("lo resolvió" un ticket, "la
 // aprobó" una reserva) y {by} quien lo provocó
-export const NOTICE_KIND_LABELS: Record<NoticeKind, string> = {
-  assigned: "Te l{o} asignó {by}",
-  unassigned: "Te l{o} sacó {by}",
-  taken: "Ahora l{o} atiende {by}",
-  approved: "L{o} aprobó {by}",
-  rejected: "L{o} rechazó {by}",
-  in_resolution: "L{o} puso en resolución {by}",
-  resolved: "L{o} resolvió {by}",
-  completed: "L{o} completó {by}",
-  modified: "L{o} modificó {by}",
-  cancelled: "L{o} canceló {by}",
-  delivered: "Te l{o} entregó {by}",
-  comment: "Comentario nuevo de {by}",
-  overdue: "Venció la fecha de devolución",
-}; // Labels de avisos
+export const NOTICE_KIND_LABELS = labels<NoticeKind>({
+  assigned: "notice.assigned",
+  unassigned: "notice.unassigned",
+  taken: "notice.taken",
+  approved: "notice.approved",
+  rejected: "notice.rejected",
+  in_resolution: "notice.in_resolution",
+  resolved: "notice.resolved",
+  completed: "notice.completed",
+  modified: "notice.modified",
+  cancelled: "notice.cancelled",
+  delivered: "notice.delivered",
+  comment: "notice.comment",
+  overdue: "notice.overdue",
+}); // Labels de avisos
 
 export const NOTICE_ENTITY_GENDER: Record<NoticeEntity, "o" | "a"> = {
   ticket: "o",
@@ -207,29 +235,32 @@ export const NOTICE_ENTITY_GENDER: Record<NoticeEntity, "o" | "a"> = {
   reservation: "a",
 }; // Vocal para concordar el texto del aviso
 
-export const INTERVENTION_TYPE_LABELS: Record<InterventionType, string> = {
-  preventive_maintenance: "Mantenimiento preventivo",
-  corrective_repair: "Reparación",
-  component_replacement: "Cambio de componente",
-  cleaning: "Limpieza",
-  software_update: "Actualización de software",
-  other: "Otra",
-}; // Labels de tipos de intervencion
+export const INTERVENTION_TYPE_LABELS = labels<InterventionType>({
+  preventive_maintenance: "intervention.preventive_maintenance",
+  corrective_repair: "intervention.corrective_repair",
+  component_replacement: "intervention.component_replacement",
+  cleaning: "intervention.cleaning",
+  software_update: "intervention.software_update",
+  other: "intervention.other",
+}); // Labels de tipos de intervencion
 
 export const ROLE_CONFIG: Record<UserRole, StatusConfig> = {
-  root_admin: { label: "Super Admin", color: "destructive" },
-  admin: { label: "Administrador", color: "warning" },
-  tecnico: { label: "Técnico", color: "info" },
-  solicitante: { label: "Solicitante", color: "muted" },
+  root_admin: statusConfig("role.root_admin", "destructive"),
+  admin: statusConfig("role.admin", "warning"),
+  tecnico: statusConfig("role.tecnico", "info"),
+  solicitante: statusConfig("role.solicitante", "muted"),
 }; // Etiqueta y color de cada rol
 
-export const ROLE_LABELS = Object.fromEntries(
-  Object.entries(ROLE_CONFIG).map(([role, { label }]) => [role, label]),
-) as Record<UserRole, string>; // Derivado de ROLE_CONFIG: un solo lugar para los nombres
+export const ROLE_LABELS = labels<UserRole>({
+  root_admin: "role.root_admin",
+  admin: "role.admin",
+  tecnico: "role.tecnico",
+  solicitante: "role.solicitante",
+}); // Mismas claves que ROLE_CONFIG: un solo lugar para los nombres
 
 export const USER_STATUS_CONFIG: Record<"active" | "inactive", StatusConfig> = {
-  active: { label: "Activo", color: "success" },
-  inactive: { label: "Inactivo", color: "destructive" },
+  active: statusConfig("status.user.active", "success"),
+  inactive: statusConfig("status.user.inactive", "destructive"),
 }; // Estado de la cuenta de un usuario
 
 export const KIND_MACHINE_CODE: Record<string, string> = {
@@ -267,6 +298,32 @@ export const EQUIPMENT_KINDS = [
   "Auriculares",
   "Otro",
 ] as const; // Tipos de equipamientos
+
+// El tipo se guarda con su nombre en espanol ("Servidor"): es el dato. Lo que se
+// muestra sale de aca; un tipo que no esta en la lista se muestra tal cual.
+export const EQUIPMENT_KIND_LABELS = labels<(typeof EQUIPMENT_KINDS)[number]>({
+  AIO: "equipmentKind.AIO",
+  Desktop: "equipmentKind.Desktop",
+  Laptop: "equipmentKind.Laptop",
+  Monitor: "equipmentKind.Monitor",
+  Servidor: "equipmentKind.Servidor",
+  Impresora: "equipmentKind.Impresora",
+  Proyector: "equipmentKind.Proyector",
+  Switch: "equipmentKind.Switch",
+  Router: "equipmentKind.Router",
+  UPS: "equipmentKind.UPS",
+  Teclado: "equipmentKind.Teclado",
+  Mouse: "equipmentKind.Mouse",
+  Webcam: "equipmentKind.Webcam",
+  Auriculares: "equipmentKind.Auriculares",
+  Otro: "equipmentKind.Otro",
+});
+
+export function equipmentKindLabel(kind: string): string {
+  return kind in EQUIPMENT_KIND_LABELS
+    ? EQUIPMENT_KIND_LABELS[kind as keyof typeof EQUIPMENT_KIND_LABELS]
+    : kind;
+}
 
 export const SPRING_TRANSITION = {
   type: "spring" as const,

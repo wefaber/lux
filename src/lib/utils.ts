@@ -1,28 +1,15 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { AUTH_STORAGE_KEY } from "@/lib/constants";
+import { t } from "@/i18n";
+import { translateError } from "@/i18n/errors";
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
-export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("es-UY", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-} // Parseo de fechas
-
-export function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("es-UY", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-} // Parseo de fecha y hora
+// Fechas y horas siguen el idioma activo (src/i18n): dd/mm/aaaa en los dos
+export { formatDate, formatDateTime, formatNumber, formatRelativeTime } from "@/i18n";
 
 // <input type="datetime-local"> trabaja en hora local y sin zona ("2026-10-08T14:30");
 // la API, en ISO UTC. Estas dos funciones pasan de uno a otro.
@@ -35,18 +22,6 @@ export function fromDateTimeInput(value: string): string {
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? "" : d.toISOString();
 }
-
-export function formatRelativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const minutes = Math.floor(diff / 60_000);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-
-  if (days > 0) return `hace ${days} día${days !== 1 ? "s" : ""}`;
-  if (hours > 0) return `hace ${hours} hora${hours !== 1 ? "s" : ""}`;
-  if (minutes > 0) return `hace ${minutes} minuto${minutes !== 1 ? "s" : ""}`;
-  return "ahora mismo";
-} // Parseo de tiempo relativo
 
 function getAuthToken(): string | null {
   try {
@@ -63,8 +38,21 @@ function getAuthToken(): string | null {
 // significa que el service worker de MSW no intercepto (ver mocks-runtime.ts).
 export class MocksUnavailableError extends Error {
   constructor(status: number) {
-    super(`No hay backend detras de /graphql (HTTP ${status})`);
+    super(t("error.mocksUnavailable", { status }));
     this.name = "MocksUnavailableError";
+  }
+}
+
+// Error de la API: `message` ya viene traducido al idioma activo; `original` es
+// el texto que mando el servidor y `code` su extensions.code, si lo trae
+export class ApiError extends Error {
+  readonly code: string | undefined;
+  readonly original: string;
+  constructor(original: string, code?: string) {
+    super(translateError(original, code));
+    this.name = "ApiError";
+    this.code = code;
+    this.original = original;
   }
 }
 
@@ -78,16 +66,24 @@ const MOCKS_ENABLED = import.meta.env.DEV || import.meta.env.VITE_ENABLE_MOCKS =
 
 const MOCKS_DOWN_STATUS = new Set([404, 405]);
 
+// Sin red, fetch falla con un TypeError del navegador ("Failed to fetch") que no
+// se entiende ni se traduce: se cambia por un mensaje propio
+function post(headers: Record<string, string>, query: string, variables?: Record<string, unknown>) {
+  return fetch("/graphql", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ query, variables }),
+  }).catch(() => {
+    throw new Error(t("error.network"));
+  });
+}
+
 async function request<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
   const token = getAuthToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch("/graphql", {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ query, variables }),
-  });
+  const response = await post(headers, query, variables);
 
   if (!response.ok) {
     if (MOCKS_ENABLED && MOCKS_DOWN_STATUS.has(response.status)) {
@@ -96,32 +92,31 @@ async function request<T>(query: string, variables?: Record<string, unknown>): P
       const { reArmMocks } = await import("@/lib/mocks-runtime");
       await reArmMocks().catch(() => {});
 
-      const retry = await fetch("/graphql", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ query, variables }),
-      });
+      const retry = await post(headers, query, variables);
 
       if (retry.ok) return readData<T>(retry);
 
       throw new MocksUnavailableError(retry.status);
     }
 
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    throw new Error(t("error.http", { status: response.status, text: response.statusText }));
   }
 
   return readData<T>(response);
 } // Peticion con reintento si los mocks quedaron inactivos
 
 async function readData<T>(response: Response): Promise<T> {
-  const json = (await response.json()) as { data?: T; errors?: Array<{ message: string }> };
+  const json = (await response.json()) as {
+    data?: T;
+    errors?: Array<{ message: string; extensions?: { code?: string } }>;
+  };
 
   if (json.errors && json.errors.length > 0) {
-    throw new Error(json.errors[0].message);
+    throw new ApiError(json.errors[0].message, json.errors[0].extensions?.code);
   }
 
   if (!json.data) {
-    throw new Error("No data returned from API");
+    throw new Error(t("error.noData"));
   }
 
   return json.data;
