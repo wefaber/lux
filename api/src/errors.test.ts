@@ -49,9 +49,9 @@ describe("catalogo de errores", () => {
   });
 });
 
-describe("classifyUnexpected", () => {
-  const pgError = (code: string) => Object.assign(new Error("detalle interno de la base"), { code });
+const pgError = (code: string) => Object.assign(new Error("detalle interno de la base"), { code });
 
+describe("classifyUnexpected", () => {
   test("traduce violaciones de restriccion de PostgreSQL", () => {
     expect(classifyUnexpected(pgError("23505")).extensions.code).toBe("CONFLICT");
     expect(classifyUnexpected(pgError("23503")).extensions.code).toBe("VALIDATION_ERROR");
