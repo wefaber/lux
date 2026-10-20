@@ -20,9 +20,11 @@ FALLAS=0
 # contenedor <servicio>: primer contenedor del servicio (podman-compose y
 # docker-compose etiquetan igual com.docker.compose.*).
 contenedor() {
+    # sed -n 1p y no head -n 1: con varias replicas head cierra la tuberia antes
+    # de que podman termine de escribir, y pipefail corta el script (rc=141).
     "$CLI" ps -q \
         --filter "label=com.docker.compose.project=$PROYECTO" \
-        --filter "label=com.docker.compose.service=$1" | head -n 1
+        --filter "label=com.docker.compose.service=$1" | sed -n 1p
 }
 
 # alcanza <contenedor> <host> <puerto>: 0 si abre una conexion TCP. Usa bash
@@ -71,7 +73,7 @@ if [[ -n "$(publicado "$DB")$(publicado "$API")" ]]; then
 else
     echo "  OK    db y api no publican nada"
 fi
-if publicado "$WEB" | grep -qv '127\.0\.0\.1'; then
+if publicado "$WEB" | grep -v '127\.0\.0\.1' >/dev/null; then
     echo "  FALLA web publica en otra interfaz que loopback:"
     publicado "$WEB" | sed 's/^/        /'
     FALLAS=$((FALLAS + 1))
