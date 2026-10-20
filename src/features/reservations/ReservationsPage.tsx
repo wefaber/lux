@@ -555,7 +555,8 @@ function CancelReservationDialog({ reservation, onDone, onCancel }: ActionDialog
             {reservation &&
               t("reservations.cancel.description", {
                 resource: resourceName(reservation),
-                date: formatDateTime(reservation.startsAt),
+                // "p. m." ya trae su punto; el texto agrega otro
+                date: formatDateTime(reservation.startsAt).replace(/\.$/, ""),
               })}
           </DialogDescription>
         </DialogHeader>

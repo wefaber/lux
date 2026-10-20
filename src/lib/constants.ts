@@ -85,7 +85,7 @@ export const ROUTES = {
 } as const; // Rutas de la aplicacion, constantes y de solo lectura
 
 export const TICKET_STATUS_CONFIG: Record<TicketStatus, StatusConfig> = {
-  pending: statusConfig("status.ticket.pending", "warning"),
+  pending: statusConfig("status.ticket.pending", "muted"), // distinto de in_resolution: la dona del dashboard los separa por color
   in_progress: statusConfig("status.ticket.in_progress", "info"),
   in_resolution: statusConfig("status.ticket.in_resolution", "warning"),
   resolved: statusConfig("status.ticket.resolved", "success"),

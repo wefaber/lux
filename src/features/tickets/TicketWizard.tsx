@@ -102,7 +102,7 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
     // En el telefono los pasos van arriba, en una fila que se desplaza de costado;
     // desde md vuelven a la columna de la izquierda
     <div className="flex flex-col md:flex-row gap-4 md:gap-8 md:min-h-[500px]">
-      <nav className="md:w-44 flex-shrink-0 pt-1 -mx-1 px-1 overflow-x-auto md:overflow-visible">
+      <nav className="md:w-56 flex-shrink-0 pt-1 -mx-1 px-1 overflow-x-auto md:overflow-visible">
         <ol className="flex md:flex-col gap-1">
           {steps.map((step, i) => (
             <li key={step.id} className="shrink-0">
@@ -127,7 +127,9 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
                 >
                   {i < currentStep ? <CheckCircle2 className="h-3.5 w-3.5" /> : i + 1}
                 </span>
-                <span className="truncate">{t(step.labelKey)}</span>
+                <span className="truncate" title={t(step.labelKey)}>
+                  {t(step.labelKey)}
+                </span>
               </button>
             </li>
           ))}

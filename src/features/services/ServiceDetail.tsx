@@ -207,6 +207,7 @@ export function ServiceDetail() {
                             vuelve a mostrar el asignado */}
                         <UserSearchSelect
                           id="service-assignee"
+                          showDni={false}
                           items={technicians}
                           value={assigneeId}
                           onChange={(technicianId) => {

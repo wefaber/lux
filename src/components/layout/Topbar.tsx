@@ -58,7 +58,9 @@ export function Topbar() {
                   <span className="font-semibold text-foreground text-xs normal-case tracking-normal">
                     {user.name}
                   </span>
-                  <span className="font-normal text-muted-foreground">{user.email}</span>
+                  <span className="font-normal text-muted-foreground normal-case tracking-normal">
+                    {user.email}
+                  </span>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />

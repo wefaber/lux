@@ -1,9 +1,10 @@
 import { useRef } from "react";
 import { Outlet, NavLink, Link, useNavigate } from "react-router-dom";
-import { Users, Shield, ActivitySquare, ArrowLeft, Zap, BarChart3 } from "lucide-react";
+import { Users, Shield, ActivitySquare, ArrowLeft, Zap, BarChart3, LogOut } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
 import { useI18n } from "@/hooks/useI18n";
+import { FontSizeControl } from "@/components/accessibility/FontSizeControl";
 import { LanguageSwitcher } from "@/components/accessibility/LanguageSwitcher";
 import type { MessageKey } from "@/i18n";
 import { ThemeSwitcher } from "@/components/accessibility/ThemeSwitcher";
@@ -20,11 +21,16 @@ const adminNav: Array<{ icon: typeof Users; labelKey: MessageKey; to: string }> 
 ];
 
 export function AdminLayout() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { t } = useI18n();
   const navigate = useNavigate();
   const mainRef = useRef<HTMLElement>(null);
   useResponsiveTables(mainRef); // tablas que no entran -> tarjetas
+
+  const handleLogout = () => {
+    logout();
+    navigate(ROUTES.LOGIN);
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -101,8 +107,18 @@ export function AdminLayout() {
             <h1 className="text-sm font-semibold text-foreground truncate">{t("admin.panel")}</h1>
           </div>
           <div className="flex items-center gap-2">
+            <FontSizeControl />
             <LanguageSwitcher />
             <ThemeSwitcher />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleLogout}
+              aria-label={t("topbar.logout")}
+              title={t("topbar.logout")}
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
           </div>
         </header>
         {/* En el telefono las secciones van en una fila que se desplaza de costado */}

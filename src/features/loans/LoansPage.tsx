@@ -82,8 +82,9 @@ export function LoansPage() {
   );
 
   const loans = data?.loans ?? [];
-  const activeCount = loans.filter((l) => l.status === "active").length;
   const overdueCount = loans.filter((l) => l.status === "overdue").length;
+  // Un préstamo vencido sigue en curso: "Activos" lo incluye y "Vencidos" lo destaca
+  const activeCount = loans.filter((l) => l.status === "active").length + overdueCount;
   const returned = loans.filter((l) => l.status === "returned");
   const onTimeRate =
     returned.length > 0
@@ -92,7 +93,7 @@ export function LoansPage() {
             returned.length) *
             100,
         )
-      : 0;
+      : null; // sin devoluciones todavía no hay tasa que mostrar
 
   const term = search.trim().toLowerCase();
   const idTerm = idQuery(term, "loan");
@@ -181,7 +182,7 @@ export function LoansPage() {
             { label: t("loans.metric.overdue"), value: overdueCount, color: "rgb(255,69,58)" },
             {
               label: t("loans.metric.onTime"),
-              value: `${onTimeRate}%`,
+              value: onTimeRate === null ? "—" : `${onTimeRate}%`,
               color: "rgb(52,199,89)",
             },
           ].map((m) => (

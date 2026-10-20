@@ -14,18 +14,23 @@ type PickerProps<T> = Omit<
 export type UserOption = Pick<User, "id" | "name"> & Partial<Pick<User, "dni" | "role">>;
 
 // Por nombre o cedula: la cedula resaltada, el nombre y el rol a la derecha
-export function UserSearchSelect(props: PickerProps<UserOption>) {
+// `showDni={false}` oculta la cedula (al asignar tecnicos solo hace falta el nombre);
+// la busqueda por cedula sigue funcionando
+export function UserSearchSelect({
+  showDni = true,
+  ...props
+}: PickerProps<UserOption> & { showDni?: boolean }) {
   const { t } = useI18n();
   return (
     <SearchSelect
       placeholder={t("pickers.user")}
       {...props}
       getKey={(u) => u.id}
-      getLabel={(u) => (u.dni ? `${u.dni} · ${u.name}` : u.name)}
+      getLabel={(u) => (showDni && u.dni ? `${u.dni} · ${u.name}` : u.name)}
       getSearchText={(u) => `${u.name} ${u.dni ?? ""}`}
       renderOption={(u) => (
         <>
-          {u.dni && <span className="font-mono text-xs text-primary font-semibold">{u.dni}</span>}
+          {showDni && u.dni && <span className="font-mono text-xs text-primary font-semibold">{u.dni}</span>}
           <span className="text-muted-foreground">{u.name}</span>
           {u.role && (
             <span className="ml-auto pl-4 text-xs text-muted-foreground">

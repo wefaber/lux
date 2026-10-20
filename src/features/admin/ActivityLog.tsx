@@ -4,7 +4,7 @@ import { Search } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useI18n } from "@/hooks/useI18n";
 import { gql, formatDateTime } from "@/lib/utils";
-import { dictionaryFor, getLang, type MessageKey } from "@/i18n";
+import { dictionaryFor, getLang, translate, type MessageKey } from "@/i18n";
 import { SPRING_TRANSITION } from "@/lib/constants";
 import type { ActivityLog as ActivityLogType } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +42,23 @@ const OP_COLORS: Record<string, StatusColor> = {
 function codeLabel(prefix: "activity.op." | "activity.entity.", code: string): string {
   const key = `${prefix}${code}`;
   const dictionary = dictionaryFor(getLang());
-  return key in dictionary ? dictionary[key as MessageKey] : code;
+  if (key in dictionary) return dictionary[key as MessageKey];
+  // Un intento rechazado por permisos se registra como `<OPERACION>_DENIED`
+  if (prefix === "activity.op." && code.endsWith(DENIED_SUFFIX)) {
+    return translate(getLang(), "activity.denied", {
+      op: codeLabel(prefix, code.slice(0, -DENIED_SUFFIX.length)),
+    });
+  }
+  return code;
+}
+
+const DENIED_SUFFIX = "_DENIED";
+
+// Las operaciones rechazadas y los fallos de acceso se destacan; el resto sigue el mapa
+function opColor(operation: string): StatusColor {
+  if (operation.endsWith(DENIED_SUFFIX) || operation === "LOGIN_FAILED") return "destructive";
+  if (operation === "ACCOUNT_LOCKED") return "warning";
+  return OP_COLORS[operation] ?? "muted";
 }
 
 // Los detalles generados por el sistema ("Operación X en Y") siguen la misma
@@ -136,7 +152,7 @@ export function ActivityLog() {
                   </td>
                   <td className="px-4 py-3 text-sm text-foreground">{l.userName}</td>
                   <td className="px-4 py-3">
-                    <Badge color={OP_COLORS[l.operation] ?? "muted"} className="text-[10px]">
+                    <Badge color={opColor(l.operation)} className="text-[10px]">
                       {codeLabel("activity.op.", l.operation)}
                     </Badge>
                   </td>

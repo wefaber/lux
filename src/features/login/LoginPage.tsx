@@ -5,7 +5,7 @@ import { Zap, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/hooks/useI18n";
 import { LanguageSwitcher } from "@/components/accessibility/LanguageSwitcher";
-import { isMocksUnavailable } from "@/lib/utils";
+import { ApiError, isMocksUnavailable } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,7 +35,10 @@ export function LoginPage() {
       navigate(from, { replace: true });
     } catch (err) {
       setAttempts((a) => a + 1);
-      setError(isMocksUnavailable(err) ? t("login.error.mocks") : t("login.error.credentials"));
+      // El servidor responde igual que ante una clave errónea, pero marca el bloqueo con
+      // su código: la persona tiene que saber que debe esperar, no seguir probando
+      if (err instanceof ApiError && err.code === "TOO_MANY_ATTEMPTS") setError(err.message);
+      else setError(isMocksUnavailable(err) ? t("login.error.mocks") : t("login.error.credentials"));
     }
   }; // Autenticacion compartida por el formulario y la burbuja de mocks
 

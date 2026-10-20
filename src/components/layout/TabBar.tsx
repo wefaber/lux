@@ -15,7 +15,7 @@ export function TabBar() {
 
   return (
     <nav
-      className="md:hidden fixed bottom-5 left-3 right-3 glass-topbar border rounded-full border-border z-50"
+      className="md:hidden fixed bottom-5 left-3 right-3 glass-topbar bg-background shadow-lg border rounded-full border-border z-50"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
       <div className="flex h-14">
