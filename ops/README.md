@@ -49,6 +49,8 @@ scripts/admin.sh deploy estado | logs api 50 | escalar 2 | rollback | down
 scripts/admin.sh deploy unidad          # arranque automatico con systemd (linger)
 ```
 
+`deploy up` habilita el linger de `sgrsi` si hace falta (sin él no existe `/run/user/<uid>` y Podman rootless no arranca) y se puede invocar desde cualquier directorio. Al reconstruir recrea los contenedores (`--force-recreate`): podman-compose 1.3 no reemplaza los que ya existen y dejaría corriendo la versión vieja.
+
 Equivalente crudo: `podman compose --env-file /etc/sgrsi/lux.env -f ops/compose.yaml up -d --build`.
 
 ## Qué verifica `verificar-redes.sh`

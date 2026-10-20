@@ -33,7 +33,29 @@ Entorno: Ubuntu 24.04, Podman 4.9.3, podman-compose 1.0.6, netavark/aardvark-dns
 | `docker compose config` y `podman-compose config` | el mismo archivo valida en ambos |
 | `bats scripts/tests/bats/deploy.bats` | 21/21 |
 
-Lo que NO se probó: Podman 5.x rootless en una VM Debian 13, `systemctl --user` con linger, la unidad `lux-stack.service`, y un reinicio del servidor. Es justo lo que la devolución de ASO de E2 pide con capturas, y queda pendiente del hilo de la tercera entrega.
+### Segunda corrida: VM Debian 13 (20/10/2026)
+
+Entorno: VM Hyper-V Generación 2 (`sgrsi-lux-test`, 2 vCPU, 2 GB, 20 GB, Secure Boot), Debian 13.7 (trixie, kernel 6.12.107), Podman 5.4.2, podman-compose 1.3.0, stack corrido como la cuenta `sgrsi` (rootless, creada con `admin.sh usuarios alta`). Las claves de `/etc/sgrsi/lux.env` se generaron en la VM con `openssl rand` (modo 640 `root:sgrsi`).
+
+| Prueba | Resultado |
+|---|---|
+| `deploy up` desde cero (build, migrate, `/ready`) | OK en ~2 min, tras dos arreglos (abajo) |
+| `deploy estado` | cuatro contenedores `healthy` (los healthchecks funcionan con systemd), `/ready` 200 |
+| `ops/verificar-redes.sh` | segmentación verificada, también tras el reinicio |
+| `deploy escalar 2` | `web` resuelve `api` a 2 IP y ambas responden |
+| `deploy rollback` | los contenedores pasan a las imágenes `previous` |
+| `deploy unidad` + `systemctl --user enable --now lux-stack.service podman-restart.service` | unidad activa, linger en `yes` |
+| Reinicio de la VM | el stack volvió solo, 4 contenedores `healthy` y `/ready` 200 sin intervención |
+| `bats scripts/tests/bats/deploy.bats` | 23/23 (21 + 2 nuevos) |
+
+La prueba encontró cuatro defectos que la corrida anterior (root, Ubuntu, home en modo 755) no mostraba, todos corregidos:
+
+1. `deploy up` fallaba en la primera ejecución: la cuenta `sgrsi` no tiene `/run/user/<uid>` hasta que alguien habilita linger, y el README lo hacía recién en `deploy unidad`. Ahora el preflight lo habilita (`asegurar_sesion_stack`).
+2. `runuser` conservaba el directorio actual del administrador: el home de `luxadmin` en Debian es modo 700 y `podman` fallaba con "cannot chdir". Ahora se ejecuta desde `/`.
+3. `deploy up` sobre un stack ya levantado no aplicaba la imagen nueva: podman-compose 1.3 responde "name already in use" y sigue, y el despliegue figuraba como correcto con la versión vieja corriendo. Ahora `up` usa `--force-recreate` al construir.
+4. `verificar-redes.sh` terminaba con 141 (SIGPIPE) de forma intermitente con 2 réplicas de `api` (`head -n 1` bajo `pipefail`): 4 fallas de 8 corridas antes, 0 de 8 después.
+
+Fuera del alcance del stack: la suite completa de bats en la VM da 169/172 corrida como root y 148/172 sin privilegios (los módulos de firewall, ssh y usuarios asumen root); las 3 que fallan como root son `respaldo.bats` (`sincronizar`). Las salidas literales están fuera del repo, en `_evidencia-aso`.
 
 ## Cambio incluido
 
@@ -77,4 +99,4 @@ Quadlet (`.container`, `.network`, `.volume` en `~/.config/containers/systemd/`)
 
 1. Si el backend real sale a producción en contenedores, o si `lux.eternum.lat` sigue con mocks hasta después de la defensa.
 2. Si en el documento de ASO se declara Podman como motor (recomendado) o se usa Docker en la VM.
-3. Hacer la corrida en la VM Debian 13 con capturas (`deploy up`, `estado`, `verificar-redes.sh`).
+3. ~~Hacer la corrida en la VM Debian 13~~ Hecha el 20/10/2026 (ver arriba); faltan solo las capturas de pantalla para la carpeta de ASO.
