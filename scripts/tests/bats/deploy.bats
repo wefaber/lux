@@ -70,6 +70,16 @@ teardown() { teardown_entorno; }
     grep -q 'curl' "$STUB_LOG"
 }
 
+@test "up con build recrea los contenedores (podman-compose no reemplaza los existentes)" {
+    SGRSI_DEPLOY_ROLLBACK_AUTO=0 run "$ADMIN" deploy up
+    grep -q 'compose.* up -d --build --force-recreate' "$STUB_LOG"
+}
+
+@test "up --sin-build no fuerza la recreacion" {
+    SGRSI_DEPLOY_ROLLBACK_AUTO=0 run "$ADMIN" deploy up --sin-build
+    ! grep -q 'force-recreate' "$STUB_LOG"
+}
+
 @test "escalar valida el rango" {
     run "$ADMIN" deploy escalar 0
     [ "$status" -ne 0 ]

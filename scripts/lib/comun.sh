@@ -387,6 +387,29 @@ _sgrsi_error_inesperado() {
 
 # --- Contenedores (Podman rootless) -----------------------------------------
 
+# asegurar_sesion_stack
+# Podman rootless necesita /run/user/<uid> (XDG_RUNTIME_DIR). Una cuenta de
+# servicio sin sesion abierta no lo tiene, y `podman info` falla ("lstat
+# /run/user/<uid>"). Con "linger" systemd lo crea y lo mantiene; es lo mismo que
+# deja `deploy unidad`, pero hace falta ya en el primer `deploy up`.
+asegurar_sesion_stack() {
+    local usuario="${SGRSI_STACK_USUARIO-sgrsi}" uid
+    if [[ -z "$usuario" || "$(id -u)" -ne 0 ]] || ! existe_usuario "$usuario"; then
+        return 0
+    fi
+    uid="$(id -u "$usuario")"
+    [[ -d "/run/user/$uid" ]] && return 0
+
+    log INFO "'$usuario' no tiene sesion de systemd: se habilita linger para crear /run/user/$uid."
+    loginctl enable-linger "$usuario" || return 1
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        [[ -d "/run/user/$uid" ]] && return 0
+        ${SGRSI_SLEEP:-sleep} 1
+    done
+    log ERROR "No se creo /run/user/$uid despues de habilitar linger para '$usuario'."
+    return 1
+}
+
 # podman_stack <argumentos de podman...>
 # Ejecuta podman como el usuario de servicio que corre el stack rootless
 # (SGRSI_STACK_USUARIO, por defecto "sgrsi"). Si ya somos ese usuario, o la
@@ -400,7 +423,9 @@ podman_stack() {
     if [[ -z "$usuario" || "$actual" == "$usuario" ]] || ! existe_usuario "$usuario"; then
         podman "$@"
     elif [[ "$(id -u)" -eq 0 ]]; then
-        runuser -u "$usuario" -- env XDG_RUNTIME_DIR="/run/user/$(id -u "$usuario")" podman "$@"
+        # cd /: runuser conserva el directorio actual, y el home de quien invoca
+        # (modo 700 en Debian) no es accesible para la cuenta del stack.
+        (cd / && runuser -u "$usuario" -- env XDG_RUNTIME_DIR="/run/user/$(id -u "$usuario")" podman "$@")
     else
         log ERROR "Para administrar los contenedores hay que ser '$usuario' o root (sudo)."
         return 1
@@ -442,7 +467,7 @@ compose_stack() {
     if [[ -z "$usuario" || "$(id -un)" == "$usuario" ]] || ! existe_usuario "$usuario"; then
         podman-compose "$@"
     elif [[ "$(id -u)" -eq 0 ]]; then
-        runuser -u "$usuario" -- env XDG_RUNTIME_DIR="/run/user/$(id -u "$usuario")" podman-compose "$@"
+        (cd / && runuser -u "$usuario" -- env XDG_RUNTIME_DIR="/run/user/$(id -u "$usuario")" podman-compose "$@")
     else
         log ERROR "Para administrar los contenedores hay que ser '$usuario' o root (sudo)."
         return 1

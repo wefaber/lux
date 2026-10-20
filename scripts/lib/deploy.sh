@@ -95,6 +95,7 @@ deploy_preflight() {
     requerir_comando podman || return 1
     comando_compose >/dev/null || return 1
     deploy_verificar_entorno || return $?
+    asegurar_sesion_stack || return 1
     deploy_verificar_rootless || return 1
 }
 
@@ -149,7 +150,10 @@ deploy_etiquetar_previa() {
 # --- Subcomandos -------------------------------------------------------------
 
 deploy_up() {
-    local build=(--build)
+    # --force-recreate: podman-compose 1.3 no recrea un contenedor que ya existe
+    # (da "name already in use" y sigue), asi que tras reconstruir la imagen
+    # quedaba corriendo la version vieja y el despliegue figuraba como correcto.
+    local build=(--build --force-recreate)
     [[ "${1:-}" == "--sin-build" ]] && build=()
 
     deploy_preflight || return $?
