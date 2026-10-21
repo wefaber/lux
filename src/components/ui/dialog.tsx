@@ -1,7 +1,7 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { type ComponentPropsWithoutRef } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/hooks/useI18n";
 
@@ -28,15 +28,19 @@ function DialogContent({
   ...props
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Content>) {
   const { t } = useI18n();
+  // Con prefers-reduced-motion el modal aparece y desaparece sin escala ni rebote
+  const reduceMotion = useReducedMotion();
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content asChild {...props}>
         <motion.div
-          initial={{ opacity: 0, scale: 0.96, y: 12 }}
+          initial={reduceMotion ? false : { opacity: 0, scale: 0.96, y: 12 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.96, y: 12 }}
-          transition={{ type: "spring", stiffness: 350, damping: 28 }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 12 }}
+          transition={
+            reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 350, damping: 28 }
+          }
           className={cn(
             "fixed left-[50%] top-[50%] z-50 w-full max-w-lg translate-x-[-50%] translate-y-[-50%]",
             // En el telefono: margen a los costados y alto limitado a lo visible (dvh descuenta
