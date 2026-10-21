@@ -1,0 +1,245 @@
+{
+  "contact": {
+    "email": "soporte@iti.edu.uy",
+    "schedule": {
+      "es": "Lunes a viernes, de 9:00 a 17:00",
+      "en": "Monday to Friday, 9:00 am to 5:00 pm"
+    },
+    "responseTime": {
+      "es": "Respondemos dentro de las 24 horas hábiles",
+      "en": "We reply within 24 business hours"
+    }
+  },
+  "guide": {
+    "url": "/dashboard",
+    "label": {
+      "es": "Empezar por el panel",
+      "en": "Start at the dashboard"
+    }
+  },
+  "categories": [
+    {
+      "id": "tickets",
+      "items": [
+        {
+          "id": "crear-ticket",
+          "question": {
+            "es": "¿Cómo creo un ticket?",
+            "en": "How do I create a ticket?"
+          },
+          "answer": {
+            "es": "Entrá a Tickets y elegí Nuevo ticket. Contá qué pasa, elegí la categoría (hardware, software, red u otra) y, si aplica, el equipo afectado. Después podés seguir el estado desde la lista.",
+            "en": "Go to Tickets and choose New ticket. Describe the problem, pick a category (hardware, software, network or other) and, if it applies, the affected equipment. You can then follow its status from the list."
+          }
+        },
+        {
+          "id": "estados-ticket",
+          "question": {
+            "es": "¿Qué significa cada estado del ticket?",
+            "en": "What does each ticket status mean?"
+          },
+          "answer": {
+            "es": "Pendiente: todavía no tiene técnico asignado. En progreso: ya está asignado y se está trabajando. En resolución: falta la confirmación final. Resuelto: el trabajo terminó. Si el problema vuelve, abrí el ticket y usá Reabrir.",
+            "en": "Pending: no technician has been assigned yet. In progress: it is assigned and being worked on. In resolution: waiting for final confirmation. Resolved: the work is done. If the problem comes back, open the ticket and use Reopen."
+          }
+        },
+        {
+          "id": "tiempo-resolucion",
+          "question": {
+            "es": "¿Cuánto tarda la resolución?",
+            "en": "How long does a resolution take?"
+          },
+          "answer": {
+            "es": "Depende del problema y de la carga del taller. El estado y el responsable se actualizan en el ticket. Si es urgente, escribinos al correo de ayuda indicando el número de ticket.",
+            "en": "It depends on the problem and the workshop's workload. The status and the assigned technician are updated on the ticket. If it is urgent, email the help address and include the ticket number."
+          }
+        },
+        {
+          "id": "comentarios-ticket",
+          "question": {
+            "es": "¿Puedo agregar información a un ticket abierto?",
+            "en": "Can I add information to an open ticket?"
+          },
+          "answer": {
+            "es": "Sí. Desde el detalle del ticket podés dejar comentarios con datos nuevos, fotos del problema o la respuesta que te pidió el técnico.",
+            "en": "Yes. From the ticket detail you can add comments with new details, photos of the problem or the answer the technician asked for."
+          }
+        }
+      ]
+    },
+    {
+      "id": "loans",
+      "items": [
+        {
+          "id": "solicitar-prestamo",
+          "question": {
+            "es": "¿Cómo pido un préstamo de equipo?",
+            "en": "How do I request an equipment loan?"
+          },
+          "answer": {
+            "es": "Entrá a Préstamos y elegí Solicitar préstamo. Seleccioná un equipo disponible, la fecha de devolución y el motivo. El pedido queda pendiente hasta que el personal del área lo revise.",
+            "en": "Go to Loans and choose Request loan. Pick an available item, the return date and the reason. The request stays pending until area staff review it."
+          }
+        },
+        {
+          "id": "devolucion",
+          "question": {
+            "es": "¿Cómo devuelvo el equipo?",
+            "en": "How do I return the equipment?"
+          },
+          "answer": {
+            "es": "Llevá el equipo al taller y avisá al personal. La devolución se registra desde Préstamos con el botón Devolver. Si el equipo vuelve con una falla, indicalo para que pase a reparación.",
+            "en": "Bring the item to the workshop and tell the staff. The return is recorded from Loans with the Return button. If the item comes back faulty, report it so it can be sent for repair."
+          }
+        },
+        {
+          "id": "atraso",
+          "question": {
+            "es": "¿Qué pasa si me atraso con la devolución?",
+            "en": "What happens if I return it late?"
+          },
+          "answer": {
+            "es": "El préstamo pasa a estado Vencido y queda marcado en la lista. Devolvelo cuanto antes y, si necesitás más tiempo, escribinos al correo de ayuda para coordinar.",
+            "en": "The loan becomes Overdue and is flagged in the list. Return it as soon as possible; if you need more time, email the help address to arrange it."
+          }
+        },
+        {
+          "id": "renovar-prestamo",
+          "question": {
+            "es": "¿Puedo extender el plazo del préstamo?",
+            "en": "Can I extend the loan period?"
+          },
+          "answer": {
+            "es": "La extensión no se hace desde la aplicación. Escribinos al correo de ayuda con el número de préstamo y la nueva fecha que necesitás; el personal la registra si el equipo no está reservado.",
+            "en": "Extensions are not requested in the app. Email the help address with the loan number and the new date you need; staff will record it if the item is not reserved."
+          }
+        }
+      ]
+    },
+    {
+      "id": "services",
+      "items": [
+        {
+          "id": "que-puedo-solicitar",
+          "question": {
+            "es": "¿Qué tipo de solicitudes puedo hacer?",
+            "en": "What kind of service requests can I make?"
+          },
+          "answer": {
+            "es": "Podés pedir preparación de laboratorio, instalación de software y armado o configuración de equipos. Elegí el tipo al crear la solicitud y describí lo que necesitás con el mayor detalle posible.",
+            "en": "You can request lab preparation, software installation and equipment setup or configuration. Choose the type when creating the request and describe what you need in as much detail as possible."
+          }
+        },
+        {
+          "id": "seguir-solicitud",
+          "question": {
+            "es": "¿Cómo sigo el estado de mi solicitud?",
+            "en": "How do I track my request?"
+          },
+          "answer": {
+            "es": "En Solicitudes vas a ver tus pedidos con su estado: pendiente, aprobada, en progreso, completada o rechazada. Abrí el detalle para leer las notas y el texto de resolución.",
+            "en": "Under Requests you will see your submissions with their status: pending, approved, in progress, completed or rejected. Open the detail to read the notes and the resolution text."
+          }
+        },
+        {
+          "id": "solicitud-rechazada",
+          "question": {
+            "es": "¿Por qué pueden rechazar una solicitud?",
+            "en": "Why can a request be rejected?"
+          },
+          "answer": {
+            "es": "Una solicitud se rechaza cuando no se puede cumplir o le falta información. En el detalle aparece el motivo. Corregí lo que corresponda y creá una nueva solicitud, o escribinos si no queda claro.",
+            "en": "A request is rejected when it cannot be fulfilled or it lacks information. The reason appears in the detail. Fix what is needed and create a new request, or contact us if it is unclear."
+          }
+        }
+      ]
+    },
+    {
+      "id": "reservations",
+      "items": [
+        {
+          "id": "crear-reserva",
+          "question": {
+            "es": "¿Cómo reservo un equipo o un espacio?",
+            "en": "How do I reserve equipment or a room?"
+          },
+          "answer": {
+            "es": "Entrá a Reservas y elegí Nueva reserva. Indicá si reservás un equipo o una ubicación, elegí el recurso y el horario. La reserva queda pendiente hasta que el personal la apruebe.",
+            "en": "Go to Reservations and choose New reservation. Select whether you are booking equipment or a location, then pick the resource and the time slot. The reservation stays pending until staff approve it."
+          }
+        },
+        {
+          "id": "modificar-reserva",
+          "question": {
+            "es": "¿Puedo modificar o cancelar una reserva?",
+            "en": "Can I change or cancel a reservation?"
+          },
+          "answer": {
+            "es": "Sí, mientras siga pendiente o aprobada. Usá Modificar para cambiar el horario o Cancelar para liberarlo. Una reserva terminada, rechazada o cancelada ya no se puede editar.",
+            "en": "Yes, while it is still pending or approved. Use Modify to change the time or Cancel to free it. A finished, rejected or cancelled reservation can no longer be edited."
+          }
+        },
+        {
+          "id": "reserva-no-usada",
+          "question": {
+            "es": "¿Qué hago si no voy a usar la reserva?",
+            "en": "What should I do if I will not use the reservation?"
+          },
+          "answer": {
+            "es": "Cancelala desde Reservas para que el horario quede libre para otras personas. Si no podés hacerlo desde la aplicación, avisá al correo de ayuda.",
+            "en": "Cancel it from Reservations so the time slot is freed for others. If you cannot do it in the app, let us know at the help address."
+          }
+        }
+      ]
+    },
+    {
+      "id": "account",
+      "items": [
+        {
+          "id": "cambiar-contrasena",
+          "question": {
+            "es": "¿Cómo cambio mi contraseña?",
+            "en": "How do I change my password?"
+          },
+          "answer": {
+            "es": "Andá a Perfil y usá Cambiar contraseña. Después de guardar se cierran las sesiones abiertas y tenés que ingresar de nuevo con la clave nueva.",
+            "en": "Go to Profile and use Change password. After saving, open sessions are closed and you must sign in again with the new password."
+          }
+        },
+        {
+          "id": "olvide-contrasena",
+          "question": {
+            "es": "Olvidé mi contraseña, ¿qué hago?",
+            "en": "I forgot my password, what should I do?"
+          },
+          "answer": {
+            "es": "Las cuentas las administra el equipo de soporte. Escribinos al correo de ayuda desde tu correo institucional y coordinamos el restablecimiento.",
+            "en": "Accounts are managed by the support team. Email the help address from your institutional account and we will arrange a reset."
+          }
+        },
+        {
+          "id": "accesibilidad",
+          "question": {
+            "es": "¿Cómo activo el alto contraste o la fuente para dislexia?",
+            "en": "How do I enable high contrast or the dyslexia-friendly font?"
+          },
+          "answer": {
+            "es": "En Perfil, sección Accesibilidad, podés cambiar el tema, el tamaño de fuente, el alto contraste y la fuente OpenDyslexic. Las preferencias se guardan en este navegador.",
+            "en": "In Profile, under Accessibility, you can change the theme, font size, high contrast and the OpenDyslexic font. Preferences are saved in this browser."
+          }
+        },
+        {
+          "id": "cambiar-idioma",
+          "question": {
+            "es": "¿Cómo cambio el idioma de la interfaz?",
+            "en": "How do I change the interface language?"
+          },
+          "answer": {
+            "es": "Usá el selector ES / EN de la barra superior o de tu perfil. El idioma elegido se recuerda en este navegador. Las preguntas frecuentes también se muestran en ese idioma cuando el operador cargó ambas versiones.",
+            "en": "Use the ES / EN switcher in the top bar or in your profile. The chosen language is remembered in this browser. FAQ entries are also shown in that language when both versions were provided by the operator."
+          }
+        }
+      ]
+    }
+  ]
+}
