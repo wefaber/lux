@@ -13,7 +13,9 @@ export interface User {
 
 export type EquipmentStatus = "available" | "in_use" | "in_repair" | "retired"; // Estado del equipamiento
 
-export type LocationKind = "laboratory" | "classroom" | "administration" | "other"; // Tipo de ubicacion
+// "special" son las areas que no son aula ni oficina: Direccion, Adscripciones,
+// Bedelia. Tienen su propia letra (E) para no mezclarlas con administracion
+export type LocationKind = "laboratory" | "classroom" | "administration" | "special" | "other"; // Tipo de ubicacion
 
 export interface Location {
   id: string;

@@ -26,6 +26,8 @@ export const validation: Translation<typeof es> = {
   "validation.code.digit": "{label}: must include at least one number",
   "validation.location.kind": "Choose the location type",
   "validation.location.number": "Number: an integer between 1 and 99",
+  "validation.location.duplicateCode": "{name} ({code}) already exists",
+  "validation.location.duplicateName": "A location named {name} already exists",
   "validation.reservation.startInvalid": "Invalid start date",
   "validation.reservation.past": "A reservation cannot start in the past",
   "validation.reservation.endInvalid": "Invalid end date",
