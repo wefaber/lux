@@ -24,6 +24,7 @@ export const validateComponent = inSpanish(validation.validateComponent);
 export const validateIntervention = inSpanish(validation.validateIntervention);
 export const validateLocation = inSpanish(validation.validateLocation);
 export const validatePassword = inSpanish(validation.validatePassword);
+export const validateNewPassword = inSpanish(validation.validateNewPassword);
 export const validateProduct = inSpanish(validation.validateProduct);
 export const validateReservation = inSpanish(validation.validateReservation);
 export const validateServiceRequest = inSpanish(validation.validateServiceRequest);

@@ -33,6 +33,7 @@ export const errors = {
   "error.user.dupDni": "Ya existe un usuario con cédula {dni}",
   "error.user.dupEmail": "Ya existe un usuario con email {email}",
   "error.password.wrong": "La contraseña actual no es correcta",
+  "error.password.same": "La nueva contraseña tiene que ser distinta",
   "error.product.dupId": "Ya existe un equipo con ID {id}",
   "error.product.dupSerial": "Ya existe un equipo con n° de serie {serial}",
   "error.product.retireLoans": "No se puede dar de baja: el equipo tiene préstamos en curso",

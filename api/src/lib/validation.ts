@@ -269,3 +269,29 @@ export function validateComponent(c: ComponentFields): FieldErrors<keyof Compone
     ["partNumber", validateCode(c.partNumber, "Part number")],
   ]);
 }
+
+// ── Contrasenas ──────────────────────────────────────────────────────────────
+// Misma politica que el formulario (src/lib/validation.ts): 6 a 128 caracteres.
+
+export const PASSWORD_MIN_LENGTH = 6;
+export const SAME_PASSWORD_MESSAGE = "La nueva contraseña tiene que ser distinta";
+
+export function validatePassword(password: string): string | null {
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    return `La contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres`;
+  }
+  if (password.length > 128) return "La contraseña no puede superar los 128 caracteres";
+  return null;
+}
+
+/**
+ * Contrasena nueva al cambiarla desde el perfil: la politica vigente y, ademas,
+ * no repetir la actual. La comparacion es exacta: argon2 distingue mayusculas,
+ * espacios y demas, asi que dos textos distintos nunca son "la misma" clave.
+ */
+export function validateNewPassword(currentPassword: string, newPassword: string): string | null {
+  return (
+    validatePassword(newPassword) ??
+    (newPassword === currentPassword ? SAME_PASSWORD_MESSAGE : null)
+  );
+}

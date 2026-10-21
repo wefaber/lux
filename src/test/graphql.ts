@@ -15,19 +15,29 @@ export interface GqlResult<T> {
   errors?: Array<{ message: string }>;
 }
 
-export async function gqlAs<T = unknown>(
-  userId: string | null,
+export async function gqlWithToken<T = unknown>(
+  token: string | null,
   query: string,
   variables?: Record<string, unknown>,
 ): Promise<GqlResult<T>> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (userId) headers.Authorization = `Bearer mock-token-${userId}`;
+  if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch("http://localhost/graphql", {
     method: "POST",
     headers,
     body: JSON.stringify({ query, variables }),
   });
   return (await res.json()) as GqlResult<T>;
+}
+
+// `mock-token-<id>` es el token de la version inicial del usuario (la 0). Para
+// uno emitido por login (con su version) se usa gqlWithToken.
+export function gqlAs<T = unknown>(
+  userId: string | null,
+  query: string,
+  variables?: Record<string, unknown>,
+): Promise<GqlResult<T>> {
+  return gqlWithToken<T>(userId ? `mock-token-${userId}` : null, query, variables);
 }
 
 export const USERS = {
