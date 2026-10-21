@@ -24,7 +24,7 @@ export function LanguageSwitcher({ className }: { className?: string }) {
           title={t(`language.name.${code}`)}
           lang={code}
           className={cn(
-            "rounded-full px-2 py-0.5 text-xs font-medium uppercase transition-colors cursor-pointer",
+            "rounded-full px-2 py-1 text-xs font-medium uppercase transition-colors cursor-pointer sm:py-0.5",
             lang === code
               ? "bg-primary text-primary-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground",

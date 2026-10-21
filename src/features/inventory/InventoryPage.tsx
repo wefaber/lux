@@ -75,28 +75,38 @@ export function InventoryPage() {
 
   return (
     <div className="space-y-6 max-w-full">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             {t("inventory.title")}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">{t("inventory.subtitle")}</p>
         </div>
         {canEdit && (
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" size="sm" asChild>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            <Button
+              variant="secondary"
+              size="sm"
+              asChild
+              className="max-sm:order-2 max-sm:w-full"
+            >
               <Link to={ROUTES.LOCATIONS}>
                 <MapPin className="h-3.5 w-3.5" />
                 {t("inventory.locations")}
               </Link>
             </Button>
-            <Button variant="secondary" size="sm" asChild>
+            <Button
+              variant="secondary"
+              size="sm"
+              asChild
+              className="max-sm:order-3 max-sm:w-full"
+            >
               <Link to={`${ROUTES.INVENTORY}/nuevo-componente`}>
                 <Cpu className="h-3.5 w-3.5" />
                 {t("inventory.component")}
               </Link>
             </Button>
-            <Button size="sm" asChild>
+            <Button size="sm" asChild className="max-sm:order-1 max-sm:col-span-2 max-sm:w-full">
               <Link to={`${ROUTES.INVENTORY}/nuevo`}>
                 <Plus className="h-3.5 w-3.5" />
                 {t("inventory.newEquipment")}
@@ -187,7 +197,10 @@ export function InventoryPage() {
                         className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                       >
                         <td className="px-4 py-3">
-                          <Link to={`${ROUTES.INVENTORY}/${p.id}`} className="hover:underline">
+                          <Link
+                            to={`${ROUTES.INVENTORY}/${p.id}`}
+                            className="block py-1 hover:underline sm:py-0"
+                          >
                             <p className="text-sm font-semibold text-foreground">
                               {p.brand} {p.model}
                             </p>
@@ -269,7 +282,7 @@ export function InventoryPage() {
                       <td className="px-4 py-3">
                         <Link
                           to={`${ROUTES.INVENTORY}/componente/${c.id}`}
-                          className="hover:underline"
+                          className="block py-1 hover:underline sm:py-0"
                         >
                           <p className="text-sm font-semibold text-foreground">{c.name}</p>
                           <p className="text-xs text-muted-foreground font-medium">{c.model}</p>

@@ -118,14 +118,18 @@ export function ServiceList() {
 
   return (
     <div className="space-y-6 max-w-full">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             {t("services.title")}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">{t("services.subtitle")}</p>
         </div>
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
+        <Button
+          size="sm"
+          className="shrink-0 whitespace-nowrap"
+          onClick={() => setCreateOpen(true)}
+        >
           <Plus className="h-3.5 w-3.5" />
           {t("services.new")}
         </Button>
@@ -255,7 +259,7 @@ export function ServiceList() {
                       <td className="px-4 py-3">
                         <Link
                           to={`${ROUTES.SERVICES}/${s.id}`}
-                          className="text-xs text-primary hover:underline font-semibold"
+                          className="inline-flex min-h-11 items-center text-xs font-semibold text-primary hover:underline sm:min-h-0"
                         >
                           {t("services.viewDetail")}
                         </Link>

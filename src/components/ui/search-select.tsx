@@ -155,7 +155,7 @@ export function SearchSelect<T>({
                 type="button"
                 role="option"
                 aria-selected={getKey(item) === value}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center gap-2"
+                className="w-full text-left px-3 py-2.5 text-base hover:bg-muted/50 transition-colors flex items-center gap-2 sm:py-2 sm:text-sm"
                 // mousedown en vez de click: el foco no llega a salir del campo
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => choose(item)}

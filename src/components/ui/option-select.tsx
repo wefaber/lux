@@ -52,7 +52,7 @@ export function OptionSelect({
         aria-label={ariaLabel}
         className={cn(
           "w-auto gap-2 cursor-pointer disabled:cursor-not-allowed",
-          size === "sm" && "h-8 rounded-lg px-2.5 text-xs",
+          size === "sm" && "h-11 rounded-lg px-3 text-sm sm:h-8 sm:px-2.5 sm:text-xs",
           className,
         )}
       >
