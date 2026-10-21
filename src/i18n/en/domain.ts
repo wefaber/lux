@@ -2,6 +2,9 @@ import type { domain as es } from "../es/domain";
 import type { Translation } from "../types";
 
 export const domain: Translation<typeof es> = {
+  "status.errorReport.new": "New",
+  "status.errorReport.triaged": "Triaged",
+  "status.errorReport.resolved": "Resolved",
   "status.ticket.pending": "Pending",
   "status.ticket.in_progress": "In progress",
   "status.ticket.in_resolution": "In resolution",

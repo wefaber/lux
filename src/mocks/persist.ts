@@ -8,6 +8,7 @@ import { mockTickets } from "./data/tickets";
 import { mockLoans } from "./data/loans";
 import { mockServices } from "./data/services";
 import { mockNotices, mockPendingSeen } from "./data/notices";
+import { mockErrorReports } from "./data/errors";
 import { mockActivityLogs } from "./generators";
 
 // Los datos de prueba viven en memoria: sin esto, al recargar la pagina todo
@@ -17,7 +18,7 @@ import { mockActivityLogs } from "./generators";
 // Subir VERSION cuando cambien los datos de ejemplo o su forma: lo guardado con
 // otra version se descarta y se arranca de cero.
 const STORAGE_KEY = "lux_mock_data";
-const VERSION = 4;
+const VERSION = 5;
 
 const ARRAYS = {
   users: mockUsers,
@@ -33,6 +34,7 @@ const ARRAYS = {
   notices: mockNotices,
   pendingSeen: mockPendingSeen,
   activityLogs: mockActivityLogs,
+  errorReports: mockErrorReports,
 } as const;
 
 type Store = { [K in keyof typeof ARRAYS]: unknown[] } & { passwords: Record<string, string> };

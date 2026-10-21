@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { Outlet, NavLink, Link, useNavigate } from "react-router-dom";
-import { Users, Shield, ActivitySquare, ArrowLeft, Zap, BarChart3, LogOut } from "lucide-react";
+import { Users, Shield, ActivitySquare, ArrowLeft, Zap, BarChart3, Bug, LogOut } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
 import { useI18n } from "@/hooks/useI18n";
@@ -18,6 +18,7 @@ const adminNav: Array<{ icon: typeof Users; labelKey: MessageKey; to: string }> 
   { icon: Shield, labelKey: "admin.nav.roles", to: ROUTES.ADMIN_ROLES },
   { icon: ActivitySquare, labelKey: "admin.nav.logs", to: ROUTES.ADMIN_LOGS },
   { icon: BarChart3, labelKey: "admin.nav.reports", to: ROUTES.ADMIN_REPORTS },
+  { icon: Bug, labelKey: "admin.nav.issues", to: ROUTES.ADMIN_ISSUES },
 ];
 
 export function AdminLayout() {

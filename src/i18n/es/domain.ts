@@ -1,5 +1,8 @@
 // Etiquetas de los enums del dominio (las usa src/lib/constants.ts)
 export const domain = {
+  "status.errorReport.new": "Nuevo",
+  "status.errorReport.triaged": "En triage",
+  "status.errorReport.resolved": "Resuelto",
   "status.ticket.pending": "Pendiente",
   "status.ticket.in_progress": "En progreso",
   "status.ticket.in_resolution": "En resolución",

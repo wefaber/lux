@@ -3,6 +3,7 @@ import { boolean, check, index, integer, pgTable, primaryKey, text, type AnyPgCo
 import {
   COMMENT_ENTITIES,
   EQUIPMENT_STATUSES,
+  ERROR_REPORT_STATUSES,
   INTERVENTION_TYPES,
   LOAN_STATUSES,
   LOCATION_KINDS,
@@ -335,6 +336,35 @@ export const revokedTokens = pgTable("revoked_tokens", {
   revokedAt: text("revoked_at").notNull(),
 });
 
+// Errores del frontend agrupados por huella (`fingerprint`): una fila por clase
+// de error, no por evento. El backend solo recibe texto ya saneado por el
+// cliente (mensaje, stack, ruta, agente y rol), sin cuerpos de formulario ni
+// credenciales; la fila se actualiza en cada reaparicion.
+export const errorReports = pgTable(
+  "error_reports",
+  {
+    id: text("id").primaryKey(),
+    fingerprint: text("fingerprint").notNull().unique(),
+    message: text("message").notNull(),
+    stack: text("stack"),
+    route: text("route").notNull(),
+    userAgent: text("user_agent"),
+    role: text("role"),
+    firstSeen: text("first_seen").notNull(),
+    lastSeen: text("last_seen").notNull(),
+    occurrences: integer("occurrences").notNull().default(1),
+    status: text("status").notNull().default("new"),
+    githubIssueUrl: text("github_issue_url"),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [
+    index("error_reports_status_idx").on(t.status),
+    index("error_reports_last_seen_idx").on(t.lastSeen),
+    check("error_reports_status_check", oneOf(t.status, ERROR_REPORT_STATUSES)),
+  ],
+);
+
 export const activityLogs = pgTable("activity_logs", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull(),
@@ -357,4 +387,5 @@ export type InterventionRow = typeof interventions.$inferSelect;
 export type CommentRow = typeof comments.$inferSelect;
 export type ReservationRow = typeof reservations.$inferSelect;
 export type NoticeRow = typeof notices.$inferSelect;
+export type ErrorReportRow = typeof errorReports.$inferSelect;
 export type ActivityLogRow = typeof activityLogs.$inferSelect;
