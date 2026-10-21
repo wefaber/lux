@@ -48,6 +48,7 @@ export const ROUTES: RouteSpec[] = [
   { method: "PUT", path: "/tickets/:id/claim", operation: "claimTicket" },
   { method: "PUT", path: "/tickets/:id/assign", operation: "assignTicket" },
   { method: "PUT", path: "/tickets/:id/complete", operation: "completeTicket" },
+  { method: "PUT", path: "/tickets/:id/rating", operation: "rateTicket" },
   { method: "DELETE", path: "/tickets/:id", operation: "softDeleteTicket", flagData: deleted },
 
   { method: "GET", path: "/loans", operation: "loans" },

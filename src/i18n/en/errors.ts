@@ -45,6 +45,8 @@ export const errors: Translation<typeof es> = {
   "error.ticket.transition": 'A ticket cannot go from "{from}" to "{to}"',
   "error.ticket.assignStaff": "Can only be assigned to technical staff",
   "error.ticket.reassignResolved": "A resolved ticket cannot be reassigned",
+  "error.ticket.ratingResolved": "Only a resolved ticket can be rated",
+  "error.ticket.ratingRange": "The rating goes from 1 to 5",
   "error.loan.unavailable": "The equipment is not available for loan",
   "error.loan.dates": "The return date must be after the delivery date",
   "error.loan.transition": 'Cannot {action} a loan with status "{status}"',

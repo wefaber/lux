@@ -45,6 +45,8 @@ export const errors = {
   "error.ticket.transition": 'No se puede pasar un ticket de "{from}" a "{to}"',
   "error.ticket.assignStaff": "Solo se puede asignar a personal técnico",
   "error.ticket.reassignResolved": "No se puede reasignar un ticket resuelto",
+  "error.ticket.ratingResolved": "Solo se puede puntuar un ticket resuelto",
+  "error.ticket.ratingRange": "La valoración va de 1 a 5",
   "error.loan.unavailable": "El equipo no está disponible para préstamo",
   "error.loan.dates": "La fecha de devolución debe ser posterior a la de entrega",
   "error.loan.transition": 'No se puede {action} un préstamo en estado "{status}"',
