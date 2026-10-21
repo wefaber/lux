@@ -27,7 +27,7 @@ export function AppLayout() {
               <motion.div
                 key={location.pathname}
                 {...PAGE_TRANSITION}
-                className="min-h-full p-6 pb-24 md:pb-6 lg:px-8 lg:py-4"
+                className="min-h-full p-4 pb-[calc(6rem+env(safe-area-inset-bottom,0px))] sm:p-6 sm:pb-[calc(6rem+env(safe-area-inset-bottom,0px))] md:pb-6 lg:px-8 lg:py-4"
               >
                 <Outlet />
               </motion.div>

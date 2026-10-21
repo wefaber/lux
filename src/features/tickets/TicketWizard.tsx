@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { CheckCircle2 } from "lucide-react";
 import type { Ticket } from "@/lib/types";
@@ -42,6 +42,21 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
   const [actionsTaken, setActionsTaken] = useState(ticket.actionsTaken ?? "");
   const [completing, setCompleting] = useState(false);
   const [error, setError] = useState("");
+  // En el telefono los pasos se desplazan de costado: el activo se centra solo
+  const stepsRef = useRef<HTMLElement>(null);
+  const stepButtons = useRef<Array<HTMLButtonElement | null>>([]);
+
+  useEffect(() => {
+    const nav = stepsRef.current;
+    const button = stepButtons.current[currentStep];
+    if (!nav || !button) return;
+    const navRect = nav.getBoundingClientRect();
+    const buttonRect = button.getBoundingClientRect();
+    nav.scrollTo({
+      left: nav.scrollLeft + buttonRect.left - navRect.left - (nav.clientWidth - buttonRect.width) / 2,
+      behavior: "smooth",
+    });
+  }, [currentStep]);
 
   // Sale del estado del ticket y no de un flag local: si se reabre, vuelve a ser editable
   const isResolved = ticket.status === "resolved";
@@ -102,14 +117,21 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
     // En el telefono los pasos van arriba, en una fila que se desplaza de costado;
     // desde md vuelven a la columna de la izquierda
     <div className="flex flex-col md:flex-row gap-4 md:gap-8 md:min-h-[500px]">
-      <nav className="md:w-56 flex-shrink-0 pt-1 -mx-1 px-1 overflow-x-auto md:overflow-visible">
+      <nav
+        ref={stepsRef}
+        className="md:w-56 flex-shrink-0 pt-1 -mx-1 px-1 overflow-x-auto md:overflow-visible scroll-px-1"
+      >
         <ol className="flex md:flex-col gap-1">
           {steps.map((step, i) => (
             <li key={step.id} className="shrink-0">
               <button
+                ref={(el) => {
+                  stepButtons.current[i] = el;
+                }}
                 onClick={() => setCurrentStep(i)}
+                aria-current={currentStep === i ? "step" : undefined}
                 className={cn(
-                  "md:w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm whitespace-nowrap transition-all cursor-pointer text-left",
+                  "md:w-full flex min-h-11 md:min-h-0 items-center gap-2.5 rounded-xl px-3 py-2 text-sm whitespace-nowrap transition-all cursor-pointer text-left",
                   currentStep === i
                     ? "bg-card/60 text-foreground font-medium shadow-sm"
                     : "text-muted-foreground hover:bg-muted/50",

@@ -65,7 +65,7 @@ export function LocationSearchBar({
         <div
           ref={setAnchor}
           className={cn(
-            "flex h-10 items-center gap-2 rounded-xl border border-border/80 bg-card/45 px-3 text-sm shadow-2xs backdrop-blur-xs",
+            "flex h-11 items-center gap-2 rounded-xl border border-border/80 bg-card/45 px-3 text-base shadow-2xs backdrop-blur-xs sm:h-10 sm:text-sm",
             "transition-all duration-300 ease-out hover:border-border hover:bg-card/65",
             "focus-within:border-primary focus-within:bg-card/85 focus-within:ring-4 focus-within:ring-primary/10",
             className,
@@ -110,7 +110,7 @@ export function LocationSearchBar({
                 onLocationChange("");
               }
             }}
-            className="min-w-0 flex-1 bg-transparent text-foreground placeholder:text-muted-foreground/75 focus:outline-none"
+            className="min-h-11 min-w-0 flex-1 self-stretch bg-transparent text-base text-foreground placeholder:text-muted-foreground/75 focus:outline-none sm:min-h-0 sm:text-sm"
           />
         </div>
       </PopoverPrimitive.Anchor>
@@ -138,7 +138,7 @@ export function LocationSearchBar({
               type="button"
               role="option"
               aria-selected={false}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50"
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/50"
               // mousedown en vez de click: el foco no llega a salir del campo
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => choose(l)}

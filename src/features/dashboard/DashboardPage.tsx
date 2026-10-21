@@ -94,14 +94,14 @@ function StaffDashboard() {
 
   return (
     <div className="space-y-8 max-w-full">
-      <div className="flex items-end justify-between">
-        <div>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             {t("dashboard.greeting", { name: user?.name.split(" ")[0] ?? "" })}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">{t("dashboard.staff.subtitle")}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <OptionSelect
             aria-label={t("dashboard.period")}
             size="sm"
@@ -113,7 +113,13 @@ function StaffDashboard() {
             }))}
           />
           {hasRole(...ADMIN_ROLES) && (
-            <Button variant="secondary" size="sm" onClick={handleExport} disabled={!stats}>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="whitespace-nowrap"
+              onClick={handleExport}
+              disabled={!stats}
+            >
               <Download className="h-3.5 w-3.5" />
               {t("dashboard.exportCsv")}
             </Button>
@@ -132,7 +138,7 @@ function StaffDashboard() {
       ) : (
         <div
           className={cn(
-            "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 transition-all duration-300 ease-out",
+            "grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 transition-all duration-300 ease-out",
             isLoading && "opacity-75 blur-xs pointer-events-none",
           )}
         >

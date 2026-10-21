@@ -21,10 +21,11 @@ const buttonVariants = cva(
           "bg-success-bg text-success border border-success-border shadow-2xs hover:bg-success/20 active:scale-[0.96]",
       },
       size: {
-        sm: "h-8 px-3 text-xs rounded-lg",
-        md: "h-10 px-5",
+        // 44px de alto en el telefono (área táctil), compacto desde sm
+        sm: "h-11 px-3 text-xs rounded-lg sm:h-8",
+        md: "h-11 px-5 sm:h-10",
         lg: "h-12 px-7 text-base rounded-2xl",
-        icon: "h-10 w-10 rounded-xl",
+        icon: "h-11 w-11 rounded-xl sm:h-10 sm:w-10",
       },
     },
     defaultVariants: {

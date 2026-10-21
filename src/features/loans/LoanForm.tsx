@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UserSearchSelect } from "@/components/search-pickers";
 import { OptionSelect } from "@/components/ui/option-select";
+import { DialogFooter } from "@/components/ui/dialog";
 import { STAFF_ROLES } from "@/lib/roles";
 import { ErrorAlert } from "@/components/ui/error-alert";
 
@@ -136,11 +137,11 @@ export function LoanForm({ onSuccess }: LoanFormProps) {
 
       <ErrorAlert>{error}</ErrorAlert>
 
-      <div className="flex gap-2 justify-end">
+      <DialogFooter>
         <Button type="submit" disabled={saving}>
           {saving ? t("loans.form.sending") : isStaff ? t("loans.register") : t("loans.request")}
         </Button>
-      </div>
+      </DialogFooter>
     </form>
   );
 }
