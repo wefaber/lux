@@ -2,6 +2,7 @@ import type { MessageKey } from "..";
 import { app } from "./app";
 import { core } from "./core";
 import { domain } from "./domain";
+import { filters } from "./filters";
 import { errors } from "./errors";
 import { comments } from "./comments";
 import { admin } from "./admin";
@@ -20,6 +21,7 @@ export const en: Record<MessageKey, string> = {
   ...core,
   ...app,
   ...domain,
+  ...filters,
   ...errors,
   ...comments,
   ...admin,

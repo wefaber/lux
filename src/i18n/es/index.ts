@@ -1,6 +1,7 @@
 import { app } from "./app";
 import { core } from "./core";
 import { domain } from "./domain";
+import { filters } from "./filters";
 import { errors } from "./errors";
 import { comments } from "./comments";
 import { admin } from "./admin";
@@ -20,6 +21,7 @@ export const es = {
   ...core,
   ...app,
   ...domain,
+  ...filters,
   ...errors,
   ...comments,
   ...admin,
@@ -40,6 +42,7 @@ export const esParts = [
   core,
   app,
   domain,
+  filters,
   errors,
   services,
   loans,
