@@ -53,7 +53,12 @@ import {
   unauthenticated,
 } from "../errors";
 import { writeAudit } from "../audit";
-import { loginIpMaxAttempts, loginLockMinutes, loginMaxAttempts } from "../env";
+import {
+  loginIpMaxAttempts,
+  loginLockMaxMinutes,
+  loginLockMinutes,
+  loginMaxAttempts,
+} from "../env";
 import { LoginGuard } from "../login-guard";
 import { userFieldResolvers } from "./privacy";
 import { revokeToken } from "../sessions";
@@ -506,6 +511,7 @@ const loginGuard = new LoginGuard({
   maxAttempts: loginMaxAttempts(),
   ipMaxAttempts: loginIpMaxAttempts(),
   lockMs: loginLockMinutes() * 60 * 1000,
+  maxLockMs: loginLockMaxMinutes() * 60 * 1000,
 });
 
 // Tope de largo de la contrasena que se acepta verificar (evita usar argon2 como DoS).
