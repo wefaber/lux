@@ -6,3 +6,8 @@ scripts/cron/*  text eol=lf
 ops/**/*.sh     text eol=lf
 ops/backup-server/cron/*  text eol=lf
 ops/containers/web/default.conf.template  text eol=lf
+# Pruebas y configuracion de shell: se copian al servidor y se corren con bats/shellcheck.
+*.bats  text eol=lf
+*.bash  text eol=lf
+.shellcheckrc  text eol=lf
+scripts/tests/bats/stubs/*  text eol=lf

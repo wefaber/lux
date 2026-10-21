@@ -1,5 +1,9 @@
-# Stack de Lux para Podman rootless: web (nginx + SPA) + api (Bun) + db
-# (PostgreSQL 17) + volumen de datos + red interna. Un solo archivo.
+# Stack de Lux para Podman rootless: un contenedor por modulo (web, api, db y
+# el job de migraciones), volumen de datos y tres redes segmentadas. Un solo
+# archivo.
+#
+#   web  --lux_app--> api  --lux_data--> db        (flechas = quien inicia la conexion)
+#   web tambien esta en lux_edge, la unica red con salida y puerto publicado.
 #
 #   podman compose --env-file /etc/sgrsi/lux.env -f ops/compose.yaml up -d --build
 #
@@ -27,8 +31,9 @@ services:
     volumes:
       - lux_pgdata:/var/lib/postgresql/data
       - ./containers/db/init:/docker-entrypoint-initdb.d:ro
-    networks: [lux_internal]
-    # Sin `ports:`. La base solo existe dentro de la red interna.
+    networks: [lux_data]
+    # Sin `ports:`. La base solo existe en lux_data (interna) y solo la ven la
+    # API y las migraciones; web no tiene ruta hacia ella.
     healthcheck:
       # -h 127.0.0.1 fuerza TCP: durante la inicializacion el servidor temporal
       # solo escucha en el socket y el chequeo por socket daria "healthy" antes
@@ -65,7 +70,7 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:?definir AUTH_SECRET en lux.env}
       HOST: 0.0.0.0
       PORT: "4111"
-    networks: [lux_internal]
+    networks: [lux_data]
     depends_on:
       db:
         condition: service_healthy
@@ -85,7 +90,9 @@ services:
       replicas: ${LUX_API_REPLICAS:-1}
     restart: unless-stopped
     environment: *api_env
-    networks: [lux_internal]
+    # lux_data: habla con la base. lux_app: la alcanza web. Es el unico modulo
+    # que toca las dos redes internas.
+    networks: [lux_data, lux_app]
     # Bun no instala un manejador de SIGTERM y, como PID 1, el nucleo ignora la
     # senal: sin init, `stop` espera 10 s y termina en SIGKILL (comprobado con
     # podman-compose 1.0.6). Con init (catatonit) el cierre es inmediato.
@@ -124,7 +131,7 @@ services:
     ports:
       # Solo loopback: el Nginx del host (80/443, TLS) es la unica entrada.
       - "127.0.0.1:${LUX_WEB_PORT:-8080}:8080"
-    networks: [lux_internal, lux_edge]
+    networks: [lux_app, lux_edge]
     depends_on:
       api:
         condition: service_healthy
@@ -142,11 +149,16 @@ volumes:
   lux_pgdata: {}
 
 networks:
-  # Red interna: sin salida a Internet ni acceso desde el host. db y api solo
-  # se alcanzan entre si y a traves de web.
-  lux_internal:
+  # Redes internas: sin salida a Internet ni acceso desde el host. Estan
+  # separadas para que cada modulo solo alcance a su vecino inmediato.
+  # lux_data: db <-> api (+ migrate). Web no pertenece, asi que no ve la base.
+  lux_data:
     driver: bridge
     internal: true
-  # Red de publicacion: la usa solo web para exponer 127.0.0.1:8080.
+  # lux_app: api <-> web.
+  lux_app:
+    driver: bridge
+    internal: true
+  # Red de publicacion: la usa solo web para exponer 127.0.0.1:${LUX_WEB_PORT}.
   lux_edge:
     driver: bridge

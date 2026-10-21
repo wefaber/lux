@@ -32,7 +32,7 @@ function archivos(dir: string): string[] {
   const salida: string[] = [];
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
     const ruta = join(dir, entrada.name);
-    const rel = relative(SRC, ruta);
+    const rel = relative(SRC, ruta).replaceAll("\\", "/");
     if (entrada.isDirectory()) {
       if (["i18n", "mocks", "test"].includes(rel.split("/")[0])) continue;
       salida.push(...archivos(ruta));
@@ -119,9 +119,9 @@ describe("literales en espanol sin traducir", () => {
   test("ningun componente ni modulo tiene literales en espanol sin pasar por el diccionario", () => {
     const hallazgos: string[] = [];
     for (const ruta of archivos(SRC)) {
-      const rel = relative(SRC, ruta);
+      const rel = relative(SRC, ruta).replaceAll("\\", "/");
       const permitidos = EXCEPCIONES[rel] ?? [];
-      for (const texto of sospechosos(readFileSync(ruta, "utf8"))) {
+      for (const texto of sospechosos(readFileSync(ruta, "utf8").replaceAll("\r\n", "\n"))) {
         if (!permitidos.includes(texto)) hallazgos.push(`${rel}: ${texto}`);
       }
     }
