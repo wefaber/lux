@@ -74,6 +74,7 @@ export const ROUTES = {
   LOANS: "/dashboard/loans",
   SERVICES: "/dashboard/service-requests",
   PROFILE: "/dashboard/profile",
+  HELP: "/dashboard/help",
   ADMIN: "/admin",
   ADMIN_USERS: "/admin/users",
   ADMIN_ROLES: "/admin/roles",
