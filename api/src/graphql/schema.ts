@@ -12,12 +12,12 @@ export const typeDefs = /* GraphQL */ `
     productByMachineId(machineId: String!): Product
     components(productId: ID, isWorking: Boolean): [Component!]!
     component(id: ID!): Component
-    tickets(status: String, assignedToId: ID, submittedById: ID, equipmentId: ID): [Ticket!]!
+    tickets(status: String, assignedToId: ID, submittedById: ID, equipmentId: ID, startDate: String, endDate: String): [Ticket!]!
     ticket(id: ID!): Ticket
     oolTickets: [Ticket!]!
-    loans(status: String, userId: ID, equipmentId: ID): [Loan!]!
+    loans(status: String, userId: ID, equipmentId: ID, startDate: String, endDate: String): [Loan!]!
     loan(id: ID!): Loan
-    serviceRequests(status: String, requestedById: ID): [ServiceRequest!]!
+    serviceRequests(status: String, requestedById: ID, startDate: String, endDate: String): [ServiceRequest!]!
     serviceRequest(id: ID!): ServiceRequest
     dashboardStats(period: String): DashboardStats!
     reports: Reports!
@@ -28,7 +28,7 @@ export const typeDefs = /* GraphQL */ `
     intervention(id: ID!): Intervention
     comments(entityType: String!, entityId: ID!): [Comment!]!
     comment(id: ID!): Comment
-    reservations(status: String): [Reservation!]!
+    reservations(status: String, startDate: String, endDate: String): [Reservation!]!
     reservation(id: ID!): Reservation
     notices: [Notice!]!
     pendingNews: [String!]!

@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import type { InterventionFields, LocationFields } from "@/lib/validation";
 import {
   locationCode,
@@ -56,6 +56,7 @@ import { writeAudit } from "../audit";
 import { loginIpMaxAttempts, loginLockMinutes, loginMaxAttempts } from "../env";
 import { LoginGuard } from "../login-guard";
 import { userFieldResolvers } from "./privacy";
+import { exclusiveEnd, overlapsRange, withinInstantRange } from "./date-range";
 import { revokeToken } from "../sessions";
 import { db } from "../db/client";
 import * as t from "../db/schema";
@@ -623,7 +624,14 @@ const Query = {
 
   tickets: (
     _p: unknown,
-    args: { status?: string; assignedToId?: string; submittedById?: string; equipmentId?: string },
+    args: {
+      status?: string;
+      assignedToId?: string;
+      submittedById?: string;
+      equipmentId?: string;
+      startDate?: string;
+      endDate?: string;
+    },
     ctx: Ctx,
   ) => {
     const caller = requireAuth(ctx);
@@ -635,6 +643,10 @@ const Query = {
       tickets = tickets.filter((t) => t.submittedBy.id === scopedSubmittedById);
     }
     if (args.equipmentId) tickets = tickets.filter((t) => t.equipmentId === args.equipmentId);
+    // Rango por fecha de creacion; el cliente manda los extremos ya en su dia local
+    if (args.startDate || args.endDate) {
+      tickets = tickets.filter((t) => withinInstantRange(t.createdAt, args.startDate, args.endDate));
+    }
     return tickets;
   },
 
@@ -654,7 +666,13 @@ const Query = {
 
   loans: (
     _p: unknown,
-    args: { status?: string; userId?: string; equipmentId?: string },
+    args: {
+      status?: string;
+      userId?: string;
+      equipmentId?: string;
+      startDate?: string;
+      endDate?: string;
+    },
     ctx: Ctx,
   ) => {
     const caller = requireAuth(ctx);
@@ -664,6 +682,11 @@ const Query = {
       if (args.status) loans = filterByStatus<Loan>(loans, args.status);
       if (scopedUserId) loans = loans.filter((l) => l.user.id === scopedUserId);
       if (args.equipmentId) loans = loans.filter((l) => l.equipment.id === args.equipmentId);
+      // Rango por fecha de entrega (issueDate): es la que se ve en la lista y la
+      // que le da sentido a "prestamos de este periodo". createdAt es tecnico.
+      if (args.startDate || args.endDate) {
+        loans = loans.filter((l) => withinInstantRange(l.issueDate, args.startDate, args.endDate));
+      }
       return loans;
     });
   },
@@ -678,7 +701,7 @@ const Query = {
 
   serviceRequests: (
     _p: unknown,
-    args: { status?: string; requestedById?: string },
+    args: { status?: string; requestedById?: string; startDate?: string; endDate?: string },
     ctx: Ctx,
   ) => {
     const caller = requireAuth(ctx);
@@ -687,6 +710,12 @@ const Query = {
     if (args.status) services = filterByStatus<ServiceRequest>(services, args.status);
     if (scopedRequestedById) {
       services = services.filter((s) => s.requestedBy.id === scopedRequestedById);
+    }
+    // Rango por fecha de creacion de la solicitud
+    if (args.startDate || args.endDate) {
+      services = services.filter((s) =>
+        withinInstantRange(s.createdAt, args.startDate, args.endDate),
+      );
     }
     return services;
   },
@@ -825,11 +854,15 @@ const Query = {
     ctx: Ctx,
   ) => {
     requireRole(ctx, ELEVATED_ROLES);
+    // El "hasta" es inclusivo (todo el dia local que mando el cliente). El texto
+    // ISO guardado puede no tener milisegundos, asi que en vez de <= se usa
+    // < siguiente milisegundo.
+    const before = args.endDate ? exclusiveEnd(args.endDate) : null;
     const filters = [
       args.userId ? eq(t.activityLogs.userId, args.userId) : undefined,
       args.operation ? eq(t.activityLogs.operation, args.operation) : undefined,
       args.startDate ? gte(t.activityLogs.timestamp, args.startDate) : undefined,
-      args.endDate ? lte(t.activityLogs.timestamp, args.endDate) : undefined,
+      before ? lt(t.activityLogs.timestamp, before) : undefined,
     ].filter((f) => f !== undefined);
     return db
       .select()
@@ -880,13 +913,25 @@ const Query = {
       .toSorted((a, b) => a.createdAt.localeCompare(b.createdAt));
   },
 
-  reservations: async (_p: unknown, args: { status?: string }, ctx: Ctx) => {
+  reservations: async (
+    _p: unknown,
+    args: { status?: string; startDate?: string; endDate?: string },
+    ctx: Ctx,
+  ) => {
     const caller = requireAuth(ctx);
     await syncReservations(ctx.state);
     let reservations = isStaff(caller)
       ? [...ctx.state.reservations]
       : ctx.state.reservations.filter((r) => r.user.id === caller.id);
     if (args.status) reservations = reservations.filter((r) => r.status === args.status);
+    // Rango por el horario de la reserva, no por cuando se pidio: dos dias
+    // consecutivos muestran las reservas que ocupan esos dias, aunque hayan
+    // empezado antes
+    if (args.startDate || args.endDate) {
+      reservations = reservations.filter((r) =>
+        overlapsRange(r.startsAt, r.endsAt, args.startDate, args.endDate),
+      );
+    }
     reservations.sort((a, b) => b.startsAt.localeCompare(a.startsAt));
     return reservations;
   },
