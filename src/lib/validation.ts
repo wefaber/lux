@@ -8,7 +8,7 @@ import {
   TICKET_CATEGORY_LABELS,
   equipmentKindLabel,
 } from "./constants";
-import type { LocationKind } from "./types";
+import type { Location, LocationKind } from "./types";
 
 // Reglas de nomenclatura de equipos. Las usan el formulario (feedback por
 // campo) y los handlers (ultima barrera), para que no diverjan. Los mensajes
@@ -183,6 +183,37 @@ export function validateLocation(l: LocationFields): FieldErrors<keyof LocationF
     ],
     ["name", validateName(l.name, t("field.name"))],
   ]);
+}
+
+// "Administración" y "administracion" son la misma ubicacion
+export function normalizeLocationName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+}
+
+// Nombre y codigo (tipo + numero) no se repiten entre las ubicaciones vigentes.
+// El servidor es la ultima barrera; esto lo avisa en el campo antes de enviar.
+export function locationConflict(
+  fields: LocationFields & { code: string | null },
+  others: Array<Pick<Location, "id" | "name" | "code">>,
+  exceptId?: string,
+): FieldErrors<keyof LocationFields> {
+  if (!fields.code) return {};
+  const active = others.filter((l) => l.id !== exceptId);
+  const sameCode = active.find((l) => l.code === fields.code);
+  if (sameCode) {
+    return {
+      number: t("validation.location.duplicateCode", { name: sameCode.name, code: fields.code }),
+    };
+  }
+  const normalized = normalizeLocationName(fields.name);
+  if (active.some((l) => normalizeLocationName(l.name) === normalized)) {
+    return { name: t("validation.location.duplicateName", { name: fields.name.trim() }) };
+  }
+  return {};
 }
 
 export interface ReservationFields {

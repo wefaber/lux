@@ -16,4 +16,7 @@ export const mockLocations: Location[] = [
   { id: "loc-3", kind: "administration", number: 1, name: "Administración 1", code: "A1", ...base },
   { id: "loc-4", kind: "other", number: 1, name: "Otro 1", code: "O1", ...base },
   { id: "loc-5", kind: "laboratory", number: 2, name: "Laboratorio 2", code: "L2", ...base },
+  // Areas especiales: su nombre propio manda y el codigo solo las identifica
+  { id: "loc-6", kind: "special", number: 1, name: "Dirección", code: "E1", ...base },
+  { id: "loc-7", kind: "special", number: 2, name: "Adscripciones", code: "E2", ...base },
 ];
