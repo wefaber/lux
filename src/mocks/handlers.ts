@@ -22,6 +22,7 @@ import {
   validateComment,
   validateComponent,
   validateIntervention,
+  validateLoan,
   validateLocation,
   validateProduct,
   validateReservation,
@@ -977,10 +978,9 @@ export const handlers = [
         errors: [{ message: "El equipo no está disponible para préstamo" }],
       });
     }
-    if (!(new Date(input.returnDate) > new Date(input.issueDate))) {
-      return HttpResponse.json({
-        errors: [{ message: "La fecha de devolución debe ser posterior a la de entrega" }],
-      });
+    const dateError = firstError(validateLoan(input));
+    if (dateError) {
+      return HttpResponse.json({ errors: [{ message: dateError }] });
     }
     const componentIds = input.componentIds ?? [];
     const components = mockComponents.filter(
