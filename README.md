@@ -151,3 +151,13 @@ bun format         # Formatting (oxfmt)
 - **Services** — Lab preparation, software installation, equipment setup
 - **Administration** — User management, role configuration, activity log
 - **Accessibility** — Light/dark theme, high contrast, adjustable font size, dyslexic font
+
+## Documentation
+
+| Document | Contents |
+|----------|----------|
+| [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md) | Architecture, data model, installation and usage |
+| [docs/BACKEND.md](docs/BACKEND.md) | API, GraphQL operations, permissions and migrations |
+| [docs/UML-SECUENCIAS.md](docs/UML-SECUENCIAS.md) | Happy-path sequence diagrams for use cases CU-01 to CU-27 |
+| [docs/I18N.md](docs/I18N.md) | Spanish/English internationalisation |
+| [docs/CAMBIOS.md](docs/CAMBIOS.md) | Corrections applied to the legacy SQL files |
