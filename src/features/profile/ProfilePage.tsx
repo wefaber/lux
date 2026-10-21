@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { motion } from "motion/react";
-import { Lock, Type } from "lucide-react";
+import { Compass, Lock, Type } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { useTheme } from "@/hooks/useTheme";
 import { useI18n } from "@/hooks/useI18n";
+import { useOnboarding } from "@/hooks/useOnboarding";
 import { gql, initials, errorMessage } from "@/lib/utils";
 import { ROLE_CONFIG, ROLE_LABELS, SPRING_TRANSITION } from "@/lib/constants";
 import { validatePassword } from "@/lib/validation";
@@ -18,6 +18,7 @@ import { LanguageSwitcher } from "@/components/accessibility/LanguageSwitcher";
 import { ThemeSwitcher } from "@/components/accessibility/ThemeSwitcher";
 import { FontSizeControl } from "@/components/accessibility/FontSizeControl";
 import { HighContrastToggle } from "@/components/accessibility/HighContrastToggle";
+import { DyslexicFontToggle } from "@/components/accessibility/DyslexicFontToggle";
 import { Separator } from "@/components/ui/separator";
 import { ErrorAlert } from "@/components/ui/error-alert";
 
@@ -51,7 +52,7 @@ function ProfileFields({ user }: { user: User }) {
 export function ProfilePage() {
   const { user, logout } = useAuth();
   const { t } = useI18n();
-  const { dyslexicFont, toggleDyslexicFont } = useTheme();
+  const { openGuide } = useOnboarding();
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
@@ -92,11 +93,17 @@ export function ProfilePage() {
 
   return (
     <div className="flex flex-col space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          {t("profile.title")}
-        </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">{t("profile.subtitle")}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {t("profile.title")}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("profile.subtitle")}</p>
+        </div>
+        <Button variant="secondary" size="sm" onClick={openGuide}>
+          <Compass className="h-3.5 w-3.5" />
+          {t("onboarding.reopen")}
+        </Button>
       </div>
 
       <motion.div
@@ -242,16 +249,7 @@ export function ProfilePage() {
                   </p>
                   <p className="text-xs text-muted-foreground">{t("profile.a11y.dyslexicHelp")}</p>
                 </div>
-                <button
-                  onClick={toggleDyslexicFont}
-                  className={`relative h-6 w-11 rounded-full transition-colors cursor-pointer ${dyslexicFont ? "bg-primary" : "bg-black/20 dark:bg-card/20"}`}
-                  role="switch"
-                  aria-checked={dyslexicFont}
-                >
-                  <span
-                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${dyslexicFont ? "" : "-translate-x-5"}`}
-                  />
-                </button>
+                <DyslexicFontToggle />
               </div>
             </CardContent>
           </Card>
