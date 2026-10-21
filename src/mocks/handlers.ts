@@ -21,15 +21,19 @@ import {
   spanishLabel,
   validateComment,
   validateComponent,
+  validateImportRow,
   validateIntervention,
   validateLocation,
   validateProduct,
   validateReservation,
   validateServiceRequest,
+  validateStudent,
   validateTicket,
   validatePassword,
   validateUser,
 } from "./spanish";
+import { normalizeStudent, filterUsers } from "@/lib/students";
+import type { ImportRowInput, UserImportRow } from "@/lib/csv";
 import {
   CHANGEABLE_RESERVATION_STATUSES,
   CLOSED_SERVICE_STATUSES,
@@ -79,6 +83,7 @@ import type {
   TicketStatus,
   LoanStatus,
   ServiceStatus,
+  StudentShift,
 } from "@/lib/types";
 
 function filterByStatus<T extends { status: string }>(items: T[], status?: string): T[] {
@@ -500,10 +505,22 @@ export const handlers = [
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
     if (!isStaff(caller.role)) return HttpResponse.json(FORBIDDEN);
-    const { role, isActive } = variables as { role?: string; isActive?: boolean };
+    const { role, isActive, studentGroup, studentShift, subject } = variables as {
+      role?: string;
+      isActive?: boolean;
+      studentGroup?: string;
+      studentShift?: string;
+      subject?: string;
+    };
     let users = [...mockUsers];
-    if (role) users = users.filter((u) => u.role === role);
     if (isActive !== undefined) users = users.filter((u) => u.isActive === isActive);
+    // Mismos filtros que la API real (y que la pantalla, que filtra en memoria)
+    users = filterUsers(users, {
+      role: role as UserRole | "",
+      group: studentGroup,
+      shift: studentShift as StudentShift | "",
+      subject,
+    });
     return HttpResponse.json({ data: { users } });
   }),
 
@@ -1248,11 +1265,22 @@ export const handlers = [
         password?: string;
         role: string;
         isActive?: boolean;
+        studentGroup?: string | null;
+        studentShift?: string | null;
+        studentSubjects?: string[] | null;
       };
     };
     const fields = normalizeUserFields({ ...input, password: input.password ?? "" });
+    const rawStudent = {
+      studentGroup: input.studentGroup ?? null,
+      studentShift: input.studentShift ?? null,
+      studentSubjects: input.studentSubjects ?? [],
+    };
+    const studentError =
+      fields.role === "solicitante" ? firstError(validateStudent(rawStudent)) : null;
     const error =
       firstError(validateUser(fields, true)) ??
+      studentError ??
       (ASSIGNABLE_ROLES.includes(fields.role as UserRole)
         ? null
         : "No se puede crear otro Super Admin") ??
@@ -1266,6 +1294,7 @@ export const handlers = [
       email: fields.email,
       role: fields.role as UserRole,
       isActive: input.isActive ?? true,
+      ...normalizeStudent(rawStudent, fields.role as UserRole),
       createdAt: now,
       updatedAt: now,
     };
@@ -1279,7 +1308,19 @@ export const handlers = [
     if (!hasRole(caller, ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
     const { id, input } = variables as {
       id: string;
-      input: Partial<Pick<User, "name" | "dni" | "email" | "role" | "isActive">> & {
+      input: Partial<
+        Pick<
+          User,
+          | "name"
+          | "dni"
+          | "email"
+          | "role"
+          | "isActive"
+          | "studentGroup"
+          | "studentShift"
+          | "studentSubjects"
+        >
+      > & {
         password?: string;
       };
     };
@@ -1294,9 +1335,20 @@ export const handlers = [
       role: input.role ?? user.role,
       password: input.password ?? "",
     });
+    // Sin campo en el input se conserva lo que habia; un rol distinto de
+    // solicitante deja la ficha vacia (normalizeStudent)
+    const rawStudent = {
+      studentGroup: input.studentGroup !== undefined ? input.studentGroup : user.studentGroup,
+      studentShift: input.studentShift !== undefined ? input.studentShift : user.studentShift,
+      studentSubjects:
+        input.studentSubjects !== undefined ? input.studentSubjects : user.studentSubjects,
+    };
     const togglesActive = input.isActive !== undefined && input.isActive !== user.isActive;
+    const studentError =
+      fields.role === "solicitante" ? firstError(validateStudent(rawStudent)) : null;
     const error =
       firstError(validateUser(fields, false)) ??
+      studentError ??
       roleChangeError(caller, user, fields.role) ??
       duplicateUserError(fields, user.id) ??
       (togglesActive ? activationError(caller, user) : null);
@@ -1312,6 +1364,7 @@ export const handlers = [
       email: fields.email,
       role: fields.role as UserRole,
       isActive: input.isActive ?? user.isActive,
+      ...normalizeStudent(rawStudent, fields.role as UserRole),
       updatedAt: new Date().toISOString(),
     });
     if (fields.password) mockPasswords[user.dni] = fields.password;
@@ -1330,6 +1383,101 @@ export const handlers = [
     user.isActive = false;
     user.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { deleteUser: true } });
+  }),
+
+  // Importación masiva (CSV exportado de Excel). Igual que la API real: cada
+  // fila se valida sola, los errores no abortan el lote y quien ya existe solo
+  // recibe los datos de estudiante del archivo.
+  graphql.mutation("ImportUsers", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { rows } = variables as { rows: ImportRowInput[] };
+    const results: Array<{
+      line: number;
+      status: string;
+      userId: string | null;
+      error: string | null;
+    }> = [];
+    const seenDni = new Map<string, number>();
+    const seenEmail = new Map<string, number>();
+    let created = 0;
+    let updated = 0;
+    let failed = 0;
+    const fail = (line: number, error: string) => {
+      failed++;
+      results.push({ line, status: "error", userId: null, error });
+    };
+
+    for (const raw of rows) {
+      const parsed = validateImportRow(raw);
+      if ("error" in parsed) {
+        fail(raw.line ?? 1, parsed.error);
+        continue;
+      }
+      const row: UserImportRow = parsed.row;
+      const firstDni = seenDni.get(row.dni);
+      if (firstDni !== undefined) {
+        fail(row.line, `Documento ${row.dni} repetido en la fila ${firstDni}`);
+        continue;
+      }
+      const firstEmail = seenEmail.get(row.email);
+      if (firstEmail !== undefined) {
+        fail(row.line, `Email ${row.email} repetido en la fila ${firstEmail}`);
+        continue;
+      }
+      seenDni.set(row.dni, row.line);
+      seenEmail.set(row.email, row.line);
+
+      const byDni = mockUsers.find((u) => u.dni === row.dni);
+      const byEmail = mockUsers.find((u) => u.email.toLowerCase() === row.email);
+      if (byDni && byEmail && byDni.id !== byEmail.id) {
+        fail(row.line, "El documento y el email pertenecen a usuarios distintos");
+        continue;
+      }
+      const existing = byDni ?? byEmail;
+      if (existing) {
+        if (existing.role !== "solicitante") {
+          fail(row.line, `La persona ya existe con rol ${existing.role}`);
+          continue;
+        }
+        // Celda vacia = dejar el dato como estaba
+        Object.assign(existing, {
+          studentGroup: row.studentGroup ?? existing.studentGroup,
+          studentShift: row.studentShift ?? existing.studentShift,
+          studentSubjects: row.studentSubjects.length
+            ? row.studentSubjects
+            : existing.studentSubjects,
+          updatedAt: new Date().toISOString(),
+        });
+        updated++;
+        results.push({ line: row.line, status: "updated", userId: existing.id, error: null });
+        continue;
+      }
+
+      const now = new Date().toISOString();
+      const newUser: User = {
+        id: nextId(USER_ID_PREFIX[row.role], mockUsers),
+        name: row.name,
+        dni: row.dni,
+        email: row.email,
+        role: row.role,
+        isActive: row.isActive,
+        studentGroup: row.studentGroup,
+        studentShift: row.studentShift as User["studentShift"],
+        studentSubjects: row.studentSubjects,
+        createdAt: now,
+        updatedAt: now,
+      };
+      // Sin contraseña en el archivo, la clave inicial es el documento
+      mockPasswords[newUser.dni] = row.password ?? newUser.dni;
+      mockUsers.push(newUser);
+      created++;
+      results.push({ line: row.line, status: "created", userId: newUser.id, error: null });
+    }
+
+    return HttpResponse.json({
+      data: { importUsers: { created, updated, failed, rows: results } },
+    });
   }),
 
   graphql.mutation("CreateProduct", ({ request, variables }) => {

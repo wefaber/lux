@@ -36,6 +36,13 @@
       "when": 1792391901647,
       "tag": "0004_token_version",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792591030301,
+      "tag": "0005_student_info",
+      "breakpoints": true
     }
   ]
 }
