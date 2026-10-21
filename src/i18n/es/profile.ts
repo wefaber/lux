@@ -11,7 +11,6 @@ export const profile = {
   "profile.password.confirm": "Confirmar nueva contraseña",
   "profile.password.mismatch": "Las contraseñas no coinciden.",
   "profile.password.failed": "Error al cambiar contraseña",
-  "profile.password.success": "Contraseña actualizada correctamente.",
   "profile.password.submit": "Actualizar contraseña",
   "profile.a11y.title": "Accesibilidad",
   "profile.a11y.theme": "Tema",

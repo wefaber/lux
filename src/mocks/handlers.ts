@@ -1,5 +1,5 @@
 import { graphql, HttpResponse } from "msw";
-import { mockUsers, mockPasswords } from "./data/users";
+import { mockUsers, mockPasswords, mockTokenVersions } from "./data/users";
 import { mockProducts, mockComponents } from "./data/equipment";
 import { mockLocations } from "./data/locations";
 import { mockInterventions } from "./data/interventions";
@@ -27,7 +27,7 @@ import {
   validateReservation,
   validateServiceRequest,
   validateTicket,
-  validatePassword,
+  validateNewPassword,
   validateUser,
 } from "./spanish";
 import {
@@ -106,12 +106,30 @@ const USER_ID_PREFIX: Record<UserRole, string> = {
 };
 
 // Simula la verificacion de un token en un backend real: lo resuelve desde
-// el header Authorization en vez de leer localStorage directamente.
+// el header Authorization en vez de leer localStorage directamente. El token
+// lleva la version con la que se emitio, asi que subirla (cambio de contrasena)
+// deja sin efecto los tokens anteriores, igual que token_version en la API.
+const MOCK_TOKEN_PREFIX = "mock-token-";
+const TOKEN_VERSION_SUFFIX = /-v(\d+)$/;
+
+function mockToken(user: User): string {
+  return `${MOCK_TOKEN_PREFIX}${user.id}-v${mockTokenVersions[user.id] ?? 0}`;
+}
+
+function bumpTokenVersion(userId: string): void {
+  mockTokenVersions[userId] = (mockTokenVersions[userId] ?? 0) + 1;
+}
+
 function getCaller(request: Request): User | null {
   const authHeader = request.headers.get("Authorization");
   const token = authHeader?.match(/^Bearer (.+)$/)?.[1];
-  const userId = token?.match(/^mock-token-(.+)$/)?.[1];
-  if (!userId) return null;
+  if (!token?.startsWith(MOCK_TOKEN_PREFIX)) return null;
+  const rest = token.slice(MOCK_TOKEN_PREFIX.length);
+  const versionMatch = TOKEN_VERSION_SUFFIX.exec(rest);
+  // Un token sin sufijo es de la version 0 (los que arman los tests)
+  const userId = versionMatch ? rest.slice(0, versionMatch.index) : rest;
+  const version = versionMatch ? Number(versionMatch[1]) : 0;
+  if ((mockTokenVersions[userId] ?? 0) !== version) return null;
   return mockUsers.find((u) => u.id === userId && u.isActive) ?? null;
 }
 
@@ -483,7 +501,7 @@ export const handlers = [
     }
     return HttpResponse.json({
       data: {
-        login: { ...user, token: `mock-token-${user.id}` },
+        login: { ...user, token: mockToken(user) },
       },
     });
   }),
@@ -1314,7 +1332,11 @@ export const handlers = [
       isActive: input.isActive ?? user.isActive,
       updatedAt: new Date().toISOString(),
     });
-    if (fields.password) mockPasswords[user.dni] = fields.password;
+    if (fields.password) {
+      mockPasswords[user.dni] = fields.password;
+      // Un reset de un administrador tambien corta las sesiones abiertas
+      bumpTokenVersion(user.id);
+    }
     return HttpResponse.json({ data: { updateUser: user } });
   }),
 
@@ -1576,11 +1598,11 @@ export const handlers = [
     if (mockPasswords[caller.dni] !== currentPassword) {
       return HttpResponse.json(errorBody("La contraseña actual no es correcta"));
     }
-    const error =
-      validatePassword(newPassword ?? "") ??
-      (newPassword === currentPassword ? "La nueva contraseña tiene que ser distinta" : null);
+    const error = validateNewPassword(currentPassword, newPassword ?? "");
     if (error) return HttpResponse.json(errorBody(error));
     mockPasswords[caller.dni] = newPassword;
+    // Cierra las sesiones abiertas, la actual incluida: hay que volver a entrar
+    bumpTokenVersion(caller.id);
     return HttpResponse.json({ data: { changePassword: true } });
   }),
 
