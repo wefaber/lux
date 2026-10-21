@@ -211,6 +211,9 @@ export async function loadState(): Promise<State> {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     resolvedAt: row.resolvedAt,
+    attendedAt: row.attendedAt,
+    rating: row.rating,
+    ratedAt: row.ratedAt,
   }));
 
   const loanComponentsByLoan = new Map<string, Component[]>();
