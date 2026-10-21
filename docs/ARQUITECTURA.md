@@ -2,6 +2,10 @@
 
 Documento tecnico del Sistema de Gestion de Recursos y Servicios Informaticos (SGRSI).
 
+> Los diagramas de secuencia del camino feliz de cada caso de uso (CU-01 a CU-27) estan en
+> [`UML-SECUENCIAS.md`](UML-SECUENCIAS.md). Ese documento tambien registra las diferencias
+> entre el modelo UML del vault y la implementacion actual.
+
 ---
 
 ## 1. Arquitectura general
