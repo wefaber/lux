@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
+import { installGlobalErrorTracking } from "@/lib/error-tracker";
 
 // La condicion va inline y no en una constante compartida: si se importa de
 // otro modulo, rolldown deja de plegarla y un build sin mocks igual arrastra
@@ -12,6 +13,9 @@ async function enableMocking(): Promise<void> {
     await worker.start({ onUnhandledRequest: "bypass" });
   }
 }
+
+// Antes de montar React: tambien reporta fallos del arranque
+installGlobalErrorTracking();
 
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("Root element not found");

@@ -1,6 +1,7 @@
 import type {
   CommentEntity,
   EquipmentStatus,
+  ErrorReportStatus,
   InterventionType,
   LoanStatus,
   LocationKind,
@@ -44,6 +45,7 @@ export const RESERVATION_RESOURCES = exhaustive<ReservationResource>()(["equipme
 export const RESERVATION_STATUSES = exhaustive<ReservationStatus>()(["pending", "approved", "rejected", "active", "completed", "cancelled"]);
 export const COMMENT_ENTITIES = exhaustive<CommentEntity>()(["ticket", "service_request"]);
 export const NOTICE_ENTITIES = exhaustive<NoticeEntity>()(["ticket", "service_request", "loan", "reservation"]);
+export const ERROR_REPORT_STATUSES = exhaustive<ErrorReportStatus>()(["new", "triaged", "resolved"]);
 export const NOTICE_KINDS = exhaustive<NoticeKind>()([
   "assigned",
   "unassigned",

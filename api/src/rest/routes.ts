@@ -94,4 +94,14 @@ export const ROUTES: RouteSpec[] = [
   { method: "GET", path: "/activity-logs", operation: "activityLogs" },
   { method: "GET", path: "/dashboard/stats", operation: "dashboardStats" },
   { method: "GET", path: "/reports", operation: "reports" },
+
+  // Issue tracker. POST /errors es publico (lo usa el navegador sin sesion) y
+  // acepta el cuerpo como `input`; el resto es de administradores.
+  { method: "POST", path: "/errors", operation: "reportError", created: true, message: "Error registrado" },
+  { method: "GET", path: "/error-reports", operation: "errorReports" },
+  { method: "GET", path: "/error-reports/:id", operation: "errorReport" },
+  { method: "GET", path: "/error-reports/:id/draft", operation: "githubIssueDraft" },
+  { method: "PUT", path: "/error-reports/:id/status", operation: "updateErrorReportStatus" },
+  { method: "POST", path: "/error-reports/:id/github-issue", operation: "createGithubIssue", created: true, message: "Issue creado" },
+  { method: "GET", path: "/error-report-settings", operation: "errorReportSettings" },
 ];

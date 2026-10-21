@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
 import type { InterventionFields, LocationFields } from "@/lib/validation";
 import {
   locationCode,
@@ -20,6 +20,8 @@ import type {
   Comment,
   CommentEntity,
   DashboardStats,
+  ErrorReport,
+  ErrorReportStatus,
   Loan,
   LoanStatus,
   Location,
@@ -53,7 +55,15 @@ import {
   unauthenticated,
 } from "../errors";
 import { writeAudit } from "../audit";
-import { loginIpMaxAttempts, loginLockMinutes, loginMaxAttempts } from "../env";
+import {
+  errorReportRateLimit,
+  githubConfig,
+  llmConfig,
+  loginIpMaxAttempts,
+  loginLockMinutes,
+  loginMaxAttempts,
+} from "../env";
+import * as tracker from "../issue-tracker";
 import { LoginGuard } from "../login-guard";
 import { userFieldResolvers } from "./privacy";
 import { revokeToken } from "../sessions";
@@ -61,6 +71,7 @@ import { db } from "../db/client";
 import * as t from "../db/schema";
 import {
   EQUIPMENT_STATUSES,
+  ERROR_REPORT_STATUSES,
   SERVICE_STATUSES,
   SERVICE_TYPES,
   TICKET_CATEGORIES,
@@ -520,6 +531,32 @@ function placeholderHash(): Promise<string> {
 // Tope de filas de una consulta del registro de actividad.
 const ACTIVITY_LOG_LIMIT = 1000;
 
+// Issue tracker: el reporte del frontend es publico pero acotado por IP, y las
+// lecturas/acciones de triage son de administradores. 500 filas alcanzan para
+// revisar lo pendiente; el resto se filtra por estado o busqueda.
+const ERROR_REPORT_LIMIT = 500;
+const errorReportLimiter = new tracker.SlidingWindowLimiter(
+  errorReportRateLimit().max,
+  errorReportRateLimit().windowMs,
+);
+
+function toErrorReport(row: t.ErrorReportRow): ErrorReport {
+  return { ...row, status: row.status as ErrorReportStatus };
+}
+
+function reportStatus(value: string): ErrorReportStatus {
+  if (!ERROR_REPORT_STATUSES.includes(value as ErrorReportStatus)) {
+    throw invalid("Estado del reporte inválido");
+  }
+  return value as ErrorReportStatus;
+}
+
+async function findErrorReport(id: string): Promise<ErrorReport> {
+  const [row] = await db.select().from(t.errorReports).where(eq(t.errorReports.id, id)).limit(1);
+  if (!row) throw notFound("Reporte de error no encontrado");
+  return toErrorReport(row);
+}
+
 // ── Queries ──────────────────────────────────────────────────────────────────
 
 const Query = {
@@ -914,6 +951,58 @@ const Query = {
     if (!isStaff(caller)) return [];
     await syncReservations(ctx.state);
     return PENDING_SECTIONS.filter((section) => hasNewPending(ctx.state, caller, section));
+  },
+
+  // ── Issue tracker ──────────────────────────────────────────────────────────
+
+  errorReports: async (
+    _p: unknown,
+    args: { status?: string; search?: string; limit?: number },
+    ctx: Ctx,
+  ) => {
+    requireRole(ctx, ELEVATED_ROLES);
+    const limit = Math.min(Math.max(Number(args.limit ?? ERROR_REPORT_LIMIT), 1), ERROR_REPORT_LIMIT);
+    const conditions = [];
+    if (args.status) conditions.push(eq(t.errorReports.status, reportStatus(args.status)));
+    const search = args.search?.trim();
+    if (search) {
+      const pattern = `%${search}%`;
+      conditions.push(
+        or(
+          ilike(t.errorReports.message, pattern),
+          ilike(t.errorReports.route, pattern),
+          ilike(t.errorReports.fingerprint, pattern),
+        ),
+      );
+    }
+    const rows = await db
+      .select()
+      .from(t.errorReports)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(t.errorReports.lastSeen))
+      .limit(limit);
+    return rows.map(toErrorReport);
+  },
+
+  errorReport: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    requireRole(ctx, ELEVATED_ROLES);
+    return findErrorReport(args.id);
+  },
+
+  errorReportSettings: (_p: unknown, _a: unknown, ctx: Ctx) => {
+    requireRole(ctx, ELEVATED_ROLES);
+    const github = githubConfig();
+    return {
+      githubConfigured: github !== null,
+      llmConfigured: llmConfig() !== null,
+      repository: github?.repo ?? null,
+    };
+  },
+
+  githubIssueDraft: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    requireRole(ctx, ELEVATED_ROLES);
+    const report = await findErrorReport(args.id);
+    return tracker.localIssueDraft(report).body;
   },
 };
 
@@ -2386,6 +2475,100 @@ const Mutation = {
     }
     return true;
   },
+
+  // Publica (la llama el navegador, incluso sin sesion). El rate limit por IP y
+  // el saneo del texto viven en issue-tracker.ts; no escribe auditoria para no
+  // inundar activity_logs con cada error.
+  reportError: async (_p: unknown, args: { input: tracker.ErrorReportInput }, ctx: Ctx) => {
+    const decision = errorReportLimiter.check(ctx.ip);
+    if (!decision.allowed) {
+      throw tooManyAttempts(
+        "Demasiados reportes de error. Probá de nuevo más tarde.",
+        decision.retryAfterSeconds,
+      );
+    }
+    // Con sesion, el rol lo decide el token (el cuerpo no puede falsearlo)
+    const input = tracker.normalizeErrorReport({
+      ...args.input,
+      role: ctx.caller?.role ?? args.input.role,
+    });
+    const now = nowIso();
+    const id = `err-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
+    const [row] = await db
+      .insert(t.errorReports)
+      .values({ id, ...input, firstSeen: now, lastSeen: now, occurrences: 1, status: "new", createdAt: now, updatedAt: now })
+      .onConflictDoUpdate({
+        target: t.errorReports.fingerprint,
+        set: {
+          lastSeen: now,
+          updatedAt: now,
+          message: sql`excluded.message`,
+          stack: sql`excluded.stack`,
+          route: sql`excluded.route`,
+          userAgent: sql`excluded.user_agent`,
+          role: sql`excluded.role`,
+          occurrences: sql`${t.errorReports.occurrences} + 1`,
+        },
+      })
+      .returning();
+    return toErrorReport(row);
+  },
+
+  updateErrorReportStatus: async (
+    _p: unknown,
+    args: { id: string; status: string },
+    ctx: Ctx,
+  ) => {
+    const caller = requireRole(ctx, ELEVATED_ROLES);
+    const status = reportStatus(args.status);
+    const now = nowIso();
+    const [row] = await db
+      .update(t.errorReports)
+      .set({ status, updatedAt: now })
+      .where(eq(t.errorReports.id, args.id))
+      .returning();
+    if (!row) throw notFound("Reporte de error no encontrado");
+    await writeAudit({
+      userId: caller.id,
+      userName: caller.name,
+      operation: "UPDATE_ERROR_REPORT_STATUS",
+      entity: "ErrorReport",
+      entityId: row.id,
+      details: `Estado: ${status}`,
+    });
+    return toErrorReport(row);
+  },
+
+  createGithubIssue: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    const caller = requireRole(ctx, ELEVATED_ROLES);
+    const report = await findErrorReport(args.id);
+    if (report.githubIssueUrl) {
+      return { url: report.githubIssueUrl, usedLlm: false, alreadyExisted: true };
+    }
+    const github = githubConfig();
+    if (!github) {
+      throw invalid(
+        "GitHub no está configurado: definí GITHUB_TOKEN y GITHUB_REPO en la API. Mientras tanto, copiá el borrador local.",
+      );
+    }
+    // El pedido al LLM y a GitHub queda fuera de la transaccion a proposito: no
+    // se retiene el lock de escritura mientras se espera a un servicio externo.
+    const draft = await tracker.generateIssueDraft(report, llmConfig());
+    const created = await tracker.createGithubIssue(draft, github);
+    await db
+      .update(t.errorReports)
+      .set({ githubIssueUrl: created.url, updatedAt: nowIso() })
+      .where(eq(t.errorReports.id, report.id));
+    await writeAudit({
+      userId: caller.id,
+      userName: caller.name,
+      operation: "CREATE_GITHUB_ISSUE",
+      entity: "ErrorReport",
+      entityId: report.id,
+      details: created.url.slice(0, 300),
+    });
+    return { url: created.url, usedLlm: draft.usedLlm, alreadyExisted: false };
+  },
 };
 
 // Que entidad y que dato deja cada mutacion en `activity_logs`. Al estar tipado
@@ -2438,11 +2621,33 @@ const AUDIT: Record<keyof typeof Mutation, AuditSpec> = {
   cancelReservation: { entity: "Reservation" },
   acknowledgeNotice: { entity: "Notice" },
   markPendingSeen: { entity: "PendingSeen", id: (a) => a.section, details: () => null },
+  // reportError no deja auditoria (ver el resolver); las otras dos escriben la
+  // suya a mano porque corren fuera de la transaccion.
+  reportError: { entity: "ErrorReport" },
+  updateErrorReportStatus: { entity: "ErrorReport", details: (a) => `Estado: ${a.status}` },
+  createGithubIssue: { entity: "ErrorReport" },
 };
 
 // `login` y `me` no necesitan la foto de la base; `activityLogs` consulta la
 // tabla directo. Las demas queries cargan el estado una vez por request.
-const STATELESS_QUERIES = new Set<keyof typeof Query>(["login", "me", "activityLogs"]);
+const STATELESS_QUERIES = new Set<keyof typeof Query>([
+  "login",
+  "me",
+  "activityLogs",
+  "errorReports",
+  "errorReport",
+  "errorReportSettings",
+  "githubIssueDraft",
+]);
+
+// Estas mutaciones no tocan el estado del dominio: evitan cargar la foto y el
+// lock de escritura (el reporte publico puede ser frecuente y createGithubIssue
+// espera servicios externos).
+const STATELESS_MUTATIONS = new Set<keyof typeof Mutation>([
+  "reportError",
+  "updateErrorReportStatus",
+  "createGithubIssue",
+]);
 
 function entries<T extends object>(source: T): Array<[keyof T & string, Resolver]> {
   return Object.entries(source) as Array<[keyof T & string, Resolver]>;
@@ -2457,6 +2662,9 @@ export const resolvers = {
     ]),
   ),
   Mutation: Object.fromEntries(
-    entries(Mutation).map(([name, fn]) => [name, withTransaction(name, fn, AUDIT[name])]),
+    entries(Mutation).map(([name, fn]) => [
+      name,
+      STATELESS_MUTATIONS.has(name) ? fn : withTransaction(name, fn, AUDIT[name]),
+    ]),
   ),
 };
