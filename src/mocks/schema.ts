@@ -2,7 +2,7 @@ export const schema = `
   type Query {
     login(dni: String!, password: String!): AuthUser
     me: User
-    users(role: String, isActive: Boolean): [User!]!
+    users(role: String, isActive: Boolean, studentGroup: String, studentShift: String, subject: String): [User!]!
     user(id: ID!): User
     products(status: String, locationId: ID, deletedAt: String, availableForLoan: Boolean): [Product!]!
     product(id: ID!): Product
@@ -35,6 +35,7 @@ export const schema = `
     createUser(input: UserInput!): User!
     updateUser(id: ID!, input: UserInput!): User!
     deleteUser(id: ID!): Boolean!
+    importUsers(rows: [UserImportRow!]!): UserImportResult!
     createProduct(input: ProductInput!): Product!
     updateProduct(id: ID!, input: ProductUpdateInput!): Product!
     softDeleteProduct(id: ID!): Boolean!
@@ -159,8 +160,27 @@ export const schema = `
     email: String!
     role: String!
     isActive: Boolean!
+    # Solo para solicitantes; null / [] cuando no hay dato
+    studentGroup: String
+    studentShift: String
+    studentSubjects: [String!]!
     createdAt: String!
     updatedAt: String!
+  }
+
+  type UserImportRowResult {
+    line: Int!
+    # created | updated | error
+    status: String!
+    userId: ID
+    error: String
+  }
+
+  type UserImportResult {
+    created: Int!
+    updated: Int!
+    failed: Int!
+    rows: [UserImportRowResult!]!
   }
 
   type Product {
@@ -330,6 +350,22 @@ export const schema = `
     password: String
     role: String!
     isActive: Boolean
+    studentGroup: String
+    studentShift: String
+    studentSubjects: [String!]
+  }
+
+  input UserImportRow {
+    line: Int!
+    name: String!
+    dni: String!
+    email: String!
+    role: String
+    password: String
+    isActive: Boolean
+    studentGroup: String
+    studentShift: String
+    studentSubjects: [String!]
   }
 
   input ProductInput {

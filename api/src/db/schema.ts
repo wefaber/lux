@@ -1,5 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
-import { boolean, check, index, integer, pgTable, primaryKey, text, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { boolean, check, index, integer, jsonb, pgTable, primaryKey, text, type AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   COMMENT_ENTITIES,
   EQUIPMENT_STATUSES,
@@ -12,6 +12,7 @@ import {
   RESERVATION_STATUSES,
   SERVICE_STATUSES,
   SERVICE_TYPES,
+  STUDENT_SHIFTS,
   TICKET_CATEGORIES,
   TICKET_STATUSES,
   USER_ROLES,
@@ -42,12 +43,28 @@ export const users = pgTable("users", {
   email: text("email").notNull(),
   role: text("role").notNull(),
   isActive: boolean("is_active").notNull().default(true),
+  // Ficha de estudiante: solo para role = 'solicitante'. Grupo y turno null
+  // significan "sin dato"; las materias viven en un jsonb (lista corta que se
+  // muestra y se filtra, sin catalogo propio ni consultas por materia en SQL).
+  studentGroup: text("student_group"),
+  studentShift: text("student_shift"),
+  studentSubjects: jsonb("student_subjects").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   passwordHash: text("password_hash").notNull(),
   // Sube cuando cambia la contrasena: los tokens firmados con otra version dejan de valer
   tokenVersion: integer("token_version").notNull().default(0),
   createdAt,
   updatedAt,
-}, (t) => [check("users_role_check", oneOf(t.role, USER_ROLES))]);
+}, (t) => [
+  check("users_role_check", oneOf(t.role, USER_ROLES)),
+  check("users_student_shift_check", sql`${t.studentShift} is null or ${oneOf(t.studentShift, STUDENT_SHIFTS)}`),
+  check("users_student_subjects_check", sql`jsonb_typeof(${t.studentSubjects}) = 'array'`),
+  // La ficha existe solo para estudiantes: cambiar el rol obliga a vaciarla
+  check(
+    "users_student_info_check",
+    sql`${t.role} = 'solicitante' or (${t.studentGroup} is null and ${t.studentShift} is null and ${t.studentSubjects} = '[]'::jsonb)`,
+  ),
+  index("users_student_idx").on(t.studentGroup, t.studentShift),
+]);
 
 export const locations = pgTable(
   "locations",

@@ -269,3 +269,8 @@ export function validateComponent(c: ComponentFields): FieldErrors<keyof Compone
     ["partNumber", validateCode(c.partNumber, "Part number")],
   ]);
 }
+
+/** Primer error de un formulario o de una fila importada. */
+export function firstError(errors: FieldErrors<string>): string | null {
+  return Object.values(errors)[0] ?? null;
+}
