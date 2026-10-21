@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useI18n } from "@/hooks/useI18n";
 import { gql, errorMessage } from "@/lib/utils";
 import { ROLE_LABELS } from "@/lib/constants";
 import { ASSIGNABLE_ROLES } from "@/lib/roles";
@@ -28,6 +29,7 @@ function FieldError({ message }: { message?: string }) {
 }
 
 export function UserForm({ user, onSuccess }: UserFormProps) {
+  const { t } = useI18n();
   const isEdit = !!user;
   // El rol del Super Admin es fijo: no se ofrece cambiarlo
   const roleLocked = user?.role === "root_admin";
@@ -58,7 +60,7 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
       }
       onSuccess();
     } catch (err) {
-      setError(errorMessage(err, "Error al guardar"));
+      setError(errorMessage(err, t("admin.userForm.failed")));
     } finally {
       setSaving(false);
     }
@@ -67,13 +69,13 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4 pt-2" noValidate>
       <div className="space-y-1.5">
-        <Label htmlFor="uf-name">Nombre completo</Label>
+        <Label htmlFor="uf-name">{t("admin.userForm.fullName")}</Label>
         <Input id="uf-name" value={name} onChange={(e) => setName(e.target.value)} required />
         <FieldError message={fieldErrors.name} />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label htmlFor="uf-dni">Cédula</Label>
+          <Label htmlFor="uf-dni">{t("label.dni")}</Label>
           <Input
             id="uf-dni"
             value={dni}
@@ -85,7 +87,7 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
           <FieldError message={fieldErrors.dni} />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="uf-role">Rol</Label>
+          <Label htmlFor="uf-role">{t("label.role")}</Label>
           {roleLocked ? (
             <Input id="uf-role" value={ROLE_LABELS[role]} disabled />
           ) : (
@@ -101,7 +103,7 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
         </div>
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="uf-email">Email</Label>
+        <Label htmlFor="uf-email">{t("label.email")}</Label>
         <Input
           id="uf-email"
           type="email"
@@ -112,7 +114,9 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
         <FieldError message={fieldErrors.email} />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="uf-password">Contraseña {isEdit && "(dejar vacío para no cambiar)"}</Label>
+        <Label htmlFor="uf-password">
+          {t("admin.userForm.password")} {isEdit && t("admin.userForm.passwordKeep")}
+        </Label>
         <Input
           id="uf-password"
           type="password"
@@ -125,7 +129,11 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
       <ErrorAlert>{error}</ErrorAlert>
       <div className="flex justify-end gap-2">
         <Button type="submit" size="sm" disabled={saving}>
-          {saving ? "Guardando..." : isEdit ? "Guardar cambios" : "Crear usuario"}
+          {saving
+            ? t("common.saving")
+            : isEdit
+              ? t("admin.userForm.saveChanges")
+              : t("admin.userForm.submit")}
         </Button>
       </div>
     </form>

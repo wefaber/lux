@@ -57,6 +57,7 @@ export const schema = `
     claimServiceRequest(id: ID!): ServiceRequest!
     assignServiceRequest(id: ID!, technicianId: ID!): ServiceRequest!
     changePassword(currentPassword: String!, newPassword: String!): Boolean!
+    logout: Boolean!
     createLocation(input: LocationInput!): Location!
     updateLocation(id: ID!, input: LocationUpdateInput!): Location!
     softDeleteLocation(id: ID!): Boolean!

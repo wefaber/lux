@@ -4,8 +4,14 @@ import { motion } from "motion/react";
 import { ArrowLeft, Edit2, Trash2 } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
+import { useI18n } from "@/hooks/useI18n";
 import { gql, formatDate } from "@/lib/utils";
-import { EQUIPMENT_STATUS_CONFIG, ROUTES, SPRING_TRANSITION } from "@/lib/constants";
+import {
+  EQUIPMENT_STATUS_CONFIG,
+  ROUTES,
+  SPRING_TRANSITION,
+  equipmentKindLabel,
+} from "@/lib/constants";
 import type { Product } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +38,7 @@ const PRODUCT_QUERY = `
 export function ProductDetail() {
   const { id } = useParams<{ id: string }>();
   const { hasRole } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [retireOpen, setRetireOpen] = useState(false);
   const { data, isLoading, error } = useAsync<{ product: Product | null }>(
@@ -56,7 +63,7 @@ export function ProductDetail() {
             <div className="h-6 w-48 bg-muted rounded animate-pulse" />
           ) : (
             <h1 className="text-xl font-semibold tracking-tight text-foreground">
-              {product ? `${product.brand} ${product.model}` : "Equipo no encontrado"}
+              {product ? `${product.brand} ${product.model}` : t("inventory.detail.notFound")}
             </h1>
           )}
         </div>
@@ -65,12 +72,12 @@ export function ProductDetail() {
             <Button variant="secondary" size="sm" asChild>
               <Link to={`${ROUTES.INVENTORY}/${id}/editar`}>
                 <Edit2 className="h-3.5 w-3.5" />
-                Editar
+                {t("inventory.detail.edit")}
               </Link>
             </Button>
             <Button variant="destructive" size="sm" onClick={() => setRetireOpen(true)}>
               <Trash2 className="h-3.5 w-3.5" />
-              Dar de baja
+              {t("inventory.detail.retire")}
             </Button>
           </div>
         )}
@@ -87,7 +94,7 @@ export function ProductDetail() {
         />
       )}
 
-      {error && <ErrorAlert>Error: {error}</ErrorAlert>}
+      {error && <ErrorAlert>{t("common.error", { error })}</ErrorAlert>}
 
       {isLoading ? (
         <div className="space-y-4">
@@ -115,7 +122,7 @@ export function ProductDetail() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Información del equipo</CardTitle>
+                <CardTitle>{t("inventory.detail.info")}</CardTitle>
                 <Badge color={EQUIPMENT_STATUS_CONFIG[product.status].color}>
                   {EQUIPMENT_STATUS_CONFIG[product.status].label}
                 </Badge>
@@ -125,31 +132,34 @@ export function ProductDetail() {
               <div className="flex flex-col sm:flex-row gap-6 sm:gap-8 items-start">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 flex-1">
                   <DetailRow
-                    label="ID de máquina"
+                    label={t("label.machineId")}
                     value={
                       <span className="font-mono font-semibold text-primary">
                         {product.machineId}
                       </span>
                     }
                   />
-                  <DetailRow label="Tipo" value={product.kind} />
-                  <DetailRow label="Marca" value={product.brand} />
-                  <DetailRow label="Modelo" value={product.model} />
+                  <DetailRow label={t("label.type")} value={equipmentKindLabel(product.kind)} />
+                  <DetailRow label={t("label.brand")} value={product.brand} />
+                  <DetailRow label={t("label.model")} value={product.model} />
                   <DetailRow
-                    label="N° de serie"
+                    label={t("label.serialNumber")}
                     value={<span className="font-mono text-xs">{product.serialNumber}</span>}
                   />
                   <DetailRow
-                    label="Part number"
+                    label={t("label.partNumber")}
                     value={<span className="font-mono text-xs">{product.partNumber}</span>}
                   />
-                  <DetailRow label="Ubicación" value={product.location} />
-                  <DetailRow label="Registrado" value={formatDate(product.createdAt)} />
-                  <DetailRow label="Actualizado" value={formatDate(product.updatedAt)} />
+                  <DetailRow label={t("label.location")} value={product.location} />
+                  <DetailRow
+                    label={t("inventory.detail.registered")}
+                    value={formatDate(product.createdAt)}
+                  />
+                  <DetailRow label={t("label.updated")} value={formatDate(product.updatedAt)} />
                   {product.issues && (
                     <div className="col-span-full">
                       <DetailRow
-                        label="Fallas / Observaciones"
+                        label={t("inventory.detail.issues")}
                         value={<span className="text-warning">{product.issues}</span>}
                       />
                     </div>
@@ -164,29 +174,35 @@ export function ProductDetail() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Componentes ({product.components.length})</CardTitle>
+              <CardTitle>
+                {t("inventory.detail.components", { count: product.components.length })}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               {product.components.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Sin componentes registrados</p>
+                <p className="text-sm text-muted-foreground">
+                  {t("inventory.detail.noComponents")}
+                </p>
               ) : (
                 <div className="rounded-xl border border-border overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-border">
-                        {[
-                          "Componente",
-                          "Modelo",
-                          "Fabricante",
-                          "Serie",
-                          "De fábrica",
-                          "Funciona",
-                        ].map((h) => (
+                        {(
+                          [
+                            "inventory.col.component",
+                            "label.model",
+                            "label.manufacturer",
+                            "inventory.col.serial",
+                            "inventory.col.factory",
+                            "inventory.col.worksShort",
+                          ] as const
+                        ).map((h) => (
                           <th
                             key={h}
                             className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                           >
-                            {h}
+                            {t(h)}
                           </th>
                         ))}
                       </tr>
@@ -209,12 +225,12 @@ export function ProductDetail() {
                           </td>
                           <td className="px-4 py-3">
                             <Badge color={c.isFactory ? "success" : "muted"}>
-                              {c.isFactory ? "Sí" : "No"}
+                              {c.isFactory ? t("common.yes") : t("common.no")}
                             </Badge>
                           </td>
                           <td className="px-4 py-3">
                             <Badge color={c.isWorking ? "success" : "destructive"}>
-                              {c.isWorking ? "Sí" : "No"}
+                              {c.isWorking ? t("common.yes") : t("common.no")}
                             </Badge>
                           </td>
                         </tr>
@@ -231,7 +247,9 @@ export function ProductDetail() {
         </motion.div>
       ) : (
         !isLoading && (
-          <div className="text-center py-16 text-muted-foreground">Equipo no encontrado</div>
+          <div className="text-center py-16 text-muted-foreground">
+            {t("inventory.detail.notFound")}
+          </div>
         )
       )}
     </div>

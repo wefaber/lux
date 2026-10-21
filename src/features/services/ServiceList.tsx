@@ -4,6 +4,7 @@ import { Plus, Search } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotices } from "@/hooks/useNotices";
+import { useI18n } from "@/hooks/useI18n";
 import { gql, formatDate, truncate, cn } from "@/lib/utils";
 import {
   SERVICE_STATUS_CONFIG,
@@ -31,6 +32,7 @@ import { Pagination, clampPage } from "@/components/ui/pagination";
 import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
 import { idQuery, pinnedFirst, servicePin } from "@/lib/pins";
 import { STAFF_ROLES } from "@/lib/roles";
+import type { MessageKey } from "@/i18n";
 
 const SERVICES_QUERY = `
   query GetServiceRequests($requestedById: ID) {
@@ -46,18 +48,19 @@ const SERVICES_QUERY = `
 // Solicitudes por pagina
 const PAGE_SIZE = 10;
 
-const SERVICE_COLUMNS = [
-  "ID",
-  "Tipo",
-  "Descripción",
-  "Estado",
-  "Solicitante",
-  "Asignado a",
-  "Fecha",
-  "",
+const SERVICE_COLUMNS: Array<MessageKey | null> = [
+  "label.id",
+  "label.type",
+  "label.description",
+  "label.status",
+  "label.requester",
+  "label.assignedTo",
+  "label.date",
+  null,
 ];
 
 export function ServiceList() {
+  const { t } = useI18n();
   const { user, hasRole } = useAuth(); // Verificacion de roles con Auth
   const { noticeFor } = useNotices();
   const [statusFilter, setStatusFilter] = useState<ServiceStatus | "">(""); // Obtencion de status para filtros
@@ -118,15 +121,13 @@ export function ServiceList() {
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Solicitudes de Servicio
+            {t("services.title")}
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Gestión de solicitudes del instituto
-          </p>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("services.subtitle")}</p>
         </div>
         <Button size="sm" onClick={() => setCreateOpen(true)}>
           <Plus className="h-3.5 w-3.5" />
-          Nueva solicitud
+          {t("services.new")}
         </Button>
       </div>
 
@@ -135,8 +136,8 @@ export function ServiceList() {
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute z-10 left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por descripción, tipo o ID (svc-004)..."
-              aria-label="Buscar solicitudes por descripción, tipo o ID"
+              placeholder={t("services.search")}
+              aria-label={t("services.searchLabel")}
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -147,14 +148,14 @@ export function ServiceList() {
           </div>
           <StatusFilter
             section="service_request"
-            aria-label="Filtrar por estado"
+            aria-label={t("overview.filterStatus")}
             value={statusFilter}
             onValueChange={(v) => {
               setStatusFilter(v as ServiceStatus | "");
               setPage(0);
             }}
             options={[
-              { value: "", label: "Todos los estados" },
+              { value: "", label: t("common.allStatuses") },
               ...Object.entries(SERVICE_STATUS_CONFIG).map(([value, conf]) => ({
                 value,
                 label: conf.label,
@@ -163,16 +164,16 @@ export function ServiceList() {
           />
           {!isSolicitante && (
             <OptionSelect
-              aria-label="Responsable"
+              aria-label={t("services.assignee")}
               value={assigneeFilter}
               onValueChange={(v) => {
                 setAssigneeFilter(v);
                 setPage(0);
               }}
               options={[
-                { value: "", label: "Todos los responsables" },
-                ...(user ? [{ value: user.id, label: "Asignadas a mí" }] : []),
-                { value: "none", label: "Sin asignar" },
+                { value: "", label: t("services.allAssignees") },
+                ...(user ? [{ value: user.id, label: t("services.assignedToMe") }] : []),
+                { value: "none", label: t("common.unassigned") },
               ]}
             />
           )}
@@ -180,10 +181,7 @@ export function ServiceList() {
 
         {hiddenClosed > 0 && (
           <p className="text-xs text-muted-foreground">
-            {hiddenClosed === 1
-              ? "1 solicitud completada o rechazada no se muestra."
-              : `${hiddenClosed} solicitudes completadas o rechazadas no se muestran.`}{" "}
-            Para verlas, filtrá por estado o buscalas por su ID.
+            {t("services.hiddenClosed", { count: hiddenClosed })} {t("services.hiddenClosedHelp")}
           </p>
         )}
       </div>
@@ -193,7 +191,7 @@ export function ServiceList() {
           <TableSkeleton rows={6} cols={7} />
         ) : services.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground text-sm font-medium">
-            {hiddenClosed > 0 ? "No hay solicitudes abiertas" : "No hay solicitudes de servicio"}
+            {hiddenClosed > 0 ? t("services.emptyOpen") : t("services.empty")}
           </div>
         ) : (
           <div
@@ -207,10 +205,10 @@ export function ServiceList() {
                 <tr className="border-b border-border">
                   {SERVICE_COLUMNS.map((h) => (
                     <th
-                      key={h}
+                      key={h ?? "actions"}
                       className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                     >
-                      {h}
+                      {h ? t(h) : ""}
                     </th>
                   ))}
                 </tr>
@@ -259,7 +257,7 @@ export function ServiceList() {
                           to={`${ROUTES.SERVICES}/${s.id}`}
                           className="text-xs text-primary hover:underline font-semibold"
                         >
-                          Ver detalle
+                          {t("services.viewDetail")}
                         </Link>
                       </td>
                     </tr>
@@ -286,10 +284,8 @@ export function ServiceList() {
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogContent className="max-w-lg">
               <DialogHeader>
-                <DialogTitle>Nueva solicitud de servicio</DialogTitle>
-                <DialogDescription>
-                  Contá qué necesitás y el staff se encarga de revisarla.
-                </DialogDescription>
+                <DialogTitle>{t("services.dialog.title")}</DialogTitle>
+                <DialogDescription>{t("services.dialog.description")}</DialogDescription>
               </DialogHeader>
               <ServiceForm
                 onSuccess={() => {

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Stub de ip: salidas fijas controladas por STUB_IP_MODO (estatica|dhcp|sinip|sinruta)
+echo "ip $*" >> "${STUB_LOG:-/dev/null}"
+modo="${STUB_IP_MODO:-estatica}"
+args="$*"
+if [[ "$args" == *"route show default"* ]]; then
+    [[ "$modo" == "sinruta" ]] && exit 0
+    echo "default via 192.168.50.1 dev ens18 proto static"
+elif [[ "$args" == *"addr show"* ]]; then
+    case "$modo" in
+        estatica) echo "2: ens18    inet ${STUB_IP_ADDR:-192.168.50.10}/24 brd 192.168.50.255 scope global ens18\       valid_lft forever preferred_lft forever" ;;
+        dhcp)     echo "2: ens18    inet ${STUB_IP_ADDR:-192.168.50.77}/24 brd 192.168.50.255 scope global dynamic ens18\       valid_lft 86000sec preferred_lft 86000sec" ;;
+    esac
+fi
+exit 0

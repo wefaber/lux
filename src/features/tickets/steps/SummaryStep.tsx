@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { TICKET_STATUS_CONFIG, EQUIPMENT_STATUS_CONFIG } from "@/lib/constants";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useI18n } from "@/hooks/useI18n";
 
 interface SummaryStepProps {
   ticket: Ticket;
@@ -21,10 +22,13 @@ export function SummaryStep({
   onActionsChange,
   readOnly = false,
 }: SummaryStepProps) {
+  const { t } = useI18n();
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-foreground mb-1">Resumen final</h2>
+        <h2 className="text-base font-semibold text-foreground mb-1">
+          {t("tickets.summary.title")}
+        </h2>
         {ticket.equipment && (
           <p className="text-xs text-muted-foreground">
             {ticket.equipment.location} · {ticket.equipment.serialNumber}
@@ -35,7 +39,7 @@ export function SummaryStep({
       <div className="rounded-xl bg-black/3 border border-border p-4 space-y-4">
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
-            Estado del ticket
+            {t("tickets.summary.ticketStatus")}
           </span>
           <Badge color={TICKET_STATUS_CONFIG[ticket.status].color}>
             {TICKET_STATUS_CONFIG[ticket.status].label}
@@ -44,7 +48,7 @@ export function SummaryStep({
         {ticket.equipment && (
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
-              Estado del equipo
+              {t("tickets.summary.equipmentStatus")}
             </span>
             <Badge color={EQUIPMENT_STATUS_CONFIG[ticket.equipment.status].color}>
               {EQUIPMENT_STATUS_CONFIG[ticket.equipment.status].label}
@@ -53,12 +57,16 @@ export function SummaryStep({
         )}
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
-            ¿Corregido?
+            {t("tickets.summary.corrected")}
           </span>
           <Badge
             color={corrected === true ? "success" : corrected === false ? "destructive" : "muted"}
           >
-            {corrected === true ? "Sí" : corrected === false ? "No" : "Sin confirmar"}
+            {corrected === true
+              ? t("common.yes")
+              : corrected === false
+                ? t("common.no")
+                : t("tickets.summary.unconfirmed")}
           </Badge>
         </div>
       </div>
@@ -66,18 +74,18 @@ export function SummaryStep({
       {diagnosis && (
         <div>
           <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium block mb-1.5">
-            Diagnóstico
+            {t("tickets.detail.diagnosis")}
           </span>
           <p className="text-sm text-foreground leading-relaxed">{diagnosis}</p>
         </div>
       )}
 
       <div className="space-y-1.5">
-        <Label>Acciones tomadas</Label>
+        <Label>{t("tickets.summary.actions")}</Label>
         <Textarea
           value={actionsTaken}
           onChange={(e) => onActionsChange(e.target.value)}
-          placeholder="Describí las acciones tomadas para resolver el ticket..."
+          placeholder={t("tickets.summary.actionsPlaceholder")}
           className="h-32"
           readOnly={readOnly}
           disabled={readOnly}

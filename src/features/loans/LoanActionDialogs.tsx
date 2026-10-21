@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { gql, errorMessage } from "@/lib/utils";
+import { useI18n } from "@/hooks/useI18n";
 import type { Loan } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -34,6 +35,7 @@ function equipmentName(loan: Loan): string {
 }
 
 export function RejectLoanDialog({ loan, onClose, onDone }: LoanActionDialogProps) {
+  const { t } = useI18n();
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -48,7 +50,7 @@ export function RejectLoanDialog({ loan, onClose, onDone }: LoanActionDialogProp
     e.preventDefault();
     if (!loan) return;
     if (!reason.trim()) {
-      setError("Indicá el motivo del rechazo.");
+      setError(t("loans.rejectDialog.required"));
       return;
     }
     setSaving(true);
@@ -58,7 +60,7 @@ export function RejectLoanDialog({ loan, onClose, onDone }: LoanActionDialogProp
       setReason("");
       onDone();
     } catch (err) {
-      setError(errorMessage(err, "Error al rechazar"));
+      setError(errorMessage(err, t("loans.rejectDialog.failed")));
     } finally {
       setSaving(false);
     }
@@ -68,21 +70,24 @@ export function RejectLoanDialog({ loan, onClose, onDone }: LoanActionDialogProp
     <Dialog open={loan !== null} onOpenChange={(open) => !open && close()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Rechazar préstamo</DialogTitle>
+          <DialogTitle>{t("loans.rejectDialog.title")}</DialogTitle>
           {loan && (
             <DialogDescription>
-              {equipmentName(loan)} para {loan.user.name}. El solicitante verá el motivo.
+              {t("loans.rejectDialog.description", {
+                equipment: equipmentName(loan),
+                user: loan.user.name,
+              })}
             </DialogDescription>
           )}
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           <div className="space-y-1.5">
-            <Label htmlFor="reject-reason">Motivo</Label>
+            <Label htmlFor="reject-reason">{t("label.reason")}</Label>
             <Textarea
               id="reject-reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Ej: el equipo está reservado para un examen ese día"
+              placeholder={t("loans.rejectDialog.placeholder")}
               className="h-24"
               required
             />
@@ -90,10 +95,10 @@ export function RejectLoanDialog({ loan, onClose, onDone }: LoanActionDialogProp
           <ErrorAlert>{error}</ErrorAlert>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={close}>
-              Cancelar
+              {t("common.cancel")}
             </Button>
             <Button type="submit" variant="destructive" disabled={saving}>
-              {saving ? "Rechazando..." : "Rechazar"}
+              {saving ? t("loans.rejectDialog.rejecting") : t("loans.reject")}
             </Button>
           </DialogFooter>
         </form>
@@ -103,6 +108,7 @@ export function RejectLoanDialog({ loan, onClose, onDone }: LoanActionDialogProp
 }
 
 export function ReturnLoanDialog({ loan, onClose, onDone }: LoanActionDialogProps) {
+  const { t } = useI18n();
   const [damaged, setDamaged] = useState(false);
   const [issues, setIssues] = useState("");
   const [saving, setSaving] = useState(false);
@@ -123,7 +129,7 @@ export function ReturnLoanDialog({ loan, onClose, onDone }: LoanActionDialogProp
     e.preventDefault();
     if (!loan) return;
     if (damaged && !issues.trim()) {
-      setError("Describí la falla para que quede registrada en el equipo.");
+      setError(t("loans.returnDialog.issuesRequired"));
       return;
     }
     setSaving(true);
@@ -137,7 +143,7 @@ export function ReturnLoanDialog({ loan, onClose, onDone }: LoanActionDialogProp
       reset();
       onDone();
     } catch (err) {
-      setError(errorMessage(err, "Error al registrar la devolución"));
+      setError(errorMessage(err, t("loans.returnDialog.failed")));
     } finally {
       setSaving(false);
     }
@@ -147,10 +153,13 @@ export function ReturnLoanDialog({ loan, onClose, onDone }: LoanActionDialogProp
     <Dialog open={loan !== null} onOpenChange={(open) => !open && close()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Registrar devolución</DialogTitle>
+          <DialogTitle>{t("loans.returnDialog.title")}</DialogTitle>
           {loan && (
             <DialogDescription>
-              {equipmentName(loan)} prestado a {loan.user.name}.
+              {t("loans.returnDialog.description", {
+                equipment: equipmentName(loan),
+                user: loan.user.name,
+              })}
             </DialogDescription>
           )}
         </DialogHeader>
@@ -162,18 +171,16 @@ export function ReturnLoanDialog({ loan, onClose, onDone }: LoanActionDialogProp
               onChange={(e) => setDamaged(e.target.checked)}
               className="h-4 w-4 rounded"
             />
-            <span className="text-sm text-foreground">
-              El equipo vuelve con fallas (pasa a reparación)
-            </span>
+            <span className="text-sm text-foreground">{t("loans.returnDialog.damaged")}</span>
           </label>
           {damaged && (
             <div className="space-y-1.5">
-              <Label htmlFor="return-issues">Descripción de la falla</Label>
+              <Label htmlFor="return-issues">{t("loans.returnDialog.issues")}</Label>
               <Textarea
                 id="return-issues"
                 value={issues}
                 onChange={(e) => setIssues(e.target.value)}
-                placeholder="Ej: no enciende la pantalla"
+                placeholder={t("loans.returnDialog.issuesPlaceholder")}
                 className="h-24"
               />
             </div>
@@ -181,10 +188,10 @@ export function ReturnLoanDialog({ loan, onClose, onDone }: LoanActionDialogProp
           <ErrorAlert>{error}</ErrorAlert>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={close}>
-              Cancelar
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={saving}>
-              {saving ? "Registrando..." : "Registrar devolución"}
+              {saving ? t("loans.returnDialog.registering") : t("loans.returnDialog.title")}
             </Button>
           </DialogFooter>
         </form>

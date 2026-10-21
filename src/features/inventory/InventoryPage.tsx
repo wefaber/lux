@@ -4,8 +4,9 @@ import { Link } from "react-router-dom";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocations } from "@/hooks/useLocations";
+import { useI18n } from "@/hooks/useI18n";
 import { gql, formatDate, cn } from "@/lib/utils";
-import { EQUIPMENT_STATUS_CONFIG, ROUTES } from "@/lib/constants";
+import { EQUIPMENT_STATUS_CONFIG, ROUTES, equipmentKindLabel } from "@/lib/constants";
 import type { Product, Component, EquipmentStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ const COMPONENTS_QUERY = `
 `;
 
 export function InventoryPage() {
+  const { t } = useI18n();
   const { hasRole } = useAuth();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<EquipmentStatus | "">("");
@@ -75,29 +77,29 @@ export function InventoryPage() {
     <div className="space-y-6 max-w-full">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Inventario</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Equipos y componentes del instituto
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {t("inventory.title")}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("inventory.subtitle")}</p>
         </div>
         {canEdit && (
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" size="sm" asChild>
               <Link to={ROUTES.LOCATIONS}>
                 <MapPin className="h-3.5 w-3.5" />
-                Ubicaciones
+                {t("inventory.locations")}
               </Link>
             </Button>
             <Button variant="secondary" size="sm" asChild>
               <Link to={`${ROUTES.INVENTORY}/nuevo-componente`}>
                 <Cpu className="h-3.5 w-3.5" />
-                Componente
+                {t("inventory.component")}
               </Link>
             </Button>
             <Button size="sm" asChild>
               <Link to={`${ROUTES.INVENTORY}/nuevo`}>
                 <Plus className="h-3.5 w-3.5" />
-                Nuevo equipo
+                {t("inventory.newEquipment")}
               </Link>
             </Button>
           </div>
@@ -107,7 +109,7 @@ export function InventoryPage() {
       <div className="flex gap-3 flex-wrap">
         <LocationSearchBar
           className="flex-1 min-w-[200px] max-w-md"
-          placeholder="Buscar por marca, modelo, serie o ubicación..."
+          placeholder={t("inventory.search")}
           search={search}
           onSearchChange={setSearch}
           locations={locations}
@@ -115,11 +117,11 @@ export function InventoryPage() {
           onLocationChange={setLocationFilter}
         />
         <OptionSelect
-          aria-label="Filtrar por estado"
+          aria-label={t("overview.filterStatus")}
           value={statusFilter}
           onValueChange={(v) => setStatusFilter(v as EquipmentStatus | "")}
           options={[
-            { value: "", label: "Todos los estados" },
+            { value: "", label: t("common.allStatuses") },
             ...Object.entries(EQUIPMENT_STATUS_CONFIG).map(([value, conf]) => ({
               value,
               label: conf.label,
@@ -132,11 +134,11 @@ export function InventoryPage() {
         <TabsList>
           <TabsTrigger value="products">
             <Package className="h-3.5 w-3.5" />
-            Equipos ({products.length})
+            {t("inventory.tab.equipment", { count: products.length })}
           </TabsTrigger>
           <TabsTrigger value="components">
             <Cpu className="h-3.5 w-3.5" />
-            Componentes ({components.length})
+            {t("inventory.tab.components", { count: components.length })}
           </TabsTrigger>
         </TabsList>
 
@@ -145,7 +147,7 @@ export function InventoryPage() {
             <TableSkeleton rows={8} cols={6} />
           ) : products.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground text-sm">
-              No se encontraron equipos
+              {t("inventory.emptyEquipment")}
             </div>
           ) : (
             <div
@@ -157,19 +159,21 @@ export function InventoryPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border">
-                    {[
-                      "Tipo/Marca/Modelo",
-                      "Serie",
-                      "Estado",
-                      "Ubicación",
-                      "Componentes",
-                      "Actualizado",
-                    ].map((h) => (
+                    {(
+                      [
+                        "inventory.col.kindBrandModel",
+                        "inventory.col.serial",
+                        "label.status",
+                        "label.location",
+                        "inventory.col.components",
+                        "inventory.col.updated",
+                      ] as const
+                    ).map((h) => (
                       <th
                         key={h}
                         className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                       >
-                        {h}
+                        {t(h)}
                       </th>
                     ))}
                   </tr>
@@ -190,7 +194,7 @@ export function InventoryPage() {
                             <p className="text-xs text-muted-foreground font-medium">
                               <span className="font-mono text-primary">{p.machineId}</span>
                               {" · "}
-                              {p.kind}
+                              {equipmentKindLabel(p.kind)}
                             </p>
                           </Link>
                         </td>
@@ -225,7 +229,7 @@ export function InventoryPage() {
             <TableSkeleton rows={8} cols={6} />
           ) : components.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground text-sm">
-              No se encontraron componentes
+              {t("inventory.emptyComponents")}
             </div>
           ) : (
             <div
@@ -237,19 +241,21 @@ export function InventoryPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border">
-                    {[
-                      "Componente",
-                      "Fabricante",
-                      "Serie",
-                      "De fábrica",
-                      "Funcionando",
-                      "Actualizado",
-                    ].map((h) => (
+                    {(
+                      [
+                        "inventory.col.component",
+                        "label.manufacturer",
+                        "inventory.col.serial",
+                        "inventory.col.factory",
+                        "inventory.col.working",
+                        "inventory.col.updated",
+                      ] as const
+                    ).map((h) => (
                       <th
                         key={h}
                         className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                       >
-                        {h}
+                        {t(h)}
                       </th>
                     ))}
                   </tr>
@@ -277,12 +283,12 @@ export function InventoryPage() {
                       </td>
                       <td className="px-4 py-3">
                         <Badge color={c.isFactory ? "success" : "muted"} withDot={c.isFactory}>
-                          {c.isFactory ? "Sí" : "No"}
+                          {c.isFactory ? t("common.yes") : t("common.no")}
                         </Badge>
                       </td>
                       <td className="px-4 py-3">
                         <Badge color={c.isWorking ? "success" : "destructive"} withDot>
-                          {c.isWorking ? "Sí" : "No"}
+                          {c.isWorking ? t("common.yes") : t("common.no")}
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">

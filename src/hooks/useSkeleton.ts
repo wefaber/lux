@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { errorMessage } from "@/lib/utils";
+import { t } from "@/i18n";
 
 export function useSkeleton(delay = 200): boolean {
   const [showing, setShowing] = useState(true);
@@ -32,7 +33,7 @@ export function useAsync<T>(
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(errorMessage(err, "Error desconocido"));
+          setError(errorMessage(err, t("common.unknownError")));
         }
       })
       .finally(() => {
@@ -45,7 +46,7 @@ export function useAsync<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trigger, ...deps]);
 
-  const refetch = () => setTrigger((t) => t + 1);
+  const refetch = () => setTrigger((n) => n + 1);
 
   return { data, isLoading, error, refetch };
 }

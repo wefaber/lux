@@ -92,7 +92,6 @@ export const rnfCases: TestCase[] = [
     precondition: "Sesión iniciada.",
     steps: ["Cambiar el idioma a inglés", "Recorrer menú, formularios, mensajes y reportes"],
     expected: "Todos los textos se muestran en inglés.",
-    knownGap: "Sin i18n: la interfaz está solo en español (devolución de Programación E2)",
     ui: { as: "solicitante", start: "/dashboard", goal: "Cambiar el idioma de la interfaz a inglés", success: "El menú y los títulos se ven en inglés", expect: /\b(Inventory|Loans|Requests|Sign out|Profile|Home)\b/ },
   },
   {

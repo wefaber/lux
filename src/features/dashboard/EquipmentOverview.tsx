@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAsync } from "@/hooks/useSkeleton";
+import { useI18n } from "@/hooks/useI18n";
 import { useLocations } from "@/hooks/useLocations";
 import { gql } from "@/lib/utils";
-import { EQUIPMENT_STATUS_CONFIG, ROUTES } from "@/lib/constants";
+import { EQUIPMENT_STATUS_CONFIG, ROUTES, equipmentKindLabel } from "@/lib/constants";
 import type { EquipmentStatus, Product } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,10 +22,10 @@ const PRODUCTS_QUERY = `
 // Equipos por pagina en el inicio
 const PAGE_SIZE = 8;
 
-
 // Lo que un solicitante mira antes de entrar a un laboratorio: como estan sus
 // maquinas, y desde ahi mismo reportar la que falla.
 export function EquipmentOverview() {
+  const { t } = useI18n();
   const [locationId, setLocationId] = useState("");
   const { locations } = useLocations();
   const [status, setStatus] = useState<EquipmentStatus | "">("");
@@ -46,20 +47,18 @@ export function EquipmentOverview() {
 
   return (
     <section
-      aria-label="Estado de los equipos"
+      aria-label={t("overview.title")}
       className="rounded-2xl border border-border/70 bg-card/40 backdrop-blur-xl p-6 space-y-4"
     >
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold text-foreground">Estado de los equipos</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Elegí el lugar al que vas a entrar para ver cómo están sus máquinas.
-          </p>
+          <p className="text-sm font-semibold text-foreground">{t("overview.title")}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("overview.help")}</p>
         </div>
         {data && (
           <span className="text-xs text-muted-foreground">
-            {products.length} {products.length === 1 ? "equipo" : "equipos"}
-            {withProblems > 0 && ` · ${withProblems} con problemas`}
+            {t("overview.count", { count: products.length })}
+            {withProblems > 0 && ` · ${t("overview.withProblems", { count: withProblems })}`}
           </span>
         )}
       </div>
@@ -67,7 +66,7 @@ export function EquipmentOverview() {
       <div className="flex gap-3 flex-wrap">
         <LocationSearchBar
           className="flex-1 min-w-[200px] max-w-md"
-          placeholder="Buscar por código, tipo, modelo o ubicación..."
+          placeholder={t("overview.search")}
           search={search}
           onSearchChange={(v) => {
             setSearch(v);
@@ -81,14 +80,14 @@ export function EquipmentOverview() {
           }}
         />
         <OptionSelect
-          aria-label="Filtrar por estado"
+          aria-label={t("overview.filterStatus")}
           value={status}
           onValueChange={(v) => {
             setStatus(v as EquipmentStatus | "");
             setPage(0);
           }}
           options={[
-            { value: "", label: "Todos los estados" },
+            { value: "", label: t("overview.allStatuses") },
             ...Object.entries(EQUIPMENT_STATUS_CONFIG).map(([value, conf]) => ({
               value,
               label: conf.label,
@@ -100,24 +99,30 @@ export function EquipmentOverview() {
       {isLoading && !data ? (
         <TableSkeleton rows={6} cols={6} />
       ) : products.length === 0 ? (
-        <div className="text-center py-10 text-muted-foreground text-sm">
-          No hay equipos que coincidan con el filtro
-        </div>
+        <div className="text-center py-10 text-muted-foreground text-sm">{t("overview.empty")}</div>
       ) : (
         <div className="rounded-2xl border border-border/70 overflow-x-auto bg-card/20">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border">
-                {["Código", "Tipo", "Marca / Modelo", "Ubicación", "Estado", "Detalle", ""].map(
-                  (h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
-                    >
-                      {h}
-                    </th>
-                  ),
-                )}
+                {(
+                  [
+                    "overview.col.code",
+                    "overview.col.kind",
+                    "overview.col.brandModel",
+                    "overview.col.location",
+                    "overview.col.status",
+                    "overview.col.detail",
+                    null,
+                  ] as const
+                ).map((h) => (
+                  <th
+                    key={h ?? "actions"}
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                  >
+                    {h ? t(h) : ""}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -131,7 +136,9 @@ export function EquipmentOverview() {
                     <td className="px-4 py-3 font-mono text-xs font-semibold text-primary">
                       {p.machineId}
                     </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">{p.kind}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                      {equipmentKindLabel(p.kind)}
+                    </td>
                     <td className="px-4 py-3 text-sm text-foreground">
                       {p.brand} {p.model}
                     </td>
@@ -146,7 +153,9 @@ export function EquipmentOverview() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Button variant="secondary" size="sm" asChild>
-                        <Link to={`${ROUTES.TICKETS}?nuevo=1&equipo=${p.id}`}>Reportar</Link>
+                        <Link to={`${ROUTES.TICKETS}?nuevo=1&equipo=${p.id}`}>
+                          {t("overview.report")}
+                        </Link>
                       </Button>
                     </td>
                   </tr>

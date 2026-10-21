@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { MessageSquare, Send } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
+import { useI18n } from "@/hooks/useI18n";
 import { gql, formatDateTime, cn, errorMessage } from "@/lib/utils";
 import { ROLE_LABELS } from "@/lib/constants";
 import { isStaff } from "@/lib/roles";
@@ -34,6 +35,7 @@ interface CommentThreadProps {
 
 // Hilo de un ticket o solicitud: el canal entre quien lo abrio y el staff
 export function CommentThread({ entityType, entityId, fill = false }: CommentThreadProps) {
+  const { t } = useI18n();
   const { user } = useAuth();
   const { data, isLoading, error, refetch } = useAsync<{ comments: Comment[] }>(
     () => gql(COMMENTS_QUERY, { entityType, entityId }),
@@ -64,7 +66,7 @@ export function CommentThread({ entityType, entityId, fill = false }: CommentThr
       setBody("");
       refetch();
     } catch (err) {
-      setSendError(errorMessage(err, "No se pudo enviar el comentario"));
+      setSendError(errorMessage(err, t("comments.sendFailed")));
     } finally {
       setSending(false);
     }
@@ -88,7 +90,7 @@ export function CommentThread({ entityType, entityId, fill = false }: CommentThr
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <MessageSquare className="h-4 w-4 text-muted-foreground" />
-          Comentarios ({comments.length})
+          {t("comments.title", { count: comments.length })}
         </CardTitle>
       </CardHeader>
       <CardContent className={cn("space-y-4", fill && "flex-1 min-h-0 flex flex-col")}>
@@ -99,16 +101,14 @@ export function CommentThread({ entityType, entityId, fill = false }: CommentThr
             ))}
           </div>
         ) : error ? (
-          <p className="text-sm text-destructive">Error al cargar los comentarios: {error}</p>
+          <p className="text-sm text-destructive">{t("comments.loadFailed", { error })}</p>
         ) : comments.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Todavía no hay comentarios. Usá este espacio para consultas o novedades.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("comments.empty")}</p>
         ) : (
           <ol
             ref={listRef}
             className={cn("space-y-2", fill && "flex-1 min-h-0 overflow-y-auto pr-1")}
-            aria-label="Comentarios"
+            aria-label={t("comments.label")}
           >
             {comments.map((c) => {
               const mine = c.author.id === user?.id;
@@ -122,7 +122,7 @@ export function CommentThread({ entityType, entityId, fill = false }: CommentThr
                 >
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-semibold text-foreground">
-                      {mine ? "Vos" : c.author.name}
+                      {mine ? t("comments.you") : c.author.name}
                     </span>
                     {isStaff(c.author.role) && (
                       <Badge color="info">{ROLE_LABELS[c.author.role]}</Badge>
@@ -142,8 +142,8 @@ export function CommentThread({ entityType, entityId, fill = false }: CommentThr
 
         <form onSubmit={handleSubmit} className={cn("space-y-2", fill && "mt-auto")}>
           <Textarea
-            aria-label="Escribir un comentario"
-            placeholder="Escribí un comentario..."
+            aria-label={t("comments.write")}
+            placeholder={t("comments.placeholder")}
             value={body}
             onChange={(e) => {
               setBody(e.target.value);
@@ -155,11 +155,11 @@ export function CommentThread({ entityType, entityId, fill = false }: CommentThr
           />
           <div className="flex items-center justify-between gap-3">
             <p className={cn("text-xs", sendError ? "text-destructive" : "text-muted-foreground")}>
-              {sendError || "Ctrl + Enter para enviar"}
+              {sendError || t("comments.hint")}
             </p>
             <Button type="submit" size="sm" disabled={sending || !body.trim()}>
               <Send className="h-3.5 w-3.5" />
-              {sending ? "Enviando..." : "Comentar"}
+              {sending ? t("comments.sending") : t("comments.send")}
             </Button>
           </div>
         </form>

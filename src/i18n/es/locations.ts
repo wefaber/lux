@@ -1,0 +1,26 @@
+export const locations = {
+  "locations.title": "Ubicaciones",
+  "locations.subtitle":
+    "Laboratorios, salones y oficinas. El código (L1 = Laboratorio 1) arranca el ID de sus equipos: L1-PC3.",
+  "locations.new": "Nueva ubicación",
+  "locations.empty": "No hay ubicaciones registradas",
+  "locations.col.code": "Código",
+  "locations.col.equipment": "Equipos",
+  "locations.col.updated": "Actualizada",
+  "locations.deleteBlocked": "Tiene equipos: movelos a otra ubicación para poder eliminarla",
+  "locations.form.titleEdit": "Editar ubicación",
+  "locations.form.description": "Su código (L1, A2...) arranca el ID de los equipos que tiene.",
+  "locations.form.number": "Número",
+  "locations.form.codeLocked":
+    "Código {code}: no se puede cambiar, {count} equipo(s) lo usan en su ID de máquina.",
+  "locations.form.codeHint": "Código: {code}. Sus equipos se nombran {code}-PC1, {code}-PRY1…",
+  "locations.form.codeEmpty": "El código sale del tipo y el número (L1 = Laboratorio 1).",
+  "locations.form.namePlaceholder": "Ej: Laboratorio 3",
+  "locations.form.saveChanges": "Guardar cambios",
+  "locations.form.submit": "Crear ubicación",
+  "locations.form.failed": "Error al guardar la ubicación",
+  "locations.delete.title": "Eliminar ubicación",
+  "locations.delete.description": "{name} ({code}) deja de figurar en filtros y formularios.",
+  "locations.delete.submitting": "Eliminando...",
+  "locations.delete.failed": "Error al eliminar la ubicación",
+} as const;

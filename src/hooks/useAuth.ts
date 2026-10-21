@@ -29,6 +29,10 @@ const ME_QUERY = `
   query GetMe { me { id name dni email role isActive createdAt updatedAt } }
 `; // Datos vigentes del usuario de la sesion
 
+const LOGOUT_MUTATION = `
+  mutation Logout { logout }
+`; // Revoca el token de la sesion
+
 interface LoginData {
   login: AuthUser;
 }
@@ -60,6 +64,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []); // Comprobacion de login y logica
 
   const logout = useCallback(() => {
+    // Revoca el token en la API (si no responde, igual se cierra la sesion local)
+    if (loadStoredUser()?.token) void gql(LOGOUT_MUTATION).catch(() => {});
     setUser(null);
     localStorage.removeItem(AUTH_STORAGE_KEY);
   }, []); // Logica de logout

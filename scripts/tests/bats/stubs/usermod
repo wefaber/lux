@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Stub: registra la llamada y no hace nada.
+echo "$(basename "$0") $*" >> "${STUB_LOG:-/dev/null}"
+exit 0

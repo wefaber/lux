@@ -2,7 +2,9 @@ import { motion } from "motion/react";
 import { Download, AlarmClock, Timer, Wrench } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAsync } from "@/hooks/useSkeleton";
-import { gql, formatDate } from "@/lib/utils";
+import { useI18n } from "@/hooks/useI18n";
+import { gql, formatDate, formatNumber } from "@/lib/utils";
+import { t as translateNow } from "@/i18n";
 import { downloadCsv } from "@/lib/csv";
 import { ROUTES, SPRING_TRANSITION, TICKET_CATEGORY_LABELS } from "@/lib/constants";
 import type { Reports } from "@/lib/types";
@@ -26,8 +28,8 @@ const REPORTS_QUERY = `
 
 function formatHours(hours: number | null): string {
   if (hours === null) return "—";
-  if (hours < 48) return `${hours.toLocaleString("es-UY")} h`;
-  return `${(Math.round((hours / 24) * 10) / 10).toLocaleString("es-UY")} días`;
+  if (hours < 48) return translateNow("reports.hours", { value: formatNumber(hours) });
+  return translateNow("reports.days", { value: formatNumber(Math.round((hours / 24) * 10) / 10) });
 }
 
 function today(): string {
@@ -74,19 +76,20 @@ function ReportCard({
 }
 
 export function ReportsPage() {
+  const { t } = useI18n();
   const { data, isLoading, error } = useAsync<{ reports: Reports }>(() => gql(REPORTS_QUERY), []);
   const reports = data?.reports;
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">Reportes</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Datos para decidir sobre préstamos, soporte y reposición de equipos
-        </p>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">
+          {t("reports.title")}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-0.5">{t("reports.subtitle")}</p>
       </div>
 
-      {error && <ErrorAlert>Error al cargar reportes: {error}</ErrorAlert>}
+      {error && <ErrorAlert>{t("reports.loadFailed", { error })}</ErrorAlert>}
 
       {isLoading && !reports ? (
         <TableSkeleton rows={6} cols={4} />
@@ -100,17 +103,17 @@ export function ReportsPage() {
           >
             <ReportCard
               icon={AlarmClock}
-              title={`Préstamos vencidos (${reports.overdueLoans.length})`}
-              subtitle="Equipos entregados que no volvieron en fecha, del más atrasado al menos"
+              title={t("reports.overdue.title", { count: reports.overdueLoans.length })}
+              subtitle={t("reports.overdue.subtitle")}
               onExport={() =>
-                downloadCsv(`lux-prestamos-vencidos-${today()}.csv`, [
+                downloadCsv(`${t("reports.overdue.csvFile")}-${today()}.csv`, [
                   [
-                    "Préstamo",
-                    "ID de máquina",
-                    "Equipo",
-                    "Usuario",
-                    "Vencimiento",
-                    "Días de atraso",
+                    t("reports.overdue.csvLoan"),
+                    t("label.machineId"),
+                    t("label.equipment"),
+                    t("label.user"),
+                    t("reports.overdue.due"),
+                    t("reports.overdue.csvDaysLate"),
                   ],
                   ...reports.overdueLoans.map((l) => [
                     l.loanId,
@@ -124,13 +127,18 @@ export function ReportsPage() {
               }
             >
               {reports.overdueLoans.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No hay préstamos vencidos.</p>
+                <p className="text-sm text-muted-foreground">{t("reports.overdue.empty")}</p>
               ) : (
                 <div className="rounded-xl border border-border overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-border">
-                        {["Equipo", "Usuario", "Vencimiento", "Atraso"].map((h) => (
+                        {[
+                          t("label.equipment"),
+                          t("label.user"),
+                          t("reports.overdue.due"),
+                          t("reports.overdue.late"),
+                        ].map((h) => (
                           <th key={h} className={TH}>
                             {h}
                           </th>
@@ -147,7 +155,7 @@ export function ReportsPage() {
                           <td className={TD}>{l.user}</td>
                           <td className={TD}>{formatDate(l.returnDate)}</td>
                           <td className="px-4 py-3 text-sm font-semibold text-destructive">
-                            {l.daysOverdue} días
+                            {t("reports.overdue.daysLate", { count: l.daysOverdue })}
                           </td>
                         </tr>
                       ))}
@@ -159,20 +167,29 @@ export function ReportsPage() {
 
             <ReportCard
               icon={Timer}
-              title="Tiempo promedio de resolución"
-              subtitle={`${reports.resolution.resolvedCount} tickets resueltos · promedio general ${formatHours(reports.resolution.averageHours)}`}
+              title={t("reports.resolution.title")}
+              subtitle={t("reports.resolution.subtitle", {
+                count: reports.resolution.resolvedCount,
+                average: formatHours(reports.resolution.averageHours),
+              })}
               onExport={() =>
-                downloadCsv(`lux-tiempo-resolucion-${today()}.csv`, [
-                  ["Categoría", "Tickets resueltos", "Promedio (horas)"],
+                downloadCsv(`${t("reports.resolution.csvFile")}-${today()}.csv`, [
+                  [
+                    t("label.category"),
+                    t("reports.resolution.csvResolved"),
+                    t("reports.resolution.csvAverage"),
+                  ],
                   ...reports.resolution.byCategory.map((c) => [
                     TICKET_CATEGORY_LABELS[c.category],
                     c.resolvedCount,
-                    c.averageHours?.toLocaleString("es-UY") ?? "",
+                    c.averageHours === null ? "" : formatNumber(c.averageHours),
                   ]),
                   [
-                    "Total",
+                    t("reports.resolution.total"),
                     reports.resolution.resolvedCount,
-                    reports.resolution.averageHours?.toLocaleString("es-UY") ?? "",
+                    reports.resolution.averageHours === null
+                      ? ""
+                      : formatNumber(reports.resolution.averageHours),
                   ],
                 ])
               }
@@ -186,7 +203,9 @@ export function ReportsPage() {
                     <p className="text-2xl font-bold tracking-tight text-foreground mt-1">
                       {formatHours(c.averageHours)}
                     </p>
-                    <p className="text-xs text-muted-foreground">{c.resolvedCount} resueltos</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t("reports.resolution.resolved", { count: c.resolvedCount })}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -194,11 +213,16 @@ export function ReportsPage() {
 
             <ReportCard
               icon={Wrench}
-              title="Equipos con más incidentes"
-              subtitle="Candidatos a revisión preventiva o reposición"
+              title={t("reports.top.title")}
+              subtitle={t("reports.top.subtitle")}
               onExport={() =>
-                downloadCsv(`lux-equipos-incidentes-${today()}.csv`, [
-                  ["ID de máquina", "Equipo", "Tickets", "Abiertos"],
+                downloadCsv(`${t("reports.top.csvFile")}-${today()}.csv`, [
+                  [
+                    t("label.machineId"),
+                    t("label.equipment"),
+                    t("reports.top.tickets"),
+                    t("reports.top.open"),
+                  ],
                   ...reports.topIncidentEquipment.map((e) => [
                     e.machineId,
                     e.equipment,
@@ -209,13 +233,17 @@ export function ReportsPage() {
               }
             >
               {reports.topIncidentEquipment.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Ningún equipo tiene tickets.</p>
+                <p className="text-sm text-muted-foreground">{t("reports.top.empty")}</p>
               ) : (
                 <div className="rounded-xl border border-border overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-border">
-                        {["Equipo", "Tickets", "Abiertos"].map((h) => (
+                        {[
+                          t("label.equipment"),
+                          t("reports.top.tickets"),
+                          t("reports.top.open"),
+                        ].map((h) => (
                           <th key={h} className={TH}>
                             {h}
                           </th>

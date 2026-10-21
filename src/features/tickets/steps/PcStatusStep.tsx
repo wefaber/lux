@@ -1,19 +1,21 @@
 import type { Ticket } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { EQUIPMENT_STATUS_CONFIG } from "@/lib/constants";
+import { EQUIPMENT_STATUS_CONFIG, equipmentKindLabel } from "@/lib/constants";
 import { DetailRow } from "@/components/ui/detail-row";
+import { useI18n } from "@/hooks/useI18n";
 
 interface PcStatusStepProps {
   ticket: Ticket;
 }
 
 export function PcStatusStep({ ticket }: PcStatusStepProps) {
+  const { t } = useI18n();
   const { equipment } = ticket;
 
   if (!equipment) {
     return (
       <div className="text-center py-12 text-muted-foreground text-sm">
-        No hay equipo asociado a este ticket.
+        {t("tickets.pcStatus.none")}
       </div>
     );
   }
@@ -23,7 +25,9 @@ export function PcStatusStep({ ticket }: PcStatusStepProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-foreground mb-1">Estado del equipo</h2>
+        <h2 className="text-base font-semibold text-foreground mb-1">
+          {t("tickets.pcStatus.title")}
+        </h2>
         <p className="text-xs text-muted-foreground">
           {equipment.machineId} · {equipment.location} · {equipment.serialNumber}
         </p>
@@ -31,24 +35,24 @@ export function PcStatusStep({ ticket }: PcStatusStepProps) {
 
       <div className="grid grid-cols-2 gap-4">
         <DetailRow
-          label="ID de máquina"
+          label={t("label.machineId")}
           value={
             <span className="font-mono font-semibold text-primary">{equipment.machineId}</span>
           }
         />
-        <DetailRow label="Ubicación" value={equipment.location} />
+        <DetailRow label={t("label.location")} value={equipment.location} />
         <DetailRow
-          label="Estado"
+          label={t("label.status")}
           value={<Badge color={statusConf.color}>{statusConf.label}</Badge>}
         />
-        <DetailRow label="Tipo" value={equipment.kind} />
-        <DetailRow label="Marca / Modelo" value={`${equipment.brand} ${equipment.model}`} />
+        <DetailRow label={t("label.type")} value={equipmentKindLabel(equipment.kind)} />
+        <DetailRow label={t("label.brandModel")} value={`${equipment.brand} ${equipment.model}`} />
         <DetailRow
-          label="N° de serie"
+          label={t("label.serialNumber")}
           value={<span className="font-mono text-xs">{equipment.serialNumber}</span>}
         />
         <DetailRow
-          label="Part number"
+          label={t("label.partNumber")}
           value={<span className="font-mono text-xs">{equipment.partNumber}</span>}
         />
       </div>
@@ -56,7 +60,7 @@ export function PcStatusStep({ ticket }: PcStatusStepProps) {
       {equipment.issues && (
         <div>
           <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium block mb-1.5">
-            Fallas registradas
+            {t("tickets.pcStatus.issues")}
           </span>
           <p className="text-sm text-warning">{equipment.issues}</p>
         </div>
@@ -64,29 +68,31 @@ export function PcStatusStep({ ticket }: PcStatusStepProps) {
 
       <div>
         <h3 className="text-xs text-muted-foreground uppercase tracking-widest font-medium mb-3">
-          Componentes ({equipment.components.length})
+          {t("tickets.pcStatus.components", { count: equipment.components.length })}
         </h3>
         {equipment.components.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Sin componentes registrados</p>
+          <p className="text-sm text-muted-foreground">{t("tickets.pcStatus.noComponents")}</p>
         ) : (
           <div className="rounded-xl border border-border overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  {[
-                    "Componente",
-                    "Modelo",
-                    "Fabricante",
-                    "Serie",
-                    "Part#",
-                    "Fábrica",
-                    "Funciona",
-                  ].map((h) => (
+                  {(
+                    [
+                      "tickets.pcStatus.col.component",
+                      "label.model",
+                      "label.manufacturer",
+                      "tickets.pcStatus.col.serial",
+                      "label.partNumber",
+                      "tickets.pcStatus.col.factory",
+                      "tickets.pcStatus.col.working",
+                    ] as const
+                  ).map((h) => (
                     <th
                       key={h}
                       className="px-4 py-2 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
                     >
-                      {h}
+                      {t(h)}
                     </th>
                   ))}
                 </tr>
@@ -108,12 +114,12 @@ export function PcStatusStep({ ticket }: PcStatusStepProps) {
                     </td>
                     <td className="px-4 py-2">
                       <Badge color={c.isFactory ? "success" : "muted"}>
-                        {c.isFactory ? "Sí" : "No"}
+                        {c.isFactory ? t("common.yes") : t("common.no")}
                       </Badge>
                     </td>
                     <td className="px-4 py-2">
                       <Badge color={c.isWorking ? "success" : "destructive"}>
-                        {c.isWorking ? "Sí" : "No"}
+                        {c.isWorking ? t("common.yes") : t("common.no")}
                       </Badge>
                     </td>
                   </tr>

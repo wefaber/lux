@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/hooks/useI18n";
 
 interface PaginationProps {
   /** Pagina actual, desde 0 */
@@ -17,15 +18,14 @@ export function clampPage(page: number, total: number, pageSize: number): number
 // "Mostrando 1–10 de 23" con Anterior / Siguiente. No se muestra si todo entra
 // en una pagina.
 export function Pagination({ page, pageSize, total, onPageChange }: PaginationProps) {
+  const { t } = useI18n();
   const pages = Math.max(1, Math.ceil(total / pageSize));
   if (total <= pageSize) return null;
   const from = page * pageSize + 1;
   const to = Math.min(total, (page + 1) * pageSize);
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-      <span>
-        Mostrando {from}–{to} de {total}
-      </span>
+      <span>{t("ui.pagination.showing", { from, to, total })}</span>
       <div className="flex items-center gap-2">
         <Button
           variant="secondary"
@@ -34,7 +34,7 @@ export function Pagination({ page, pageSize, total, onPageChange }: PaginationPr
           onClick={() => onPageChange(page - 1)}
         >
           <ChevronLeft className="h-3.5 w-3.5" />
-          Anterior
+          {t("ui.pagination.prev")}
         </Button>
         <span className="tabular-nums">
           {page + 1} / {pages}
@@ -45,7 +45,7 @@ export function Pagination({ page, pageSize, total, onPageChange }: PaginationPr
           disabled={page >= pages - 1}
           onClick={() => onPageChange(page + 1)}
         >
-          Siguiente
+          {t("ui.pagination.next")}
           <ChevronRight className="h-3.5 w-3.5" />
         </Button>
       </div>

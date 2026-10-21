@@ -4,8 +4,14 @@ import { Plus, Search, AlertCircle, Camera } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotices } from "@/hooks/useNotices";
+import { useI18n } from "@/hooks/useI18n";
 import { gql, formatDate, truncate, cn, errorMessage } from "@/lib/utils";
-import { TICKET_STATUS_CONFIG, TICKET_CATEGORY_LABELS, ROUTES } from "@/lib/constants";
+import {
+  TICKET_STATUS_CONFIG,
+  TICKET_CATEGORY_LABELS,
+  ROUTES,
+  equipmentKindLabel,
+} from "@/lib/constants";
 import type { Ticket, TicketStatus, Product } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -69,6 +75,7 @@ const CREATE_TICKET_MUTATION = `
 const PAGE_SIZE = 10;
 
 export function TicketList() {
+  const { t } = useI18n();
   const { user, hasRole } = useAuth();
   const { noticeFor, hasNewPending } = useNotices();
   const [search, setSearch] = useState("");
@@ -102,12 +109,12 @@ export function TicketList() {
 
   const term = search.trim().toLowerCase();
   const idTerm = idQuery(term, "tkt");
-  const matchesId = (t: Ticket) => idTerm !== null && t.id.toLowerCase().includes(idTerm);
-  const pin = (t: Ticket) => ticketPin(t, user?.id, !!noticeFor("ticket", t.id));
+  const matchesId = (tk: Ticket) => idTerm !== null && tk.id.toLowerCase().includes(idTerm);
+  const pin = (tk: Ticket) => ticketPin(tk, user?.id, !!noticeFor("ticket", tk.id));
 
-  const matching = (data?.tickets ?? []).filter((t) => {
-    const matchSearch = !term || t.title.toLowerCase().includes(term) || matchesId(t);
-    const matchStatus = !statusFilter || t.status === statusFilter;
+  const matching = (data?.tickets ?? []).filter((tk) => {
+    const matchSearch = !term || tk.title.toLowerCase().includes(term) || matchesId(tk);
+    const matchStatus = !statusFilter || tk.status === statusFilter;
     return matchSearch && matchStatus;
   }); // Comprueba que los tickets mostrados matcheen con los filtros
 
@@ -117,7 +124,7 @@ export function TicketList() {
   const hideResolved = !isSolicitante && !statusFilter;
   const tickets = pinnedFirst(
     hideResolved
-      ? matching.filter((t) => t.status !== "resolved" || matchesId(t) || pin(t))
+      ? matching.filter((tk) => tk.status !== "resolved" || matchesId(tk) || pin(tk))
       : matching,
     pin,
   );
@@ -145,7 +152,7 @@ export function TicketList() {
       setForm({ title: "", description: "", category: "hardware", equipmentId: "" });
       refetch();
     } catch (err) {
-      setCreateError(errorMessage(err, "No se pudo crear el ticket"));
+      setCreateError(errorMessage(err, t("tickets.create.failed")));
     } finally {
       setSaving(false);
     }
@@ -164,22 +171,24 @@ export function TicketList() {
     <div className="space-y-3 max-w-full">
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Tickets</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Mesa de ayuda</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {t("tickets.title")}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("tickets.subtitle")}</p>
         </div>
         <div className="flex gap-2">
           {/* Cualquier rol puede reportar un incidente; OOL es una accion extra del staff */}
           <Button size="sm" onClick={() => setCreateOpen(true)}>
             <Plus className="h-3.5 w-3.5" />
-            Nuevo ticket
+            {t("tickets.new")}
           </Button>
           {hasRole(...STAFF_ROLES) && (
             <Button variant="secondary" size="sm" asChild className="relative">
               <Link to={`${ROUTES.TICKETS}/ool`}>
                 <AlertCircle className="h-3.5 w-3.5" />
-                OOL
+                {t("tickets.ool")}
                 {/* Llegaron tickets sin asignar desde la ultima vez que entraste */}
-                {hasNewPending("ticket") && <UnseenDot label="tickets nuevos sin asignar" />}
+                {hasNewPending("ticket") && <UnseenDot label={t("tickets.oolUnseen")} />}
               </Link>
             </Button>
           )}
@@ -190,8 +199,8 @@ export function TicketList() {
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute z-10 left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por título o ID (tkt-007)..."
-            aria-label="Buscar tickets por título o ID"
+            placeholder={t("tickets.search")}
+            aria-label={t("tickets.searchLabel")}
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -201,14 +210,14 @@ export function TicketList() {
           />
         </div>
         <OptionSelect
-          aria-label="Filtrar por estado"
+          aria-label={t("overview.filterStatus")}
           value={statusFilter}
           onValueChange={(v) => {
             setStatusFilter(v as TicketStatus | "");
             setPage(0);
           }}
           options={[
-            { value: "", label: "Todos los estados" },
+            { value: "", label: t("common.allStatuses") },
             ...Object.entries(TICKET_STATUS_CONFIG).map(([value, conf]) => ({
               value,
               label: conf.label,
@@ -219,20 +228,17 @@ export function TicketList() {
 
       {hiddenResolved > 0 && (
         <p className="text-xs text-muted-foreground">
-          {hiddenResolved === 1
-            ? "1 ticket resuelto no se muestra."
-            : `${hiddenResolved} tickets resueltos no se muestran.`}{" "}
-          Para verlos, filtrá por estado «Resuelto» o buscalos por su ID.
+          {t("tickets.hiddenResolved", { count: hiddenResolved })} {t("tickets.hiddenResolvedHelp")}
         </p>
       )}
 
-      {error && <ErrorAlert>Error: {error}</ErrorAlert>}
+      {error && <ErrorAlert>{t("common.error", { error })}</ErrorAlert>}
 
       {showSkeleton ? (
         <TableSkeleton rows={8} cols={5} />
       ) : tickets.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground text-sm">
-          {hiddenResolved > 0 ? "No hay tickets abiertos" : "No hay tickets"}
+          {hiddenResolved > 0 ? t("tickets.emptyOpen") : t("tickets.empty")}
         </div>
       ) : (
         <div
@@ -244,26 +250,34 @@ export function TicketList() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border">
-                {["ID", "Título", "Estado", "Categoría", "Asignado a", "Solicitante", "Fecha"].map(
-                  (h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-2 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
-                    >
-                      {h}
-                    </th>
-                  ),
-                )}
+                {(
+                  [
+                    "label.id",
+                    "label.title",
+                    "label.status",
+                    "label.category",
+                    "label.assignedTo",
+                    "label.requester",
+                    "label.date",
+                  ] as const
+                ).map((h) => (
+                  <th
+                    key={h}
+                    className="px-4 py-2 text-left text-xs font-medium uppercase tracking-widest text-muted-foreground"
+                  >
+                    {t(h)}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {visible.map((t) => {
-                const statusConf = TICKET_STATUS_CONFIG[t.status];
-                const pinState = pin(t);
-                const notice = noticeFor("ticket", t.id);
+              {visible.map((tk) => {
+                const statusConf = TICKET_STATUS_CONFIG[tk.status];
+                const pinState = pin(tk);
+                const notice = noticeFor("ticket", tk.id);
                 return (
                   <tr
-                    key={t.id}
+                    key={tk.id}
                     className={cn(
                       "border-b border-border last:border-0 transition-colors",
                       pinRowClass(pinState),
@@ -271,14 +285,14 @@ export function TicketList() {
                   >
                     <td className="px-4 py-2 text-xs text-muted-foreground font-mono">
                       <PinMark state={pinState} />
-                      {t.id}
+                      {tk.id}
                     </td>
                     <td className="px-4 py-2 min-w-48 max-w-72 whitespace-normal">
                       <Link
-                        to={`${ROUTES.TICKETS}/${t.id}`}
+                        to={`${ROUTES.TICKETS}/${tk.id}`}
                         className="text-sm font-semibold text-foreground hover:underline"
                       >
-                        {truncate(t.title, 48)}
+                        {truncate(tk.title, 48)}
                       </Link>
                       {notice && <NoticeLine notice={notice} />}
                     </td>
@@ -288,16 +302,16 @@ export function TicketList() {
                       </Badge>
                     </td>
                     <td className="px-4 py-2 text-sm text-muted-foreground font-medium">
-                      {TICKET_CATEGORY_LABELS[t.category]}
+                      {TICKET_CATEGORY_LABELS[tk.category]}
                     </td>
                     <td className="px-4 py-2 text-sm text-muted-foreground font-medium whitespace-normal">
-                      {t.assignedTo?.name ?? "—"}
+                      {tk.assignedTo?.name ?? "—"}
                     </td>
                     <td className="px-4 py-2 text-sm text-muted-foreground font-medium whitespace-normal">
-                      {t.submittedBy.name}
+                      {tk.submittedBy.name}
                     </td>
                     <td className="px-4 py-2 text-xs text-muted-foreground">
-                      {formatDate(t.createdAt)}
+                      {formatDate(tk.createdAt)}
                     </td>
                   </tr>
                 );
@@ -319,31 +333,29 @@ export function TicketList() {
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Crear nuevo ticket</DialogTitle>
-                <DialogDescription>
-                  Reportá un problema; si es de un equipo, elegilo o escaneá su QR.
-                </DialogDescription>
+                <DialogTitle>{t("tickets.create.title")}</DialogTitle>
+                <DialogDescription>{t("tickets.create.description")}</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label>Título</Label>
+                  <Label>{t("label.title")}</Label>
                   <Input
-                    placeholder="Descripción breve del problema"
+                    placeholder={t("tickets.create.titlePlaceholder")}
                     value={form.title}
                     onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Descripción</Label>
+                  <Label>{t("label.description")}</Label>
                   <Textarea
-                    placeholder="Describí el problema en detalle..."
+                    placeholder={t("tickets.create.descriptionPlaceholder")}
                     value={form.description}
                     onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                     className="h-28"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Categoría</Label>
+                  <Label>{t("label.category")}</Label>
                   <Select
                     value={form.category}
                     onValueChange={(v) => setForm((f) => ({ ...f, category: v }))}
@@ -352,15 +364,16 @@ export function TicketList() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="hardware">Hardware</SelectItem>
-                      <SelectItem value="software">Software</SelectItem>
-                      <SelectItem value="network">Red</SelectItem>
-                      <SelectItem value="other">Otro</SelectItem>
+                      {Object.entries(TICKET_CATEGORY_LABELS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Equipo (opcional)</Label>
+                  <Label>{t("tickets.create.equipment")}</Label>
                   <div className="flex gap-2">
                     <div className="flex-1">
                       <EquipmentSearchSelect
@@ -375,7 +388,7 @@ export function TicketList() {
                       variant="secondary"
                       size="icon"
                       onClick={() => setScannerOpen(true)}
-                      title="Escanear QR"
+                      title={t("tickets.create.scan")}
                     >
                       <Camera className="h-4 w-4" />
                     </Button>
@@ -385,7 +398,7 @@ export function TicketList() {
                       <span className="font-mono text-primary font-semibold">
                         {selectedProduct.machineId}
                       </span>
-                      · {selectedProduct.location} · {selectedProduct.kind}
+                      · {selectedProduct.location} · {equipmentKindLabel(selectedProduct.kind)}
                     </p>
                   )}
                 </div>
@@ -393,10 +406,10 @@ export function TicketList() {
               <ErrorAlert>{createError}</ErrorAlert>
               <DialogFooter>
                 <Button variant="secondary" onClick={() => setCreateOpen(false)}>
-                  Cancelar
+                  {t("common.cancel")}
                 </Button>
                 <Button onClick={handleCreate} disabled={saving || !form.title.trim()}>
-                  {saving ? "Enviando..." : "Enviar ticket"}
+                  {saving ? t("tickets.create.sending") : t("tickets.create.submit")}
                 </Button>
               </DialogFooter>
             </DialogContent>

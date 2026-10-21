@@ -1,29 +1,24 @@
 import { Elysia } from "elysia";
-import { createSchema, createYoga } from "graphql-yoga";
-import { bearerFrom, verifyToken } from "./auth";
+import { createSchema } from "graphql-yoga";
+import { createContext } from "./context";
+import { corsPlugin } from "./cors";
+import { securityHeadersPlugin } from "./security-headers";
 import { pool } from "./db/client";
-import { loadEnv, serverHost, serverPort } from "./env";
+import { restPlugin } from "./rest/plugin";
+import { loadEnv, maxBodyBytes, serverHost, serverPort } from "./env";
+import { clientIp } from "./net";
 import { resolvers } from "./graphql/resolvers";
+import { createGraphqlServer } from "./graphql/server";
 import { typeDefs } from "./graphql/schema";
-import { loadState } from "./state";
 
 loadEnv();
 
 const schema = createSchema({ typeDefs, resolvers });
 
-const yoga = createYoga({
+const yoga = createGraphqlServer({
   schema,
-  graphqlEndpoint: "/graphql",
-  graphiql: true,
-  // El frontend manda el JWT en `Authorization: Bearer`; el token identifica al
-  // usuario y de aca sale `caller` para las reglas de permisos.
-  context: async ({ request }) => {
-    const token = bearerFrom(request.headers.get("authorization"));
-    const payload = token ? await verifyToken(token) : null;
-    const state = await loadState();
-    const found = payload ? (state.usersById.get(payload.sub) ?? null) : null;
-    return { state, caller: found && found.isActive ? found : null };
-  },
+  production: process.env.NODE_ENV === "production",
+  createContext,
 });
 
 // Tablas que tienen que existir para que /ready de 200: si faltan, no se aplicaron
@@ -43,9 +38,10 @@ const REQUIRED_TABLES = [
   "notices",
   "pending_seen",
   "activity_logs",
+  "revoked_tokens",
 ];
 
-async function readiness(): Promise<{ ok: boolean; missing?: string[]; error?: string }> {
+async function readiness(): Promise<boolean> {
   try {
     await pool.query("select 1");
     const result = await pool.query<{ table_name: string }>(
@@ -53,21 +49,33 @@ async function readiness(): Promise<{ ok: boolean; missing?: string[]; error?: s
     );
     const present = new Set(result.rows.map((r) => r.table_name));
     const missing = REQUIRED_TABLES.filter((name) => !present.has(name));
-    return missing.length > 0 ? { ok: false, missing } : { ok: true };
+    if (missing.length > 0) {
+      console.error(`[ready] faltan tablas (migraciones sin aplicar): ${missing.join(", ")}`);
+      return false;
+    }
+    return true;
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    console.error("[ready] la base no responde:", error);
+    return false;
   }
 }
 
 const app = new Elysia()
+  .use(securityHeadersPlugin(process.env.NODE_ENV === "production"))
+  .use(corsPlugin())
   .get("/health", () => ({ status: "ok" }))
   .get("/ready", async ({ set }) => {
-    const result = await readiness();
-    if (!result.ok) set.status = 503;
-    return { status: result.ok ? "ready" : "not-ready", ...result };
+    // El detalle (tablas faltantes, texto de la base) queda en el log del servidor:
+    // /ready no requiere autenticacion y no debe describir la infraestructura.
+    const ok = await readiness();
+    if (!ok) set.status = 503;
+    return { status: ok ? "ready" : "not-ready", ok };
   })
-  .all("/graphql", ({ request }) => yoga.fetch(request));
+  .use(restPlugin({ schema, createContext: (request, ip) => createContext(request, ip) }))
+  .all("/graphql", ({ request, server }) =>
+    yoga.fetch(request, { ip: clientIp(request, server) }),
+  );
 
-app.listen({ hostname: serverHost(), port: serverPort() });
+app.listen({ hostname: serverHost(), port: serverPort(), maxRequestBodySize: maxBodyBytes() });
 
 console.log(`Lux API escuchando en http://${serverHost()}:${serverPort()}/graphql`);

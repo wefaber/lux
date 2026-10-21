@@ -1,0 +1,49 @@
+name: Ops
+
+# Valida los scripts de administracion y la composicion de contenedores de ops/.
+# NO se probo todavia en GitHub Actions: se escribio contra las versiones de
+# Ubuntu y se corre igual en un contenedor local (ver Script-Final.md).
+on:
+  pull_request:
+    paths: ["scripts/**", "ops/**", ".shellcheckrc", ".github/workflows/ops.yml"]
+  push:
+    branches: [main, dev]
+    paths: ["scripts/**", "ops/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar herramientas
+        run: sudo apt-get update && sudo apt-get install -y bats shellcheck rsync openssh-server postgresql-client
+      - name: Sintaxis y shellcheck
+        run: |
+          find scripts ops -name '*.sh' -print0 | xargs -0 -n1 bash -n
+          find scripts ops -name '*.sh' -print0 | xargs -0 shellcheck -x -S style
+      # Los scripts de administracion exigen root (lib/comun.sh); las pruebas
+      # usan stubs, asi que correr como root no toca el runner.
+      - name: Pruebas bats
+        working-directory: scripts/tests
+        run: |
+          # sshd -t como root exige el directorio de separacion de privilegios
+          sudo mkdir -p /run/sshd
+          sudo env "PATH=$PATH" bats bats/*.bats
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar podman-compose
+        run: sudo apt-get update && sudo apt-get install -y podman podman-compose
+      - name: Validar compose
+        working-directory: ops
+        env:
+          POSTGRES_PASSWORD: ci-no-secreto
+          LUX_DB_PASSWORD: ci-no-secreto
+          AUTH_SECRET: ci-no-secreto
+        run: podman-compose -f compose.yaml config > /dev/null

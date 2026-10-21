@@ -11,6 +11,8 @@ import { SummaryStep } from "./steps/SummaryStep";
 import { Button } from "@/components/ui/button";
 import { gql } from "@/lib/utils";
 import { SPRING_TRANSITION } from "@/lib/constants";
+import { useI18n } from "@/hooks/useI18n";
+import type { MessageKey } from "@/i18n";
 
 const COMPLETE_TICKET_MUTATION = `
  mutation CompleteTicket($id: ID!, $input: TicketCompleteInput!) {
@@ -18,12 +20,12 @@ const COMPLETE_TICKET_MUTATION = `
  }
 `; // Mutacion del ticket una vez completaod
 
-const steps = [
-  { id: "incident", label: "Incidente" },
-  { id: "pc-status", label: "Estado del equipo" },
-  { id: "pc-history", label: "Historial" },
-  { id: "diagnosis", label: "Diagnóstico" },
-  { id: "summary", label: "Resumen" },
+const steps: Array<{ id: string; labelKey: MessageKey }> = [
+  { id: "incident", labelKey: "tickets.wizard.incident" },
+  { id: "pc-status", labelKey: "tickets.wizard.pcStatus" },
+  { id: "pc-history", labelKey: "tickets.wizard.history" },
+  { id: "diagnosis", labelKey: "tickets.wizard.diagnosis" },
+  { id: "summary", labelKey: "tickets.wizard.summary" },
 ]; // Pasos que ocurren dentro del flujo del ticket
 
 interface TicketWizardProps {
@@ -33,6 +35,7 @@ interface TicketWizardProps {
 } // Interfaz del ticket con sus props
 
 export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardProps) {
+  const { t } = useI18n();
   const [currentStep, setCurrentStep] = useState(0);
   const [diagnosis, setDiagnosis] = useState(ticket.diagnosis ?? "");
   const [corrected, setCorrected] = useState<boolean | null>(ticket.corrected ?? null);
@@ -54,7 +57,7 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
       });
       onComplete();
     } catch (err) {
-      setError(errorMessage(err, "Error al completar el ticket"));
+      setError(errorMessage(err, t("tickets.wizard.completeFailed")));
     } finally {
       setCompleting(false);
     }
@@ -99,7 +102,7 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
     // En el telefono los pasos van arriba, en una fila que se desplaza de costado;
     // desde md vuelven a la columna de la izquierda
     <div className="flex flex-col md:flex-row gap-4 md:gap-8 md:min-h-[500px]">
-      <nav className="md:w-44 flex-shrink-0 pt-1 -mx-1 px-1 overflow-x-auto md:overflow-visible">
+      <nav className="md:w-56 flex-shrink-0 pt-1 -mx-1 px-1 overflow-x-auto md:overflow-visible">
         <ol className="flex md:flex-col gap-1">
           {steps.map((step, i) => (
             <li key={step.id} className="shrink-0">
@@ -124,7 +127,9 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
                 >
                   {i < currentStep ? <CheckCircle2 className="h-3.5 w-3.5" /> : i + 1}
                 </span>
-                <span className="truncate">{step.label}</span>
+                <span className="truncate" title={t(step.labelKey)}>
+                  {t(step.labelKey)}
+                </span>
               </button>
             </li>
           ))}
@@ -152,7 +157,7 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
             onClick={() => setCurrentStep((s) => Math.max(0, s - 1))}
             disabled={currentStep === 0}
           >
-            Anterior
+            {t("common.previous")}
           </Button>
 
           <div className="flex gap-2 items-center">
@@ -162,16 +167,16 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
                 size="sm"
                 onClick={() => setCurrentStep((s) => Math.min(steps.length - 1, s + 1))}
               >
-                Siguiente
+                {t("common.next")}
               </Button>
             ) : isResolved ? (
               <span className="text-xs text-success font-medium flex items-center gap-1">
                 <CheckCircle2 className="h-4 w-4" />
-                Resuelto
+                {t("tickets.wizard.resolved")}
               </span>
             ) : !canComplete ? null : ticket.status === "pending" ? (
               <span className="text-xs text-muted-foreground font-medium">
-                Tomá el ticket para poder completarlo
+                {t("tickets.wizard.claimFirst")}
               </span>
             ) : (
               <Button
@@ -179,7 +184,7 @@ export function TicketWizard({ ticket, onComplete, canComplete }: TicketWizardPr
                 onClick={handleComplete}
                 disabled={completing || !diagnosis || corrected === null}
               >
-                {completing ? "Completando..." : "Marcar como completado"}
+                {completing ? t("tickets.wizard.completing") : t("tickets.wizard.complete")}
               </Button>
             )}
           </div>

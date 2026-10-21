@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { gql, errorMessage } from "@/lib/utils";
+import { useI18n } from "@/hooks/useI18n";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -36,6 +37,7 @@ export function RetireEquipmentDialog({
   onOpenChange,
   onRetired,
 }: RetireEquipmentDialogProps) {
+  const { t } = useI18n();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -51,7 +53,7 @@ export function RetireEquipmentDialog({
       await gql(kind === "product" ? RETIRE_PRODUCT_MUTATION : RETIRE_COMPONENT_MUTATION, { id });
       onRetired();
     } catch (err) {
-      setError(errorMessage(err, "Error al dar de baja"));
+      setError(errorMessage(err, t("retire.failed")));
     } finally {
       setSaving(false);
     }
@@ -62,19 +64,17 @@ export function RetireEquipmentDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>
-            Dar de baja {kind === "product" ? "el equipo" : "el componente"}
+            {kind === "product" ? t("retire.title.product") : t("retire.title.component")}
           </DialogTitle>
-          <DialogDescription>
-            {name} deja de figurar en el inventario. El historial se conserva.
-          </DialogDescription>
+          <DialogDescription>{t("retire.description", { name })}</DialogDescription>
         </DialogHeader>
         <ErrorAlert>{error}</ErrorAlert>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button variant="destructive" onClick={handleConfirm} disabled={saving}>
-            {saving ? "Dando de baja..." : "Dar de baja"}
+            {saving ? t("retire.retiring") : t("inventory.detail.retire")}
           </Button>
         </DialogFooter>
       </DialogContent>

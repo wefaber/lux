@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Stub de sshd: -T devuelve los puertos de $STUB_SSHD_PUERTOS; -t valida siempre bien.
+echo "sshd $*" >> "${STUB_LOG:-/dev/null}"
+if [[ "${1:-}" == "-T" ]]; then
+    for p in ${STUB_SSHD_PUERTOS:-22}; do echo "port $p"; done
+fi
+[[ "${1:-}" == "-t" ]] && { echo "${STUB_SSHD_ERROR:-}" >&2; exit "${STUB_SSHD_T_RC:-0}"; }
+exit 0

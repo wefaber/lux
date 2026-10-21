@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Plus, Pencil, Wrench } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
+import { useI18n } from "@/hooks/useI18n";
 import { gql, formatDateTime, toDateTimeInput, fromDateTimeInput, errorMessage } from "@/lib/utils";
 import { INTERVENTION_TYPE_LABELS, ROUTES } from "@/lib/constants";
 import { validateIntervention, type FieldErrors, type InterventionFields } from "@/lib/validation";
@@ -53,6 +54,7 @@ interface EquipmentInterventionsProps {
 // Trabajo hecho sobre el equipo (mantenimiento, limpieza, cambio de piezas...),
 // haya o no un ticket de por medio
 export function EquipmentInterventions({ equipmentId, canEdit }: EquipmentInterventionsProps) {
+  const { t } = useI18n();
   const { data, isLoading, error, refetch } = useAsync<{ interventions: Intervention[] }>(
     () => gql(INTERVENTIONS_QUERY, { equipmentId }),
     [equipmentId],
@@ -70,11 +72,11 @@ export function EquipmentInterventions({ equipmentId, canEdit }: EquipmentInterv
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle>Intervenciones ({interventions.length})</CardTitle>
+          <CardTitle>{t("interventions.title", { count: interventions.length })}</CardTitle>
           {canEdit && (
             <Button size="sm" variant="secondary" onClick={() => setEditing("new")}>
               <Plus className="h-3.5 w-3.5" />
-              Registrar intervención
+              {t("interventions.register")}
             </Button>
           )}
         </div>
@@ -87,11 +89,9 @@ export function EquipmentInterventions({ equipmentId, canEdit }: EquipmentInterv
             ))}
           </div>
         ) : error ? (
-          <p className="text-sm text-destructive">Error al cargar las intervenciones: {error}</p>
+          <p className="text-sm text-destructive">{t("interventions.loadError", { error })}</p>
         ) : interventions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Sin intervenciones registradas sobre este equipo.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("interventions.empty")}</p>
         ) : (
           <ol className="space-y-2">
             {interventions.map((i) => (
@@ -120,7 +120,7 @@ export function EquipmentInterventions({ equipmentId, canEdit }: EquipmentInterv
                   </p>
                   {i.partsReplaced && (
                     <p className="text-xs text-muted-foreground">
-                      Piezas reemplazadas: {i.partsReplaced}
+                      {t("interventions.parts", { parts: i.partsReplaced })}
                     </p>
                   )}
                 </div>
@@ -129,7 +129,7 @@ export function EquipmentInterventions({ equipmentId, canEdit }: EquipmentInterv
                     variant="ghost"
                     size="sm"
                     onClick={() => setEditing(i)}
-                    aria-label="Editar intervención"
+                    aria-label={t("interventions.edit")}
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
@@ -184,6 +184,7 @@ function InterventionForm({
   onDone,
   onCancel,
 }: InterventionFormProps) {
+  const { t } = useI18n();
   const [form, setForm] = useState<FormState>({
     type: intervention?.type ?? "",
     description: intervention?.description ?? "",
@@ -220,7 +221,7 @@ function InterventionForm({
         : gql(CREATE_MUTATION, { input: { ...input, equipmentId } }));
       onDone();
     } catch (err) {
-      setError(errorMessage(err, "Error al guardar la intervención"));
+      setError(errorMessage(err, t("interventions.saveFailed")));
     } finally {
       setSaving(false);
     }
@@ -232,21 +233,21 @@ function InterventionForm({
   return (
     <form onSubmit={handleSubmit} noValidate>
       <DialogHeader>
-        <DialogTitle>{intervention ? "Editar intervención" : "Registrar intervención"}</DialogTitle>
-        <DialogDescription>
-          El trabajo hecho sobre el equipo queda en su historial.
-        </DialogDescription>
+        <DialogTitle>
+          {intervention ? t("interventions.edit") : t("interventions.register")}
+        </DialogTitle>
+        <DialogDescription>{t("interventions.formDescription")}</DialogDescription>
       </DialogHeader>
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor="int-type">Tipo</Label>
+            <Label htmlFor="int-type">{t("label.type")}</Label>
             <OptionSelect
               id="int-type"
               className="w-full"
               value={form.type}
               onValueChange={(v) => update("type", v as InterventionType | "")}
-              placeholder="Elegí un tipo"
+              placeholder={t("interventions.pickType")}
               options={Object.entries(INTERVENTION_TYPE_LABELS).map(([value, label]) => ({
                 value,
                 label,
@@ -255,7 +256,7 @@ function InterventionForm({
             {fieldError("type")}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="int-date">Fecha y hora</Label>
+            <Label htmlFor="int-date">{t("interventions.dateTime")}</Label>
             <Input
               id="int-date"
               type="datetime-local"
@@ -267,10 +268,10 @@ function InterventionForm({
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="int-desc">Qué se hizo</Label>
+          <Label htmlFor="int-desc">{t("interventions.what")}</Label>
           <Textarea
             id="int-desc"
-            placeholder="Ej: Limpieza interna y cambio de pasta térmica"
+            placeholder={t("interventions.whatPlaceholder")}
             value={form.description}
             onChange={(e) => update("description", e.target.value)}
             className="h-24"
@@ -278,25 +279,25 @@ function InterventionForm({
           {fieldError("description")}
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="int-parts">Piezas reemplazadas (opcional)</Label>
+          <Label htmlFor="int-parts">{t("interventions.partsLabel")}</Label>
           <Input
             id="int-parts"
-            placeholder="Ej: Fuente 300W, cooler"
+            placeholder={t("interventions.partsPlaceholder")}
             value={form.partsReplaced}
             onChange={(e) => update("partsReplaced", e.target.value)}
           />
           {fieldError("partsReplaced")}
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="int-ticket">Ticket de origen (opcional)</Label>
+          <Label htmlFor="int-ticket">{t("interventions.ticket")}</Label>
           <OptionSelect
             id="int-ticket"
             className="w-full"
             value={form.ticketId}
             onValueChange={(v) => update("ticketId", v)}
             options={[
-              { value: "", label: "Sin ticket: intervención directa sobre el equipo" },
-              ...tickets.map((t) => ({ value: t.id, label: `${t.id} · ${t.title}` })),
+              { value: "", label: t("interventions.noTicket") },
+              ...tickets.map((tk) => ({ value: tk.id, label: `${tk.id} · ${tk.title}` })),
             ]}
           />
         </div>
@@ -304,10 +305,14 @@ function InterventionForm({
       </div>
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onCancel}>
-          Cancelar
+          {t("common.cancel")}
         </Button>
         <Button type="submit" disabled={saving}>
-          {saving ? "Guardando..." : intervention ? "Guardar cambios" : "Registrar"}
+          {saving
+            ? t("common.saving")
+            : intervention
+              ? t("form.saveChanges")
+              : t("interventions.submit")}
         </Button>
       </DialogFooter>
     </form>

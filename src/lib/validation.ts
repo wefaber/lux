@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import {
   INTERVENTION_TYPE_LABELS,
   KIND_MACHINE_CODE,
@@ -5,11 +6,13 @@ import {
   ROLE_CONFIG,
   SERVICE_TYPE_LABELS,
   TICKET_CATEGORY_LABELS,
+  equipmentKindLabel,
 } from "./constants";
 import type { LocationKind } from "./types";
 
 // Reglas de nomenclatura de equipos. Las usan el formulario (feedback por
-// campo) y los handlers (ultima barrera), para que no diverjan.
+// campo) y los handlers (ultima barrera), para que no diverjan. Los mensajes
+// salen del diccionario (src/i18n) en el idioma activo.
 
 export type FieldErrors<K extends string> = Partial<Record<K, string>>;
 
@@ -109,16 +112,18 @@ export function validateMachineId(
   const id = machineId.trim().toUpperCase();
   const code = location?.code;
   const kindCode = KIND_MACHINE_CODE[kind];
-  if (!location || !code) return "Ubicación inválida";
-  if (!kindCode) return "Tipo de equipo inválido";
+  if (!location || !code) return t("validation.locationInvalid");
+  if (!kindCode) return t("validation.kindInvalid");
   const example = `${code}-${kindCode}1`;
   const match = MACHINE_ID_PATTERN.exec(id);
-  if (!match) return `Formato inválido. Ej: ${example}`;
+  if (!match) return t("validation.machineId.format", { example });
   if (match[1] !== code) {
-    return `Un equipo en ${location.name} empieza con "${code}-". Ej: ${example}`;
+    return t("validation.machineId.location", { location: location.name, code, example });
   }
-  if (match[2] !== kindCode) return `Un ${kind} usa el código "${kindCode}". Ej: ${example}`;
-  if (Number(match[3]) === 0) return "Los números arrancan en 1";
+  if (match[2] !== kindCode) {
+    return t("validation.machineId.kind", { kind: equipmentKindLabel(kind), kindCode, example });
+  }
+  if (Number(match[3]) === 0) return t("validation.machineId.start");
   return null;
 }
 
@@ -126,17 +131,17 @@ export function validateMachineId(
 // corta lo que claramente no es un nombre: "JJSJS", "aaaa", "...".
 export function validateName(value: string, label: string): string | null {
   const text = value.trim();
-  if (text.length < 2) return `${label}: mínimo 2 caracteres`;
-  if (text.length > 60) return `${label}: máximo 60 caracteres`;
-  if (!NAME_CHARS.test(text)) return `${label}: tiene caracteres no permitidos`;
-  if (!/\p{L}/u.test(text)) return `${label}: tiene que incluir letras`;
-  if (/(.)\1{3,}/iu.test(text)) return `${label}: no parece un nombre válido`;
+  if (text.length < 2) return t("validation.min", { label, min: 2 });
+  if (text.length > 60) return t("validation.max", { label, max: 60 });
+  if (!NAME_CHARS.test(text)) return t("validation.name.chars", { label });
+  if (!/\p{L}/u.test(text)) return t("validation.name.letters", { label });
+  if (/(.)\1{3,}/iu.test(text)) return t("validation.name.invalid", { label });
   const words = text.split(/[^\p{L}]+/u).filter(Boolean);
   const gibberish = (w: string) =>
     (w.length >= 5 && !/[aeiouyáéíóúü]/iu.test(w)) ||
     (w.length >= 4 && isRepeatedChunk(w)) ||
     isKeyboardRun(w);
-  if (words.some(gibberish)) return `${label}: no parece un nombre válido`;
+  if (words.some(gibberish)) return t("validation.name.invalid", { label });
   return null;
 }
 
@@ -144,9 +149,9 @@ export function validateName(value: string, label: string): string | null {
 export function validateCode(value: string, label: string): string | null {
   const text = value.trim();
   if (!CODE_PATTERN.test(text)) {
-    return `${label}: entre 3 y 40 caracteres, solo letras, números, "-", "/" o "."`;
+    return t("validation.code.format", { label });
   }
-  if (!/\d/.test(text)) return `${label}: tiene que incluir al menos un número`;
+  if (!/\d/.test(text)) return t("validation.code.digit", { label });
   return null;
 }
 
@@ -159,24 +164,24 @@ function collect<K extends string>(checks: Array<[K, string | null]>): FieldErro
 export function validateProduct(p: ProductFields): FieldErrors<keyof ProductFields> {
   return collect<keyof ProductFields>([
     ["machineId", validateMachineId(p.machineId, p.kind, p.location)],
-    ["brand", validateName(p.brand, "Marca")],
-    ["model", validateName(p.model, "Modelo")],
-    ["serialNumber", validateCode(p.serialNumber, "N° de serie")],
-    ["partNumber", validateCode(p.partNumber, "Part number")],
+    ["brand", validateName(p.brand, t("field.brand"))],
+    ["model", validateName(p.model, t("field.model"))],
+    ["serialNumber", validateCode(p.serialNumber, t("field.serialNumber"))],
+    ["partNumber", validateCode(p.partNumber, t("field.partNumber"))],
   ]);
 }
 
 // Ubicacion: nombre legible y codigo de 1 a 3 letras (arranca los IDs de maquina)
 export function validateLocation(l: LocationFields): FieldErrors<keyof LocationFields> {
   return collect<keyof LocationFields>([
-    ["kind", l.kind in LOCATION_KIND_LETTER ? null : "Elegí el tipo de ubicación"],
+    ["kind", l.kind in LOCATION_KIND_LETTER ? null : t("validation.location.kind")],
     [
       "number",
       Number.isInteger(l.number) && l.number >= 1 && l.number <= 99
         ? null
-        : "Número: entero entre 1 y 99",
+        : t("validation.location.number"),
     ],
-    ["name", validateName(l.name, "Nombre")],
+    ["name", validateName(l.name, t("field.name"))],
   ]);
 }
 
@@ -201,27 +206,27 @@ export function validateReservation(
     [
       "startsAt",
       Number.isNaN(start)
-        ? "Fecha de inicio inválida"
+        ? t("validation.reservation.startInvalid")
         : start < now - 60_000
-          ? "La reserva no puede empezar en el pasado"
+          ? t("validation.reservation.past")
           : null,
     ],
     [
       "endsAt",
       Number.isNaN(end)
-        ? "Fecha de fin inválida"
+        ? t("validation.reservation.endInvalid")
         : !Number.isNaN(start) && end <= start
-          ? "El fin tiene que ser posterior al inicio"
+          ? t("validation.reservation.order")
           : !Number.isNaN(start) && end - start > MAX_RESERVATION_DAYS * 86_400_000
-            ? `Una reserva dura como máximo ${MAX_RESERVATION_DAYS} días`
+            ? t("validation.reservation.maxDays", { days: MAX_RESERVATION_DAYS })
             : null,
     ],
     [
       "purpose",
       purpose.length < 5
-        ? "Motivo: mínimo 5 caracteres"
+        ? t("validation.reservation.purposeMin")
         : purpose.length > 300
-          ? "Motivo: máximo 300 caracteres"
+          ? t("validation.reservation.purposeMax")
           : null,
     ],
   ]);
@@ -230,8 +235,8 @@ export function validateReservation(
 // Comentario: ni vacio ni un texto interminable
 export function validateComment(body: string): string | null {
   const text = body.trim();
-  if (!text) return "El comentario no puede estar vacío";
-  if (text.length > 1000) return "El comentario no puede superar los 1000 caracteres";
+  if (!text) return t("validation.comment.empty");
+  if (text.length > 1000) return t("validation.comment.max");
   return null;
 }
 
@@ -243,25 +248,25 @@ export function validateIntervention(
   const description = i.description.trim();
   const performedAt = new Date(i.performedAt).getTime();
   return collect<keyof InterventionFields>([
-    ["type", i.type in INTERVENTION_TYPE_LABELS ? null : "Elegí el tipo de intervención"],
+    ["type", i.type in INTERVENTION_TYPE_LABELS ? null : t("validation.intervention.type")],
     [
       "description",
       description.length < 10
-        ? "Descripción: mínimo 10 caracteres"
+        ? t("validation.intervention.descriptionMin")
         : description.length > 1000
-          ? "Descripción: máximo 1000 caracteres"
+          ? t("validation.intervention.descriptionMax")
           : null,
     ],
     [
       "partsReplaced",
-      (i.partsReplaced ?? "").trim().length > 300 ? "Piezas: máximo 300 caracteres" : null,
+      (i.partsReplaced ?? "").trim().length > 300 ? t("validation.intervention.partsMax") : null,
     ],
     [
       "performedAt",
       Number.isNaN(performedAt)
-        ? "Fecha inválida"
+        ? t("validation.intervention.dateInvalid")
         : performedAt > now + 60_000
-          ? "La fecha no puede ser futura"
+          ? t("validation.intervention.dateFuture")
           : null,
     ],
   ]);
@@ -269,11 +274,11 @@ export function validateIntervention(
 
 export function validateComponent(c: ComponentFields): FieldErrors<keyof ComponentFields> {
   return collect<keyof ComponentFields>([
-    ["name", validateName(c.name, "Nombre")],
-    ["model", validateName(c.model, "Modelo")],
-    ["manufacturer", validateName(c.manufacturer, "Fabricante")],
-    ["serialNumber", validateCode(c.serialNumber, "N° de serie")],
-    ["partNumber", validateCode(c.partNumber, "Part number")],
+    ["name", validateName(c.name, t("field.name"))],
+    ["model", validateName(c.model, t("field.model"))],
+    ["manufacturer", validateName(c.manufacturer, t("field.manufacturer"))],
+    ["serialNumber", validateCode(c.serialNumber, t("field.serialNumber"))],
+    ["partNumber", validateCode(c.partNumber, t("field.partNumber"))],
   ]);
 }
 
@@ -296,9 +301,9 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function validatePassword(password: string): string | null {
   if (password.length < PASSWORD_MIN_LENGTH) {
-    return `La contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres`;
+    return t("validation.password.min", { min: PASSWORD_MIN_LENGTH });
   }
-  if (password.length > 128) return "La contraseña no puede superar los 128 caracteres";
+  if (password.length > 128) return t("validation.password.max");
   return null;
 }
 
@@ -308,10 +313,10 @@ export function validateUser(
   requirePassword: boolean,
 ): FieldErrors<keyof UserFields> {
   return collect<keyof UserFields>([
-    ["name", validateName(u.name, "Nombre")],
-    ["dni", DNI_PATTERN.test(u.dni.trim()) ? null : "Cédula: 8 dígitos, sin puntos ni guión"],
-    ["email", EMAIL_PATTERN.test(u.email.trim()) ? null : "Email inválido"],
-    ["role", u.role in ROLE_CONFIG ? null : "Rol inválido"],
+    ["name", validateName(u.name, t("field.name"))],
+    ["dni", DNI_PATTERN.test(u.dni.trim()) ? null : t("validation.user.dni")],
+    ["email", EMAIL_PATTERN.test(u.email.trim()) ? null : t("validation.user.email")],
+    ["role", u.role in ROLE_CONFIG ? null : t("validation.user.role")],
     ["password", requirePassword || u.password ? validatePassword(u.password) : null],
   ]);
 }
@@ -326,16 +331,16 @@ export interface TicketFields {
 
 function textLength(value: string, label: string, min: number, max: number): string | null {
   const text = value.trim();
-  if (text.length < min) return `${label}: mínimo ${min} caracteres`;
-  if (text.length > max) return `${label}: máximo ${max} caracteres`;
+  if (text.length < min) return t("validation.min", { label, min });
+  if (text.length > max) return t("validation.max", { label, max });
   return null;
 }
 
-export function validateTicket(t: TicketFields): FieldErrors<keyof TicketFields> {
+export function validateTicket(tk: TicketFields): FieldErrors<keyof TicketFields> {
   return collect<keyof TicketFields>([
-    ["title", textLength(t.title, "Título", 3, 120)],
-    ["description", textLength(t.description, "Descripción", 5, 2000)],
-    ["category", t.category in TICKET_CATEGORY_LABELS ? null : "Elegí una categoría"],
+    ["title", textLength(tk.title, t("field.title"), 3, 120)],
+    ["description", textLength(tk.description, t("field.description"), 5, 2000)],
+    ["category", tk.category in TICKET_CATEGORY_LABELS ? null : t("validation.ticket.category")],
   ]);
 }
 
@@ -348,8 +353,8 @@ export function validateServiceRequest(
   s: ServiceRequestFields,
 ): FieldErrors<keyof ServiceRequestFields> {
   return collect<keyof ServiceRequestFields>([
-    ["type", s.type in SERVICE_TYPE_LABELS ? null : "Elegí el tipo de solicitud"],
-    ["description", textLength(s.description, "Descripción", 5, 2000)],
+    ["type", s.type in SERVICE_TYPE_LABELS ? null : t("validation.service.type")],
+    ["description", textLength(s.description, t("field.description"), 5, 2000)],
   ]);
 }
 

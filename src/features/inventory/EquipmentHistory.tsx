@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Ticket as TicketIcon, BookOpen } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
+import { useI18n } from "@/hooks/useI18n";
 import { gql, formatDate } from "@/lib/utils";
 import {
   LOAN_STATUS_CONFIG,
@@ -47,6 +48,7 @@ export function EquipmentHistory({
   excludeTicketId,
   embedded,
 }: EquipmentHistoryProps) {
+  const { t } = useI18n();
   const { data, isLoading, error } = useAsync<{ tickets: Ticket[]; loans: Loan[] }>(async () => {
     const [{ tickets }, { loans }] = await Promise.all([
       gql<{ tickets: Ticket[] }>(TICKETS_QUERY, { equipmentId }),
@@ -57,7 +59,7 @@ export function EquipmentHistory({
 
   const entries: HistoryEntry[] = [
     ...(data?.tickets ?? [])
-      .filter((t) => t.id !== excludeTicketId)
+      .filter((tk) => tk.id !== excludeTicketId)
       .map((ticket) => ({ kind: "ticket" as const, date: ticket.createdAt, ticket })),
     ...(data?.loans ?? []).map((loan) => ({ kind: "loan" as const, date: loan.createdAt, loan })),
   ].toSorted((a, b) => b.date.localeCompare(a.date));
@@ -70,9 +72,9 @@ export function EquipmentHistory({
         ))}
       </div>
     ) : error ? (
-      <p className="text-sm text-destructive">Error al cargar el historial: {error}</p>
+      <p className="text-sm text-destructive">{t("history.loadError", { error })}</p>
     ) : entries.length === 0 ? (
-      <p className="text-sm text-muted-foreground">Sin tickets ni préstamos registrados.</p>
+      <p className="text-sm text-muted-foreground">{t("history.empty")}</p>
     ) : (
       <ol className="space-y-2">
         {entries.map((entry) =>
@@ -95,8 +97,8 @@ export function EquipmentHistory({
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Ticket · {TICKET_CATEGORY_LABELS[entry.ticket.category]} ·{" "}
-                  {entry.ticket.assignedTo?.name ?? "Sin asignar"}
+                  {t("history.ticket")} · {TICKET_CATEGORY_LABELS[entry.ticket.category]} ·{" "}
+                  {entry.ticket.assignedTo?.name ?? t("common.unassigned")}
                   {entry.ticket.diagnosis && ` · ${entry.ticket.diagnosis}`}
                 </p>
               </div>
@@ -113,15 +115,17 @@ export function EquipmentHistory({
               <div className="flex-1 min-w-0 space-y-0.5">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-semibold text-foreground">
-                    Préstamo a {entry.loan.user.name}
+                    {t("history.loanTo", { name: entry.loan.user.name })}
                   </span>
                   <Badge color={LOAN_STATUS_CONFIG[entry.loan.status].color}>
                     {LOAN_STATUS_CONFIG[entry.loan.status].label}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {formatDate(entry.loan.issueDate)} al{" "}
-                  {formatDate(entry.loan.actualReturnDate ?? entry.loan.returnDate)}
+                  {t("history.range", {
+                    from: formatDate(entry.loan.issueDate),
+                    to: formatDate(entry.loan.actualReturnDate ?? entry.loan.returnDate),
+                  })}
                   {entry.loan.rejectionReason && ` · ${entry.loan.rejectionReason}`}
                 </p>
               </div>
@@ -139,7 +143,7 @@ export function EquipmentHistory({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Historial</CardTitle>
+        <CardTitle>{t("history.title")}</CardTitle>
       </CardHeader>
       <CardContent>{body}</CardContent>
     </Card>

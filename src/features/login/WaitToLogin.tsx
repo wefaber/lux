@@ -3,11 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import { Zap } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useI18n } from "@/hooks/useI18n";
 import { ROUTES } from "@/lib/constants";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function WaitToLogin() {
   const { isAuthenticated } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -52,7 +54,7 @@ export function WaitToLogin() {
             transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
             className="h-5 w-5 rounded-full border-2 border-border border-t-[rgb(0,122,255)]"
           />
-          <span className="text-sm text-muted-foreground">Preparando el sistema...</span>
+          <span className="text-sm text-muted-foreground">{t("wait.preparing")}</span>
         </div>
       </div>
     </div>

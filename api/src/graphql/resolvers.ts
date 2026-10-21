@@ -1,5 +1,4 @@
-import { and, eq } from "drizzle-orm";
-import { GraphQLError } from "graphql";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import type { InterventionFields, LocationFields } from "@/lib/validation";
 import {
   locationCode,
@@ -41,33 +40,51 @@ import type {
 } from "@/lib/types";
 import { ASSIGNABLE_ROLES, canEditUser, canToggleUserActive } from "@/lib/roles";
 import { signToken } from "../auth";
+import type { Ctx } from "../context";
+import {
+  conflict,
+  FORBIDDEN_MESSAGE,
+  forbidden,
+  invalid,
+  INVALID_CREDENTIALS_MESSAGE,
+  invalidCredentials,
+  notFound,
+  tooManyAttempts,
+  unauthenticated,
+} from "../errors";
+import { writeAudit } from "../audit";
+import { loginIpMaxAttempts, loginLockMinutes, loginMaxAttempts } from "../env";
+import { LoginGuard } from "../login-guard";
+import { userFieldResolvers } from "./privacy";
+import { revokeToken } from "../sessions";
 import { db } from "../db/client";
 import * as t from "../db/schema";
+import {
+  EQUIPMENT_STATUSES,
+  SERVICE_STATUSES,
+  SERVICE_TYPES,
+  TICKET_CATEGORIES,
+} from "../db/enums";
 import { toUser, type State } from "../state";
+import { withState, withTransaction, type AuditSpec, type Resolver } from "./wrap";
 
-export interface Ctx {
-  state: State;
-  caller: User | null;
-}
+export type { Ctx };
 
 const STAFF_ROLES: UserRole[] = ["root_admin", "admin", "tecnico"];
 const ELEVATED_ROLES: UserRole[] = ["root_admin", "admin"];
-
-const UNAUTHENTICATED = "No autenticado";
-const FORBIDDEN = "No tenés permisos para esta acción";
 
 function isStaff(user: User): boolean {
   return STAFF_ROLES.includes(user.role);
 }
 
 function requireAuth(ctx: Ctx): User {
-  if (!ctx.caller) throw new GraphQLError(UNAUTHENTICATED);
+  if (!ctx.caller) throw unauthenticated();
   return ctx.caller;
 }
 
 function requireRole(ctx: Ctx, roles: UserRole[]): User {
   const caller = requireAuth(ctx);
-  if (!roles.includes(caller.role)) throw new GraphQLError(FORBIDDEN);
+  if (!roles.includes(caller.role)) throw forbidden();
   return caller;
 }
 
@@ -86,7 +103,18 @@ function activationError(caller: User, user: User): string | null {
   if (canToggleUserActive(caller, user)) return null;
   if (user.role === "root_admin") return "El Super Admin no se puede desactivar";
   if (user.id === caller.id) return "No podés desactivar tu propia cuenta";
-  return FORBIDDEN;
+  return FORBIDDEN_MESSAGE;
+}
+
+// Un tecnico no toca el trabajo de otro: si el ticket o la solicitud tiene a otra
+// persona asignada, solo la puede modificar un administrador. Lo que esta sin
+// asignar (recien creado o devuelto a la cola) lo puede trabajar cualquier
+// tecnico, que es como se reclama (claim*). El asignado conserva el control.
+function assertCanWorkOn(caller: User, assignedTo: User | null, what: string): void {
+  if (caller.role !== "tecnico") return;
+  if (assignedTo && assignedTo.id !== caller.id) {
+    throw forbidden(`${what} está asignado a otro técnico`);
+  }
 }
 
 function filterByStatus<T extends { status: string }>(items: T[], status?: string | null): T[] {
@@ -103,8 +131,11 @@ function maxSuffix(prefix: string, items: Array<{ id: string }>): number {
   }, 0);
 }
 
-function nextId(prefix: string, items: Array<{ id: string }>, pad = 0): string {
-  return prefix + String(maxSuffix(prefix, items) + 1).padStart(pad, "0");
+// Las filas con baja logica no estan en `items` pero siguen ocupando su id.
+function nextId(state: State, prefix: string, items: Array<{ id: string }>, pad = 0): string {
+  const retired = Array.from(state.deletedIds, (id) => ({ id }));
+  const last = Math.max(maxSuffix(prefix, items), maxSuffix(prefix, retired));
+  return prefix + String(last + 1).padStart(pad, "0");
 }
 
 const USER_ID_PREFIX: Record<UserRole, string> = {
@@ -184,6 +215,31 @@ async function dropNotices(
       state.notices.splice(i, 1);
     }
   }
+}
+
+// Al dar de baja algo se retiran todos sus avisos pendientes.
+async function dropNoticesOf(
+  state: State,
+  entityType: NoticeEntity,
+  entityId: string,
+): Promise<void> {
+  await db
+    .delete(t.notices)
+    .where(and(eq(t.notices.entityType, entityType), eq(t.notices.entityId, entityId)));
+  state.notices = state.notices.filter(
+    (n) => !(n.entityType === entityType && n.entityId === entityId),
+  );
+}
+
+function removeFrom<T extends { id: string }>(items: T[], byId: Map<string, T>, id: string): T[] {
+  byId.delete(id);
+  return items.filter((item) => item.id !== id);
+}
+
+// Quien puede dar de baja algo ajeno: administradores. El dueño solo cancela lo
+// suyo mientras nadie lo tomo.
+function canRetire(caller: User, ownerId: string | undefined, ownerMayCancel: boolean): boolean {
+  return ELEVATED_ROLES.includes(caller.role) || (ownerId === caller.id && ownerMayCancel);
 }
 
 // Deja un aviso a `to` sobre algo que hizo `by` (null: el sistema).
@@ -319,6 +375,25 @@ function firstError(errors: Record<string, string | undefined>): string | null {
   return Object.values(errors)[0] ?? null;
 }
 
+// Valor de un campo de lista cerrada (estado, categoria, tipo): la base lo exige
+// con un CHECK, aca se responde con un mensaje claro antes de llegar a ella.
+function assertOneOf(value: string, allowed: readonly string[], message: string): void {
+  if (!allowed.includes(value)) throw invalid(message);
+}
+
+// Una referencia a un equipo tiene que apuntar a uno que exista (FK de la base).
+function assertProductExists(state: State, id: string | null | undefined, message: string): void {
+  if (id && !state.productsById.has(id)) throw invalid(message);
+}
+
+// Primero las reglas de formato (422); si pasan, las que chocan con el estado
+// actual, como un duplicado o una superposicion (409).
+function assertRules(validation: string | null, clash: () => string | null = () => null): void {
+  if (validation) throw invalid(validation);
+  const clashing = clash();
+  if (clashing) throw conflict(clashing);
+}
+
 function duplicateProductError(
   state: State,
   fields: { machineId: string; serialNumber: string },
@@ -334,21 +409,20 @@ function duplicateProductError(
   return null;
 }
 
-function commentAccessError(
+function assertCommentAccess(
   state: State,
   caller: User,
   entityType: CommentEntity,
   entityId: string,
-): string | null {
+): void {
   const owner =
     entityType === "ticket"
       ? state.tickets.find((t) => t.id === entityId)?.submittedBy
       : entityType === "service_request"
         ? state.services.find((s) => s.id === entityId)?.requestedBy
         : undefined;
-  if (!owner) return "No encontrado";
-  if (!isStaff(caller) && owner.id !== caller.id) return FORBIDDEN;
-  return null;
+  if (!owner) throw notFound("No encontrado");
+  if (!isStaff(caller) && owner.id !== caller.id) throw forbidden();
 }
 
 function threadParticipants(state: State, entityType: CommentEntity, entityId: string): User[] {
@@ -428,16 +502,60 @@ const PERIOD_BUCKETS: Record<DashboardPeriod, { days: number; bucketDays: number
 
 const nowIso = () => new Date().toISOString();
 
+const loginGuard = new LoginGuard({
+  maxAttempts: loginMaxAttempts(),
+  ipMaxAttempts: loginIpMaxAttempts(),
+  lockMs: loginLockMinutes() * 60 * 1000,
+});
+
+// Tope de largo de la contrasena que se acepta verificar (evita usar argon2 como DoS).
+const MAX_PASSWORD_LENGTH = 512;
+
+let placeholder: Promise<string> | undefined;
+function placeholderHash(): Promise<string> {
+  placeholder ??= Bun.password.hash(crypto.randomUUID(), { algorithm: "argon2id" });
+  return placeholder;
+}
+
+// Tope de filas de una consulta del registro de actividad.
+const ACTIVITY_LOG_LIMIT = 1000;
+
 // ── Queries ──────────────────────────────────────────────────────────────────
 
 const Query = {
-  login: async (_p: unknown, args: { dni: string; password: string }) => {
+  login: async (_p: unknown, args: { dni: string; password: string }, ctx: Ctx) => {
+    const lock = loginGuard.check(args.dni, ctx.ip);
+    if (lock.locked) {
+      // Mismo texto que una clave erronea: el mensaje no delata si la cuenta existe ni
+      // si esta bloqueada. El bloqueo se distingue por `code` (TOO_MANY_ATTEMPTS), el
+      // status 429 y `retryAfterSeconds`, y se cuenta igual para documentos que no existen.
+      throw tooManyAttempts(INVALID_CREDENTIALS_MESSAGE, lock.retryAfterSeconds);
+    }
     const [row] = await db.select().from(t.users).where(eq(t.users.dni, args.dni)).limit(1);
-    if (!row || !row.isActive) throw new GraphQLError("Credenciales inválidas");
-    const ok = await Bun.password.verify(args.password, row.passwordHash);
-    if (!ok) throw new GraphQLError("Credenciales inválidas");
+    // Se verifica siempre contra algun hash (el real o uno de relleno) para que el
+    // tiempo de respuesta no delate si el documento existe.
+    const active = row?.isActive === true;
+    const hash = active ? row.passwordHash : await placeholderHash();
+    const passwordOk = args.password.length <= MAX_PASSWORD_LENGTH && (await Bun.password.verify(args.password, hash));
+    if (!active || !passwordOk) {
+      const { dniLocked, ipLocked } = loginGuard.recordFailure(args.dni, ctx.ip);
+      const who = { userId: row?.id ?? "anonymous", userName: row?.name ?? "Anónimo" };
+      await writeAudit({ ...who, operation: "LOGIN_FAILED", entity: "Session", entityId: row?.id ?? "-", details: `IP ${ctx.ip}` });
+      if (dniLocked || ipLocked) {
+        await writeAudit({
+          ...who,
+          operation: "ACCOUNT_LOCKED",
+          entity: "Session",
+          entityId: row?.id ?? "-",
+          details: `Bloqueo por ${dniLocked ? "documento" : "IP"} desde ${ctx.ip}`,
+        });
+      }
+      throw invalidCredentials();
+    }
+    loginGuard.recordSuccess(args.dni);
     const user = toUser(row);
-    const token = await signToken({ sub: user.id, role: user.role });
+    await writeAudit({ userId: user.id, userName: user.name, operation: "LOGIN", entity: "Session", entityId: user.id, details: `IP ${ctx.ip}` });
+    const token = await signToken({ sub: user.id, role: user.role, ver: row.tokenVersion });
     return { ...user, token };
   },
 
@@ -455,7 +573,7 @@ const Query = {
 
   user: (_p: unknown, args: { id: string }, ctx: Ctx) => {
     const caller = requireAuth(ctx);
-    if (!isStaff(caller) && args.id !== caller.id) throw new GraphQLError(FORBIDDEN);
+    if (!isStaff(caller) && args.id !== caller.id) throw forbidden();
     return ctx.state.users.find((u) => u.id === args.id) ?? null;
   },
 
@@ -524,7 +642,7 @@ const Query = {
     const caller = requireAuth(ctx);
     const ticket = ctx.state.tickets.find((t) => t.id === args.id) ?? null;
     if (ticket && !isStaff(caller) && ticket.submittedBy.id !== caller.id) {
-      throw new GraphQLError(FORBIDDEN);
+      throw forbidden();
     }
     return ticket;
   },
@@ -554,7 +672,7 @@ const Query = {
     const caller = requireAuth(ctx);
     await syncOverdueLoans(ctx.state);
     const loan = ctx.state.loans.find((l) => l.id === args.id) ?? null;
-    if (loan && !isStaff(caller) && loan.user.id !== caller.id) throw new GraphQLError(FORBIDDEN);
+    if (loan && !isStaff(caller) && loan.user.id !== caller.id) throw forbidden();
     return loan;
   },
 
@@ -577,7 +695,7 @@ const Query = {
     const caller = requireAuth(ctx);
     const service = ctx.state.services.find((s) => s.id === args.id) ?? null;
     if (service && !isStaff(caller) && service.requestedBy.id !== caller.id) {
-      throw new GraphQLError(FORBIDDEN);
+      throw forbidden();
     }
     return service;
   },
@@ -699,18 +817,44 @@ const Query = {
     return reports;
   },
 
-  activityLogs: (
+  // Lee directo de la tabla (parametrizado, mas nuevos primero, tope de filas):
+  // el log crece con cada mutacion y no entra en la foto que se carga por request.
+  activityLogs: async (
     _p: unknown,
     args: { userId?: string; operation?: string; startDate?: string; endDate?: string },
     ctx: Ctx,
   ) => {
     requireRole(ctx, ELEVATED_ROLES);
-    let logs = [...ctx.state.activityLogs];
-    if (args.userId) logs = logs.filter((l) => l.userId === args.userId);
-    if (args.operation) logs = logs.filter((l) => l.operation === args.operation);
-    if (args.startDate) logs = logs.filter((l) => l.timestamp >= args.startDate!);
-    if (args.endDate) logs = logs.filter((l) => l.timestamp <= args.endDate!);
-    return logs;
+    const filters = [
+      args.userId ? eq(t.activityLogs.userId, args.userId) : undefined,
+      args.operation ? eq(t.activityLogs.operation, args.operation) : undefined,
+      args.startDate ? gte(t.activityLogs.timestamp, args.startDate) : undefined,
+      args.endDate ? lte(t.activityLogs.timestamp, args.endDate) : undefined,
+    ].filter((f) => f !== undefined);
+    return db
+      .select()
+      .from(t.activityLogs)
+      .where(and(...filters))
+      .orderBy(desc(t.activityLogs.timestamp))
+      .limit(ACTIVITY_LOG_LIMIT);
+  },
+
+  location: (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    requireAuth(ctx);
+    const location = activeLocation(ctx.state, args.id);
+    return location ? withProductCount(ctx.state, location) : null;
+  },
+
+  intervention: (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    requireRole(ctx, STAFF_ROLES);
+    return ctx.state.interventions.find((i) => i.id === args.id) ?? null;
+  },
+
+  comment: (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    const caller = requireAuth(ctx);
+    const comment = ctx.state.comments.find((c) => c.id === args.id) ?? null;
+    if (comment) assertCommentAccess(ctx.state, caller, comment.entityType, comment.entityId);
+    return comment;
   },
 
   locations: (_p: unknown, _a: unknown, ctx: Ctx) => {
@@ -730,8 +874,7 @@ const Query = {
   comments: (_p: unknown, args: { entityType: string; entityId: string }, ctx: Ctx) => {
     const caller = requireAuth(ctx);
     const entityType = args.entityType as CommentEntity;
-    const denied = commentAccessError(ctx.state, caller, entityType, args.entityId);
-    if (denied) throw new GraphQLError(denied);
+    assertCommentAccess(ctx.state, caller, entityType, args.entityId);
     return ctx.state.comments
       .filter((c) => c.entityType === entityType && c.entityId === args.entityId)
       .toSorted((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -753,7 +896,7 @@ const Query = {
     await syncReservations(ctx.state);
     const reservation = ctx.state.reservations.find((r) => r.id === args.id) ?? null;
     if (reservation && !isStaff(caller) && reservation.user.id !== caller.id) {
-      throw new GraphQLError(FORBIDDEN);
+      throw forbidden();
     }
     return reservation;
   },
@@ -794,10 +937,13 @@ const Mutation = {
     requireRole(ctx, ELEVATED_ROLES);
     const { input } = args;
     if (!ASSIGNABLE_ROLES.includes(input.role as UserRole)) {
-      throw new GraphQLError("No se puede asignar el rol Super Admin");
+      throw forbidden("No se puede asignar el rol Super Admin");
+    }
+    if (ctx.state.users.some((u) => u.dni === input.dni)) {
+      throw conflict("Ya existe un usuario con ese documento");
     }
     const user: User = {
-      id: nextId(USER_ID_PREFIX[input.role as UserRole] ?? "u-", ctx.state.users),
+      id: nextId(ctx.state, USER_ID_PREFIX[input.role as UserRole] ?? "u-", ctx.state.users),
       name: input.name,
       dni: input.dni,
       email: input.email,
@@ -822,20 +968,27 @@ const Mutation = {
   ) => {
     const caller = requireRole(ctx, ELEVATED_ROLES);
     const user = ctx.state.users.find((u) => u.id === args.id);
-    if (!user) throw new GraphQLError("Usuario no encontrado");
-    if (!canEditUser(caller, user)) throw new GraphQLError(FORBIDDEN);
+    if (!user) throw notFound("Usuario no encontrado");
+    if (!canEditUser(caller, user)) throw forbidden();
     const { password, ...rest } = args.input;
     const role = typeof rest.role === "string" ? rest.role : user.role;
     const togglesActive = typeof rest.isActive === "boolean" && rest.isActive !== user.isActive;
     const error = roleChangeError(caller, user, role) ?? (togglesActive ? activationError(caller, user) : null);
-    if (error) throw new GraphQLError(error);
+    if (error) throw forbidden(error);
+    if (typeof rest.dni === "string" && ctx.state.users.some((u) => u.dni === rest.dni && u.id !== user.id)) {
+      throw conflict("Ya existe un usuario con ese documento");
+    }
     const next = { ...rest, updatedAt: nowIso() } as Partial<typeof t.users.$inferInsert>;
     const passwordHash = password
       ? await Bun.password.hash(String(password), { algorithm: "argon2id" })
       : undefined;
     await db
       .update(t.users)
-      .set({ ...next, ...(passwordHash ? { passwordHash } : {}) })
+      .set({
+        ...next,
+        // Una contrasena nueva (reset por un administrador) tambien corta las sesiones abiertas
+        ...(passwordHash ? { passwordHash, tokenVersion: sql`${t.users.tokenVersion} + 1` } : {}),
+      })
       .where(eq(t.users.id, user.id));
     Object.assign(user, rest, { updatedAt: next.updatedAt });
     return user;
@@ -844,9 +997,11 @@ const Mutation = {
   deleteUser: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
     requireRole(ctx, ELEVATED_ROLES);
     const user = ctx.state.users.find((u) => u.id === args.id);
-    if (!user || user.role === "root_admin") {
-      throw new GraphQLError("No se puede eliminar este usuario");
-    }
+    if (!user) throw notFound("Usuario no encontrado");
+    if (user.role === "root_admin") throw forbidden("No se puede eliminar este usuario");
+    // Mismas reglas que updateUser(isActive: false): nadie se da de baja a si mismo
+    const blocked = activationError(ctx.caller!, user);
+    if (blocked) throw forbidden(blocked);
     user.isActive = false;
     user.updatedAt = nowIso();
     await db
@@ -885,11 +1040,11 @@ const Mutation = {
       serialNumber: input.serialNumber.trim().toUpperCase(),
       partNumber: input.partNumber.trim().toUpperCase(),
     };
-    const error =
-      firstError(validateProduct(fields)) ?? duplicateProductError(ctx.state, fields);
-    if (error || !location) throw new GraphQLError(error ?? "Ubicación inválida");
+    assertOneOf(input.status, EQUIPMENT_STATUSES, "Estado de equipo inválido");
+    assertRules(firstError(validateProduct(fields)), () => duplicateProductError(ctx.state, fields));
+    if (!location) throw invalid("Ubicación inválida");
     const product: Product = {
-      id: nextId("prod-", ctx.state.products),
+      id: nextId(ctx.state, "prod-", ctx.state.products),
       type: "product",
       machineId: fields.machineId,
       kind: fields.kind,
@@ -934,7 +1089,7 @@ const Mutation = {
   ) => {
     requireRole(ctx, STAFF_ROLES);
     const product = ctx.state.products.find((p) => p.id === args.id && p.deletedAt === null);
-    if (!product) throw new GraphQLError("Producto no encontrado");
+    if (!product) throw notFound("Producto no encontrado");
     const input = args.input as Partial<{
       machineId: string;
       kind: string;
@@ -955,9 +1110,10 @@ const Mutation = {
       serialNumber: (input.serialNumber ?? product.serialNumber).trim().toUpperCase(),
       partNumber: (input.partNumber ?? product.partNumber).trim().toUpperCase(),
     };
-    const error =
-      firstError(validateProduct(next)) ?? duplicateProductError(ctx.state, next, product.id);
-    if (error || !location) throw new GraphQLError(error ?? "Ubicación inválida");
+    assertRules(firstError(validateProduct(next)), () =>
+      duplicateProductError(ctx.state, next, product.id),
+    );
+    if (!location) throw invalid("Ubicación inválida");
     Object.assign(product, {
       machineId: next.machineId,
       kind: next.kind,
@@ -992,13 +1148,13 @@ const Mutation = {
     requireRole(ctx, STAFF_ROLES);
     const { state } = ctx;
     const product = state.products.find((p) => p.id === args.id && p.deletedAt === null);
-    if (!product) throw new GraphQLError("Producto no encontrado");
+    if (!product) throw notFound("Producto no encontrado");
     await syncOverdueLoans(state);
     if (state.loans.some((l) => l.equipment.id === args.id && IN_COURSE_LOAN_STATUSES.has(l.status))) {
-      throw new GraphQLError("No se puede dar de baja: el equipo tiene préstamos en curso");
+      throw conflict("No se puede dar de baja: el equipo tiene préstamos en curso");
     }
     if (state.tickets.some((t) => t.equipmentId === args.id && t.status !== "resolved")) {
-      throw new GraphQLError("No se puede dar de baja: el equipo tiene tickets abiertos");
+      throw conflict("No se puede dar de baja: el equipo tiene tickets abiertos");
     }
     await syncReservations(state);
     if (
@@ -1006,7 +1162,7 @@ const Mutation = {
         (r) => r.equipment?.id === args.id && OPEN_RESERVATION_STATUSES.has(r.status),
       )
     ) {
-      throw new GraphQLError("No se puede dar de baja: el equipo tiene reservas vigentes");
+      throw conflict("No se puede dar de baja: el equipo tiene reservas vigentes");
     }
     const now = nowIso();
     product.status = "retired";
@@ -1046,9 +1202,10 @@ const Mutation = {
       partNumber: input.partNumber.trim().toUpperCase(),
     };
     const error = firstError(validateComponent(fields));
-    if (error) throw new GraphQLError(error);
+    if (error) throw invalid(error);
+    assertProductExists(ctx.state, fields.productId, "El equipo al que pertenece el componente no existe");
     const component = {
-      id: nextId("comp-", ctx.state.components),
+      id: nextId(ctx.state, "comp-", ctx.state.components),
       type: "component" as const,
       name: fields.name,
       model: fields.model,
@@ -1057,7 +1214,7 @@ const Mutation = {
       partNumber: fields.partNumber,
       isFactory: fields.isFactory,
       isWorking: fields.isWorking,
-      productId: fields.productId ?? null,
+      productId: fields.productId || null,
       createdAt: nowIso(),
       updatedAt: nowIso(),
       deletedAt: null,
@@ -1077,7 +1234,7 @@ const Mutation = {
   ) => {
     requireRole(ctx, STAFF_ROLES);
     const component = ctx.state.components.find((c) => c.id === args.id && c.deletedAt === null);
-    if (!component) throw new GraphQLError("Componente no encontrado");
+    if (!component) throw notFound("Componente no encontrado");
     const input = args.input as Partial<{
       name: string;
       model: string;
@@ -1095,7 +1252,7 @@ const Mutation = {
       partNumber: (input.partNumber ?? component.partNumber).trim().toUpperCase(),
     };
     const error = firstError(validateComponent(next));
-    if (error) throw new GraphQLError(error);
+    if (error) throw invalid(error);
     Object.assign(component, next, { updatedAt: nowIso() });
     if (input.isFactory !== undefined) component.isFactory = input.isFactory;
     if (input.isWorking !== undefined) component.isWorking = input.isWorking;
@@ -1119,13 +1276,13 @@ const Mutation = {
     requireRole(ctx, STAFF_ROLES);
     const { state } = ctx;
     const component = state.components.find((c) => c.id === args.id && c.deletedAt === null);
-    if (!component) throw new GraphQLError("Componente no encontrado");
+    if (!component) throw notFound("Componente no encontrado");
     await syncOverdueLoans(state);
     const inOpenLoan = state.loans.some(
       (l) => IN_COURSE_LOAN_STATUSES.has(l.status) && l.components.some((c) => c.id === args.id),
     );
     if (inOpenLoan) {
-      throw new GraphQLError("No se puede dar de baja: el componente está en un préstamo en curso");
+      throw conflict("No se puede dar de baja: el componente está en un préstamo en curso");
     }
     const now = nowIso();
     component.deletedAt = now;
@@ -1149,18 +1306,20 @@ const Mutation = {
   ) => {
     const caller = requireAuth(ctx);
     const { input } = args;
+    assertOneOf(input.category, TICKET_CATEGORIES, "Categoría de incidencia inválida");
+    assertProductExists(ctx.state, input.equipmentId, "El equipo no existe");
     const equipment = input.equipmentId
       ? (ctx.state.products.find((p) => p.id === input.equipmentId) ?? null)
       : null;
     const ticket: Ticket = {
-      id: nextId("tkt-", ctx.state.tickets, 3),
+      id: nextId(ctx.state, "tkt-", ctx.state.tickets, 3),
       title: input.title,
       description: input.description,
       category: input.category as Ticket["category"],
       status: "pending",
       submittedBy: caller,
       assignedTo: null,
-      equipmentId: input.equipmentId ?? null,
+      equipmentId: input.equipmentId || null,
       equipment,
       diagnosis: null,
       corrected: null,
@@ -1195,20 +1354,25 @@ const Mutation = {
     args: { id: string; input: Partial<Record<string, unknown>> },
     ctx: Ctx,
   ) => {
-    requireRole(ctx, STAFF_ROLES);
+    const caller = requireRole(ctx, STAFF_ROLES);
     const ticket = ctx.state.tickets.find((t) => t.id === args.id);
-    if (!ticket) throw new GraphQLError("Ticket no encontrado");
+    if (!ticket) throw notFound("Ticket no encontrado");
+    assertCanWorkOn(caller, ticket.assignedTo, "El ticket");
     const input = args.input as Partial<{
       title: string;
       description: string;
       category: string;
       equipmentId: string;
     }>;
+    if (input.category !== undefined) {
+      assertOneOf(input.category, TICKET_CATEGORIES, "Categoría de incidencia inválida");
+    }
+    if (input.equipmentId) assertProductExists(ctx.state, input.equipmentId, "El equipo no existe");
     if (input.title !== undefined) ticket.title = input.title;
     if (input.description !== undefined) ticket.description = input.description;
     if (input.category !== undefined) ticket.category = input.category as Ticket["category"];
     if (input.equipmentId !== undefined) {
-      ticket.equipmentId = input.equipmentId;
+      ticket.equipmentId = input.equipmentId || null;
       ticket.equipment = ctx.state.products.find((p) => p.id === input.equipmentId) ?? null;
     }
     ticket.updatedAt = nowIso();
@@ -1232,14 +1396,15 @@ const Mutation = {
   ) => {
     const caller = requireRole(ctx, STAFF_ROLES);
     const ticket = ctx.state.tickets.find((t) => t.id === args.id);
-    if (!ticket) throw new GraphQLError("Ticket no encontrado");
+    if (!ticket) throw notFound("Ticket no encontrado");
+    assertCanWorkOn(caller, ticket.assignedTo, "El ticket");
     const { status } = args;
-    if (!(status in TICKET_STATUS_CONFIG)) throw new GraphQLError("Estado inválido");
+    if (!(status in TICKET_STATUS_CONFIG)) throw invalid("Estado inválido");
     if (status === "resolved") {
-      throw new GraphQLError("Para resolver un ticket completá el diagnóstico");
+      throw invalid("Para resolver un ticket completá el diagnóstico");
     }
     if (ticket.status === "pending" || !canTransitionTicket(ticket, status)) {
-      throw new GraphQLError(invalidTicketTransition(ticket, status));
+      throw conflict(invalidTicketTransition(ticket, status));
     }
     if (status === "pending") {
       await handOver(ctx.state, "ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, null, caller);
@@ -1270,13 +1435,14 @@ const Mutation = {
   ) => {
     const caller = requireRole(ctx, STAFF_ROLES);
     const ticket = ctx.state.tickets.find((t) => t.id === args.id);
-    if (!ticket) throw new GraphQLError("Ticket no encontrado");
+    if (!ticket) throw notFound("Ticket no encontrado");
+    assertCanWorkOn(caller, ticket.assignedTo, "El ticket");
     if (!canTransitionTicket(ticket, "resolved")) {
-      throw new GraphQLError(invalidTicketTransition(ticket, "resolved"));
+      throw conflict(invalidTicketTransition(ticket, "resolved"));
     }
     const { input } = args;
     if (!input.diagnosis?.trim() || typeof input.corrected !== "boolean") {
-      throw new GraphQLError("Completá el diagnóstico y si se corrigió el problema");
+      throw invalid("Completá el diagnóstico y si se corrigió el problema");
     }
     ticket.status = "resolved";
     ticket.diagnosis = input.diagnosis;
@@ -1302,8 +1468,8 @@ const Mutation = {
   claimTicket: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
     const caller = requireRole(ctx, STAFF_ROLES);
     const ticket = ctx.state.tickets.find((t) => t.id === args.id);
-    if (!ticket) throw new GraphQLError("Ticket no encontrado");
-    if (ticket.status !== "pending") throw new GraphQLError(invalidTicketTransition(ticket, "in_progress"));
+    if (!ticket) throw notFound("Ticket no encontrado");
+    if (ticket.status !== "pending") throw conflict(invalidTicketTransition(ticket, "in_progress"));
     await handOver(ctx.state, "ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, caller, caller);
     ticket.assignedTo = caller;
     ticket.status = "in_progress";
@@ -1319,9 +1485,10 @@ const Mutation = {
     const caller = requireRole(ctx, STAFF_ROLES);
     const ticket = ctx.state.tickets.find((t) => t.id === args.id);
     const tech = ctx.state.users.find((u) => u.id === args.technicianId && u.isActive);
-    if (!ticket || !tech) throw new GraphQLError("No encontrado");
-    if (!isStaff(tech)) throw new GraphQLError("Solo se puede asignar a personal técnico");
-    if (ticket.status === "resolved") throw new GraphQLError("No se puede reasignar un ticket resuelto");
+    if (!ticket || !tech) throw notFound("No encontrado");
+    assertCanWorkOn(caller, ticket.assignedTo, "El ticket");
+    if (!isStaff(tech)) throw invalid("Solo se puede asignar a personal técnico");
+    if (ticket.status === "resolved") throw conflict("No se puede reasignar un ticket resuelto");
     await handOver(ctx.state, "ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, tech, caller);
     ticket.assignedTo = tech;
     if (ticket.status === "pending") ticket.status = "in_progress";
@@ -1351,18 +1518,18 @@ const Mutation = {
     const loanUserId = isStaff(caller) ? (input.userId ?? caller.id) : caller.id;
     const equipment = ctx.state.products.find((p) => p.id === input.equipmentId && p.deletedAt === null);
     const loanUser = ctx.state.users.find((u) => u.id === loanUserId && u.isActive);
-    if (!equipment || !loanUser) throw new GraphQLError("Equipo o usuario no encontrado");
+    if (!equipment || !loanUser) throw notFound("Equipo o usuario no encontrado");
     if (equipment.status !== "available" || hasOpenLoan(ctx.state, equipment.id)) {
-      throw new GraphQLError("El equipo no está disponible para préstamo");
+      throw conflict("El equipo no está disponible para préstamo");
     }
     if (!(new Date(input.returnDate) > new Date(input.issueDate))) {
-      throw new GraphQLError("La fecha de devolución debe ser posterior a la de entrega");
+      throw invalid("La fecha de devolución debe ser posterior a la de entrega");
     }
     const components = input.componentIds
       ? ctx.state.components.filter((c) => input.componentIds!.includes(c.id))
       : [];
     const loan: Loan = {
-      id: nextId("loan-", ctx.state.loans, 3),
+      id: nextId(ctx.state, "loan-", ctx.state.loans, 3),
       equipment,
       user: loanUser,
       status: "pending",
@@ -1405,10 +1572,10 @@ const Mutation = {
   approveLoan: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
     const caller = requireRole(ctx, STAFF_ROLES);
     const loan = ctx.state.loans.find((l) => l.id === args.id);
-    if (!loan) throw new GraphQLError("Préstamo no encontrado");
-    if (loan.status !== "pending") throw new GraphQLError(invalidLoanTransition(loan, "aprobar"));
+    if (!loan) throw notFound("Préstamo no encontrado");
+    if (loan.status !== "pending") throw conflict(invalidLoanTransition(loan, "aprobar"));
     if (hasOpenLoan(ctx.state, loan.equipment.id, loan.id)) {
-      throw new GraphQLError("El equipo ya está comprometido en otro préstamo");
+      throw conflict("El equipo ya está comprometido en otro préstamo");
     }
     loan.status = "approved";
     loan.approvedBy = caller;
@@ -1424,9 +1591,9 @@ const Mutation = {
   rejectLoan: async (_p: unknown, args: { id: string; reason: string }, ctx: Ctx) => {
     const caller = requireRole(ctx, STAFF_ROLES);
     const loan = ctx.state.loans.find((l) => l.id === args.id);
-    if (!loan) throw new GraphQLError("Préstamo no encontrado");
-    if (loan.status !== "pending") throw new GraphQLError(invalidLoanTransition(loan, "rechazar"));
-    if (!args.reason?.trim()) throw new GraphQLError("Indicá el motivo del rechazo");
+    if (!loan) throw notFound("Préstamo no encontrado");
+    if (loan.status !== "pending") throw conflict(invalidLoanTransition(loan, "rechazar"));
+    if (!args.reason?.trim()) throw invalid("Indicá el motivo del rechazo");
     loan.status = "rejected";
     loan.rejectionReason = args.reason.trim();
     loan.updatedAt = nowIso();
@@ -1441,10 +1608,10 @@ const Mutation = {
   deliverLoan: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
     const caller = requireRole(ctx, STAFF_ROLES);
     const loan = ctx.state.loans.find((l) => l.id === args.id);
-    if (!loan) throw new GraphQLError("Préstamo no encontrado");
-    if (loan.status !== "approved") throw new GraphQLError(invalidLoanTransition(loan, "entregar"));
+    if (!loan) throw notFound("Préstamo no encontrado");
+    if (loan.status !== "approved") throw conflict(invalidLoanTransition(loan, "entregar"));
     if (loan.equipment.status !== "available") {
-      throw new GraphQLError("El equipo no está disponible para entregar");
+      throw conflict("El equipo no está disponible para entregar");
     }
     const now = nowIso();
     loan.status = "active";
@@ -1472,9 +1639,9 @@ const Mutation = {
   ) => {
     requireRole(ctx, STAFF_ROLES);
     const loan = ctx.state.loans.find((l) => l.id === args.id);
-    if (!loan) throw new GraphQLError("Préstamo no encontrado");
+    if (!loan) throw notFound("Préstamo no encontrado");
     if (loan.status !== "active" && loan.status !== "overdue") {
-      throw new GraphQLError(invalidLoanTransition(loan, "devolver"));
+      throw conflict(invalidLoanTransition(loan, "devolver"));
     }
     const now = nowIso();
     loan.status = "returned";
@@ -1510,8 +1677,10 @@ const Mutation = {
   ) => {
     const caller = requireAuth(ctx);
     const { input } = args;
+    assertOneOf(input.type, SERVICE_TYPES, "Tipo de solicitud inválido");
+    assertProductExists(ctx.state, input.equipmentId, "El equipo no existe");
     const service: ServiceRequest = {
-      id: nextId("svc-", ctx.state.services, 3),
+      id: nextId(ctx.state, "svc-", ctx.state.services, 3),
       type: input.type as ServiceRequest["type"],
       status: "pending",
       requestedBy: caller,
@@ -1519,7 +1688,7 @@ const Mutation = {
       description: input.description,
       labNumber: input.labNumber ?? null,
       softwareName: input.softwareName ?? null,
-      equipmentId: input.equipmentId ?? null,
+      equipmentId: input.equipmentId || null,
       resolutionText: null,
       createdAt: nowIso(),
       updatedAt: nowIso(),
@@ -1550,9 +1719,11 @@ const Mutation = {
   ) => {
     const caller = requireRole(ctx, STAFF_ROLES);
     const service = ctx.state.services.find((s) => s.id === args.id);
-    if (!service) throw new GraphQLError("Solicitud no encontrada");
+    if (!service) throw notFound("Solicitud no encontrada");
+    assertCanWorkOn(caller, service.assignedTo, "La solicitud");
     const { input } = args;
     const previousStatus = service.status;
+    if (input.status) assertOneOf(input.status, SERVICE_STATUSES, "Estado de solicitud inválido");
     if (input.status) service.status = input.status as ServiceRequest["status"];
     if (!service.assignedTo && (input.status === "in_progress" || input.status === "completed")) {
       await handOver(ctx.state, "service_request", service.id, service.requestedBy, null, caller, caller);
@@ -1579,9 +1750,9 @@ const Mutation = {
   claimServiceRequest: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
     const caller = requireRole(ctx, STAFF_ROLES);
     const service = ctx.state.services.find((s) => s.id === args.id);
-    if (!service) throw new GraphQLError("Solicitud no encontrada");
-    if (CLOSED_SERVICE_STATUSES.has(service.status)) throw new GraphQLError("La solicitud ya está cerrada");
-    if (service.assignedTo) throw new GraphQLError(`La solicitud ya la tomó ${service.assignedTo.name}`);
+    if (!service) throw notFound("Solicitud no encontrada");
+    if (CLOSED_SERVICE_STATUSES.has(service.status)) throw conflict("La solicitud ya está cerrada");
+    if (service.assignedTo) throw conflict(`La solicitud ya la tomó ${service.assignedTo.name}`);
     await handOver(ctx.state, "service_request", service.id, service.requestedBy, null, caller, caller);
     service.assignedTo = caller;
     service.updatedAt = nowIso();
@@ -1600,9 +1771,10 @@ const Mutation = {
     const caller = requireRole(ctx, STAFF_ROLES);
     const service = ctx.state.services.find((s) => s.id === args.id);
     const tech = ctx.state.users.find((u) => u.id === args.technicianId && u.isActive);
-    if (!service || !tech) throw new GraphQLError("No encontrado");
-    if (!isStaff(tech)) throw new GraphQLError("Solo se puede asignar a personal técnico");
-    if (CLOSED_SERVICE_STATUSES.has(service.status)) throw new GraphQLError("La solicitud ya está cerrada");
+    if (!service || !tech) throw notFound("No encontrado");
+    assertCanWorkOn(caller, service.assignedTo, "La solicitud");
+    if (!isStaff(tech)) throw invalid("Solo se puede asignar a personal técnico");
+    if (CLOSED_SERVICE_STATUSES.has(service.status)) throw conflict("La solicitud ya está cerrada");
     await handOver(ctx.state, "service_request", service.id, service.requestedBy, service.assignedTo, tech, caller);
     service.assignedTo = tech;
     service.updatedAt = nowIso();
@@ -1613,6 +1785,104 @@ const Mutation = {
     return service;
   },
 
+  softDeleteTicket: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    const caller = requireAuth(ctx);
+    const { state } = ctx;
+    const ticket = state.tickets.find((t) => t.id === args.id);
+    if (!ticket) throw notFound("Ticket no encontrado");
+    const unclaimed = ticket.status === "pending" && !ticket.assignedTo;
+    if (!canRetire(caller, ticket.submittedBy.id, unclaimed)) throw forbidden();
+    const now = nowIso();
+    await db
+      .update(t.tickets)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(eq(t.tickets.id, ticket.id));
+    await dropNoticesOf(state, "ticket", ticket.id);
+    state.tickets = removeFrom(state.tickets, state.ticketsById, ticket.id);
+    state.deletedIds.add(ticket.id);
+    return true;
+  },
+
+  softDeleteLoan: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    const caller = requireAuth(ctx);
+    const { state } = ctx;
+    await syncOverdueLoans(state);
+    const loan = state.loans.find((l) => l.id === args.id);
+    if (!loan) throw notFound("Préstamo no encontrado");
+    if (!canRetire(caller, loan.user.id, loan.status === "pending")) throw forbidden();
+    if (loan.status === "active" || loan.status === "overdue") {
+      throw conflict("No se puede dar de baja un préstamo en curso: registrá la devolución primero");
+    }
+    const now = nowIso();
+    await db
+      .update(t.loans)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(eq(t.loans.id, loan.id));
+    await dropNoticesOf(state, "loan", loan.id);
+    state.loans = removeFrom(state.loans, state.loansById, loan.id);
+    state.deletedIds.add(loan.id);
+    return true;
+  },
+
+  softDeleteServiceRequest: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    const caller = requireAuth(ctx);
+    const { state } = ctx;
+    const service = state.services.find((s) => s.id === args.id);
+    if (!service) throw notFound("Solicitud no encontrada");
+    const unclaimed = service.status === "pending" && !service.assignedTo;
+    if (!canRetire(caller, service.requestedBy.id, unclaimed)) throw forbidden();
+    if (service.status === "in_progress") {
+      throw conflict("No se puede dar de baja una solicitud en curso");
+    }
+    const now = nowIso();
+    await db
+      .update(t.serviceRequests)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(eq(t.serviceRequests.id, service.id));
+    await dropNoticesOf(state, "service_request", service.id);
+    state.services = removeFrom(state.services, state.servicesById, service.id);
+    state.deletedIds.add(service.id);
+    return true;
+  },
+
+  softDeleteIntervention: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    const caller = requireRole(ctx, STAFF_ROLES);
+    const { state } = ctx;
+    const intervention = state.interventions.find((i) => i.id === args.id);
+    if (!intervention) throw notFound("Intervención no encontrada");
+    if (!canRetire(caller, intervention.technician.id, true)) throw forbidden();
+    const now = nowIso();
+    await db
+      .update(t.interventions)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(eq(t.interventions.id, intervention.id));
+    state.interventions = removeFrom(state.interventions, state.interventionsById, intervention.id);
+    state.deletedIds.add(intervention.id);
+    return true;
+  },
+
+  softDeleteComment: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    const caller = requireAuth(ctx);
+    const { state } = ctx;
+    const comment = state.comments.find((c) => c.id === args.id);
+    if (!comment) throw notFound("Comentario no encontrado");
+    assertCommentAccess(state, caller, comment.entityType, comment.entityId);
+    if (!canRetire(caller, comment.author.id, true)) throw forbidden();
+    await db
+      .update(t.comments)
+      .set({ deletedAt: nowIso() })
+      .where(eq(t.comments.id, comment.id));
+    state.comments = removeFrom(state.comments, state.commentsById, comment.id);
+    state.deletedIds.add(comment.id);
+    return true;
+  },
+
+  logout: async (_p: unknown, _a: unknown, ctx: Ctx) => {
+    const caller = requireAuth(ctx);
+    if (ctx.token) await revokeToken(ctx.token, caller.id);
+    return true;
+  },
+
   changePassword: async (
     _p: unknown,
     args: { currentPassword: string; newPassword: string },
@@ -1620,13 +1890,15 @@ const Mutation = {
   ) => {
     const caller = requireAuth(ctx);
     const [row] = await db.select().from(t.users).where(eq(t.users.id, caller.id)).limit(1);
-    if (!row) throw new GraphQLError("Usuario no encontrado");
+    if (!row) throw notFound("Usuario no encontrado");
     const ok = await Bun.password.verify(args.currentPassword, row.passwordHash);
-    if (!ok) throw new GraphQLError("La contraseña actual no es correcta");
+    if (!ok) throw invalid("La contraseña actual no es correcta");
     const passwordHash = await Bun.password.hash(args.newPassword, { algorithm: "argon2id" });
     await db
       .update(t.users)
-      .set({ passwordHash, updatedAt: nowIso() })
+      // Subir la version invalida todas las sesiones abiertas, la actual incluida:
+      // hay que volver a iniciar sesion con la contrasena nueva
+      .set({ passwordHash, tokenVersion: sql`${t.users.tokenVersion} + 1`, updatedAt: nowIso() })
       .where(eq(t.users.id, caller.id));
     return true;
   },
@@ -1639,13 +1911,12 @@ const Mutation = {
       name: args.input.name.trim(),
     };
     const code = locationCode(fields.kind, fields.number);
-    const error =
-      firstError(validateLocation(fields)) ??
-      (code ? duplicateLocationError(ctx.state, { ...fields, code }) : "Ubicación inválida");
-    if (error || !code) throw new GraphQLError(error ?? "Ubicación inválida");
+    assertRules(firstError(validateLocation(fields)));
+    if (!code) throw invalid("Ubicación inválida");
+    assertRules(null, () => duplicateLocationError(ctx.state, { ...fields, code }));
     const now = nowIso();
     const location: Location = {
-      id: nextId("loc-", ctx.state.locations),
+      id: nextId(ctx.state, "loc-", ctx.state.locations),
       kind: fields.kind as Location["kind"],
       number: fields.number,
       name: fields.name,
@@ -1677,7 +1948,7 @@ const Mutation = {
   ) => {
     requireRole(ctx, STAFF_ROLES);
     const location = activeLocation(ctx.state, args.id);
-    if (!location) throw new GraphQLError("Ubicación no encontrada");
+    if (!location) throw notFound("Ubicación no encontrada");
     const input = args.input;
     const fields = {
       kind: input.kind ?? location.kind,
@@ -1685,13 +1956,12 @@ const Mutation = {
       name: (input.name ?? location.name).trim(),
     };
     const code = locationCode(fields.kind, fields.number);
-    const error =
-      firstError(validateLocation(fields)) ??
-      (code ? duplicateLocationError(ctx.state, { ...fields, code }, args.id) : "Ubicación inválida");
-    if (error || !code) throw new GraphQLError(error ?? "Ubicación inválida");
+    assertRules(firstError(validateLocation(fields)));
+    if (!code) throw invalid("Ubicación inválida");
+    assertRules(null, () => duplicateLocationError(ctx.state, { ...fields, code }, args.id));
     const products = productsIn(ctx.state, args.id);
     if (code !== location.code && products.length > 0) {
-      throw new GraphQLError(
+      throw conflict(
         `No se puede cambiar el tipo ni el número: ${products.length} equipo(s) usan ${location.code} en su ID de máquina`,
       );
     }
@@ -1725,18 +1995,18 @@ const Mutation = {
   softDeleteLocation: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
     requireRole(ctx, STAFF_ROLES);
     const location = activeLocation(ctx.state, args.id);
-    if (!location) throw new GraphQLError("Ubicación no encontrada");
+    if (!location) throw notFound("Ubicación no encontrada");
     await syncReservations(ctx.state);
     if (
       ctx.state.reservations.some(
         (r) => r.location?.id === args.id && OPEN_RESERVATION_STATUSES.has(r.status),
       )
     ) {
-      throw new GraphQLError("No se puede eliminar: la ubicación tiene reservas vigentes");
+      throw conflict("No se puede eliminar: la ubicación tiene reservas vigentes");
     }
     const count = productsIn(ctx.state, args.id).length;
     if (count > 0) {
-      throw new GraphQLError(`No se puede eliminar: tiene ${count} equipo(s). Movelos a otra ubicación primero`);
+      throw conflict(`No se puede eliminar: tiene ${count} equipo(s). Movelos a otra ubicación primero`);
     }
     location.deletedAt = nowIso();
     await db
@@ -1756,9 +2026,9 @@ const Mutation = {
     const caller = requireRole(ctx, STAFF_ROLES);
     const { input } = args;
     const product = ctx.state.products.find((p) => p.id === input.equipmentId);
-    if (!product) throw new GraphQLError("Equipo no encontrado");
+    if (!product) throw notFound("Equipo no encontrado");
     if (product.deletedAt) {
-      throw new GraphQLError("No se registran intervenciones en un equipo dado de baja");
+      throw conflict("No se registran intervenciones en un equipo dado de baja");
     }
     const now = nowIso();
     const fields: InterventionFields = {
@@ -1771,9 +2041,9 @@ const Mutation = {
     const error =
       firstError(validateIntervention(fields)) ??
       interventionTicketError(ctx.state, ticketId, product.id);
-    if (error) throw new GraphQLError(error);
+    if (error) throw invalid(error);
     const intervention = {
-      id: nextId("int-", ctx.state.interventions, 3),
+      id: nextId(ctx.state, "int-", ctx.state.interventions, 3),
       equipmentId: product.id,
       technician: caller,
       type: fields.type as (typeof ctx.state.interventions)[number]["type"],
@@ -1808,7 +2078,7 @@ const Mutation = {
   ) => {
     requireRole(ctx, STAFF_ROLES);
     const intervention = ctx.state.interventions.find((i) => i.id === args.id);
-    if (!intervention) throw new GraphQLError("Intervención no encontrada");
+    if (!intervention) throw notFound("Intervención no encontrada");
     const input = args.input;
     const fields: InterventionFields = {
       type: input.type ?? intervention.type,
@@ -1824,7 +2094,7 @@ const Mutation = {
     const error =
       firstError(validateIntervention(fields)) ??
       interventionTicketError(ctx.state, ticketId, intervention.equipmentId);
-    if (error) throw new GraphQLError(error);
+    if (error) throw invalid(error);
     Object.assign(intervention, {
       type: fields.type as (typeof intervention)["type"],
       description: fields.description,
@@ -1855,12 +2125,11 @@ const Mutation = {
     const caller = requireAuth(ctx);
     const { input } = args;
     const entityType = input.entityType as CommentEntity;
-    const denied = commentAccessError(ctx.state, caller, entityType, input.entityId);
-    if (denied) throw new GraphQLError(denied);
+    assertCommentAccess(ctx.state, caller, entityType, input.entityId);
     const error = validateComment(input.body);
-    if (error) throw new GraphQLError(error);
+    if (error) throw invalid(error);
     const comment: Comment = {
-      id: nextId("cmt-", ctx.state.comments, 3),
+      id: nextId(ctx.state, "cmt-", ctx.state.comments, 3),
       entityType,
       entityId: input.entityId,
       author: caller,
@@ -1904,24 +2173,23 @@ const Mutation = {
     let location: Location | null = null;
     if (input.resourceType === "equipment") {
       equipment = ctx.state.products.find((p) => p.id === input.equipmentId && !p.deletedAt) ?? null;
-      if (!equipment) throw new GraphQLError("Equipo no encontrado");
-      if (equipment.status === "in_repair") throw new GraphQLError("El equipo está en reparación: no se puede reservar");
-      if (equipment.status === "retired") throw new GraphQLError("El equipo está dado de baja: no se puede reservar");
+      if (!equipment) throw notFound("Equipo no encontrado");
+      if (equipment.status === "in_repair") throw conflict("El equipo está en reparación: no se puede reservar");
+      if (equipment.status === "retired") throw conflict("El equipo está dado de baja: no se puede reservar");
     } else if (input.resourceType === "location") {
       location = activeLocation(ctx.state, input.locationId) ?? null;
-      if (!location) throw new GraphQLError("Ubicación no encontrada");
+      if (!location) throw notFound("Ubicación no encontrada");
     } else {
-      throw new GraphQLError("Elegí un equipo o un espacio");
+      throw invalid("Elegí un equipo o un espacio");
     }
     const fields = { startsAt: input.startsAt, endsAt: input.endsAt, purpose: input.purpose };
     const resourceId = (equipment ?? location)!.id;
-    const error =
-      firstError(validateReservation(fields)) ??
-      reservationOverlapError(ctx.state, input.resourceType, resourceId, fields.startsAt, fields.endsAt);
-    if (error) throw new GraphQLError(error);
+    assertRules(firstError(validateReservation(fields)), () =>
+      reservationOverlapError(ctx.state, input.resourceType, resourceId, fields.startsAt, fields.endsAt),
+    );
     const now = nowIso();
     const reservation: Reservation = {
-      id: nextId("rsv-", ctx.state.reservations, 3),
+      id: nextId(ctx.state, "rsv-", ctx.state.reservations, 3),
       resourceType: input.resourceType,
       equipment,
       location,
@@ -1961,12 +2229,12 @@ const Mutation = {
     const caller = requireRole(ctx, STAFF_ROLES);
     await syncReservations(ctx.state);
     const reservation = ctx.state.reservations.find((r) => r.id === args.id);
-    if (!reservation) throw new GraphQLError("Reserva no encontrada");
+    if (!reservation) throw notFound("Reserva no encontrada");
     if (reservation.status !== "pending") {
-      throw new GraphQLError(invalidReservationTransition(reservation, "aprobar"));
+      throw conflict(invalidReservationTransition(reservation, "aprobar"));
     }
     if (Date.parse(reservation.endsAt) <= Date.now()) {
-      throw new GraphQLError("La reserva ya terminó: no se puede aprobar");
+      throw conflict("La reserva ya terminó: no se puede aprobar");
     }
     const overlap = reservationOverlapError(
       ctx.state,
@@ -1976,7 +2244,7 @@ const Mutation = {
       reservation.endsAt,
       reservation.id,
     );
-    if (overlap) throw new GraphQLError(overlap);
+    if (overlap) throw conflict(overlap);
     reservation.status = "approved";
     reservation.reviewedBy = caller;
     reservation.updatedAt = nowIso();
@@ -1997,12 +2265,12 @@ const Mutation = {
     const caller = requireRole(ctx, STAFF_ROLES);
     await syncReservations(ctx.state);
     const reservation = ctx.state.reservations.find((r) => r.id === args.id);
-    if (!reservation) throw new GraphQLError("Reserva no encontrada");
+    if (!reservation) throw notFound("Reserva no encontrada");
     if (reservation.status !== "pending") {
-      throw new GraphQLError(invalidReservationTransition(reservation, "rechazar"));
+      throw conflict(invalidReservationTransition(reservation, "rechazar"));
     }
     if ((args.reason ?? "").trim().length < 5) {
-      throw new GraphQLError("Indicá el motivo del rechazo (mínimo 5 caracteres)");
+      throw invalid("Indicá el motivo del rechazo (mínimo 5 caracteres)");
     }
     reservation.status = "rejected";
     reservation.reviewedBy = caller;
@@ -2029,9 +2297,9 @@ const Mutation = {
     const caller = requireRole(ctx, STAFF_ROLES);
     await syncReservations(ctx.state);
     const reservation = ctx.state.reservations.find((r) => r.id === args.id);
-    if (!reservation) throw new GraphQLError("Reserva no encontrada");
+    if (!reservation) throw notFound("Reserva no encontrada");
     if (reservation.status !== "pending" && reservation.status !== "approved") {
-      throw new GraphQLError(invalidReservationTransition(reservation, "modificar"));
+      throw conflict(invalidReservationTransition(reservation, "modificar"));
     }
     const input = args.input;
     const fields = {
@@ -2039,8 +2307,7 @@ const Mutation = {
       endsAt: input.endsAt ?? reservation.endsAt,
       purpose: input.purpose ?? reservation.purpose,
     };
-    const error =
-      firstError(validateReservation(fields)) ??
+    assertRules(firstError(validateReservation(fields)), () =>
       reservationOverlapError(
         ctx.state,
         reservation.resourceType,
@@ -2048,8 +2315,8 @@ const Mutation = {
         fields.startsAt,
         fields.endsAt,
         reservation.id,
-      );
-    if (error) throw new GraphQLError(error);
+      ),
+    );
     Object.assign(reservation, {
       startsAt: new Date(fields.startsAt).toISOString(),
       endsAt: new Date(fields.endsAt).toISOString(),
@@ -2074,10 +2341,10 @@ const Mutation = {
     const caller = requireAuth(ctx);
     await syncReservations(ctx.state);
     const reservation = ctx.state.reservations.find((r) => r.id === args.id);
-    if (!reservation) throw new GraphQLError("Reserva no encontrada");
-    if (reservation.user.id !== caller.id) throw new GraphQLError(FORBIDDEN);
+    if (!reservation) throw notFound("Reserva no encontrada");
+    if (reservation.user.id !== caller.id) throw forbidden();
     if (reservation.status !== "pending" && reservation.status !== "approved") {
-      throw new GraphQLError(invalidReservationTransition(reservation, "cancelar"));
+      throw conflict(invalidReservationTransition(reservation, "cancelar"));
     }
     reservation.status = "cancelled";
     reservation.cancelledBy = caller;
@@ -2093,8 +2360,8 @@ const Mutation = {
   acknowledgeNotice: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
     const caller = requireAuth(ctx);
     const notice = ctx.state.notices.find((n) => n.id === args.id);
-    if (!notice) throw new GraphQLError("Aviso no encontrado");
-    if (notice.userId !== caller.id) throw new GraphQLError(FORBIDDEN);
+    if (!notice) throw notFound("Aviso no encontrado");
+    if (notice.userId !== caller.id) throw forbidden();
     await db.delete(t.notices).where(eq(t.notices.id, notice.id));
     ctx.state.notices = ctx.state.notices.filter((n) => n.id !== notice.id);
     ctx.state.noticesById.delete(notice.id);
@@ -2104,7 +2371,7 @@ const Mutation = {
   markPendingSeen: async (_p: unknown, args: { section: NoticeEntity }, ctx: Ctx) => {
     const caller = requireRole(ctx, STAFF_ROLES);
     const { section } = args;
-    if (!PENDING_SECTIONS.includes(section)) throw new GraphQLError("Sección inválida");
+    if (!PENDING_SECTIONS.includes(section)) throw invalid("Sección inválida");
     const seenAt = nowIso();
     const seen = ctx.state.pendingSeen.find((s) => s.userId === caller.id && s.section === section);
     if (seen) {
@@ -2121,4 +2388,75 @@ const Mutation = {
   },
 };
 
-export const resolvers = { Query, Mutation };
+// Que entidad y que dato deja cada mutacion en `activity_logs`. Al estar tipado
+// por `keyof typeof Mutation`, agregar una mutacion sin su fila de auditoria no
+// compila.
+const reason = (args: { reason?: string }) => (args.reason ? `Motivo: ${args.reason.trim()}` : null);
+
+const AUDIT: Record<keyof typeof Mutation, AuditSpec> = {
+  createUser: { entity: "User" },
+  updateUser: { entity: "User" },
+  deleteUser: { entity: "User", details: () => "Baja lógica (is_active = false)" },
+  createProduct: { entity: "Product" },
+  updateProduct: { entity: "Product" },
+  softDeleteProduct: { entity: "Product", details: () => "Baja lógica (deleted_at)" },
+  createComponent: { entity: "Component" },
+  updateComponent: { entity: "Component" },
+  softDeleteComponent: { entity: "Component", details: () => "Baja lógica (deleted_at)" },
+  createTicket: { entity: "Ticket" },
+  updateTicket: { entity: "Ticket" },
+  assignTicket: { entity: "Ticket", details: (a) => `Asignado a ${a.technicianId}` },
+  claimTicket: { entity: "Ticket" },
+  completeTicket: { entity: "Ticket", details: (a) => `Corregido: ${a.input.corrected ? "sí" : "no"}` },
+  changeTicketStatus: { entity: "Ticket", details: (a) => `Estado: ${a.status}` },
+  createLoan: { entity: "Loan", details: (a) => `Equipo ${a.input.equipmentId}` },
+  approveLoan: { entity: "Loan" },
+  rejectLoan: { entity: "Loan", details: reason },
+  deliverLoan: { entity: "Loan" },
+  returnLoan: { entity: "Loan", details: (a) => (a.damaged ? "Devuelto con daños" : "Devuelto sin daños") },
+  createServiceRequest: { entity: "ServiceRequest" },
+  updateServiceRequest: { entity: "ServiceRequest" },
+  claimServiceRequest: { entity: "ServiceRequest" },
+  assignServiceRequest: { entity: "ServiceRequest", details: (a) => `Asignado a ${a.technicianId}` },
+  softDeleteTicket: { entity: "Ticket", details: () => "Baja lógica (deleted_at)" },
+  softDeleteLoan: { entity: "Loan", details: () => "Baja lógica (deleted_at)" },
+  softDeleteServiceRequest: { entity: "ServiceRequest", details: () => "Baja lógica (deleted_at)" },
+  softDeleteIntervention: { entity: "Intervention", details: () => "Baja lógica (deleted_at)" },
+  softDeleteComment: { entity: "Comment", details: () => "Baja lógica (deleted_at)" },
+  logout: { entity: "Session", id: (_a, _r, ctx) => ctx.caller?.id ?? "-", details: () => null },
+  changePassword: { entity: "User", id: (_a, _r, ctx) => ctx.caller?.id ?? "-", details: () => null },
+  createLocation: { entity: "Location" },
+  updateLocation: { entity: "Location" },
+  softDeleteLocation: { entity: "Location", details: () => "Baja lógica (deleted_at)" },
+  createIntervention: { entity: "Intervention" },
+  updateIntervention: { entity: "Intervention" },
+  createComment: { entity: "Comment", details: (a) => `En ${a.input.entityType} ${a.input.entityId}` },
+  createReservation: { entity: "Reservation" },
+  approveReservation: { entity: "Reservation" },
+  rejectReservation: { entity: "Reservation", details: reason },
+  updateReservation: { entity: "Reservation" },
+  cancelReservation: { entity: "Reservation" },
+  acknowledgeNotice: { entity: "Notice" },
+  markPendingSeen: { entity: "PendingSeen", id: (a) => a.section, details: () => null },
+};
+
+// `login` y `me` no necesitan la foto de la base; `activityLogs` consulta la
+// tabla directo. Las demas queries cargan el estado una vez por request.
+const STATELESS_QUERIES = new Set<keyof typeof Query>(["login", "me", "activityLogs"]);
+
+function entries<T extends object>(source: T): Array<[keyof T & string, Resolver]> {
+  return Object.entries(source) as Array<[keyof T & string, Resolver]>;
+}
+
+export const resolvers = {
+  User: userFieldResolvers,
+  Query: Object.fromEntries(
+    entries(Query).map(([name, fn]) => [
+      name,
+      STATELESS_QUERIES.has(name) ? fn : withState(fn),
+    ]),
+  ),
+  Mutation: Object.fromEntries(
+    entries(Mutation).map(([name, fn]) => [name, withTransaction(name, fn, AUDIT[name])]),
+  ),
+};

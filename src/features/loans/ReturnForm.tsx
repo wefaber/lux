@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { gql, errorMessage } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/hooks/useI18n";
 import { ErrorAlert } from "@/components/ui/error-alert";
 
 const RETURN_MUTATION = `
@@ -13,6 +14,7 @@ interface ReturnFormProps {
 }
 
 export function ReturnForm({ loanId, onSuccess }: ReturnFormProps) {
+  const { t } = useI18n();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -23,7 +25,7 @@ export function ReturnForm({ loanId, onSuccess }: ReturnFormProps) {
       await gql(RETURN_MUTATION, { id: loanId });
       onSuccess();
     } catch (err) {
-      setError(errorMessage(err, "Error al registrar devolución"));
+      setError(errorMessage(err, t("loans.returnForm.failed")));
     } finally {
       setSaving(false);
     }
@@ -31,13 +33,11 @@ export function ReturnForm({ loanId, onSuccess }: ReturnFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Se registrará la devolución con la fecha y hora actual.
-      </p>
+      <p className="text-sm text-muted-foreground">{t("loans.returnForm.note")}</p>
       <ErrorAlert>{error}</ErrorAlert>
       <div className="flex gap-2 justify-end">
         <Button type="submit" disabled={saving}>
-          {saving ? "Registrando..." : "Confirmar devolución"}
+          {saving ? t("loans.returnDialog.registering") : t("loans.returnForm.confirm")}
         </Button>
       </div>
     </form>

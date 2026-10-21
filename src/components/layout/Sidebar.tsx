@@ -5,12 +5,14 @@ import { ChevronLeft, ChevronRight, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SPRING_TRANSITION } from "@/lib/constants";
 import { useAuth } from "@/hooks/useAuth";
+import { useI18n } from "@/hooks/useI18n";
 import { navItemsFor } from "./navItems";
 import { NavIcon } from "./NavIcon";
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { user } = useAuth();
+  const { t } = useI18n();
 
   const visibleItems = navItemsFor(user?.role); // El usuario final no ve las secciones del personal
 
@@ -34,7 +36,7 @@ export function Sidebar() {
                 <Zap className="h-4 w-4 text-primary-foreground" />
               </div>
               <span className="text-sm font-semibold tracking-tight text-sidebar-foreground">
-                Lux
+                {t("app.name")}
               </span>
             </motion.div>
           )}
@@ -73,7 +75,7 @@ export function Sidebar() {
                   transition={{ duration: 0.15 }}
                   className="truncate overflow-hidden whitespace-nowrap"
                 >
-                  {item.label}
+                  {t(item.labelKey)}
                 </motion.span>
               )}
             </AnimatePresence>
@@ -88,14 +90,14 @@ export function Sidebar() {
             "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors cursor-pointer",
             collapsed && "justify-center px-2",
           )}
-          aria-label={collapsed ? "Expandir sidebar" : "Colapsar sidebar"}
+          aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
         >
           {collapsed ? (
             <ChevronRight className="h-4 w-4" />
           ) : (
             <>
               <ChevronLeft className="h-4 w-4" />
-              <span className="text-xs">Colapsar</span>
+              <span className="text-xs">{t("sidebar.collapseShort")}</span>
             </>
           )}
         </button>

@@ -1,8 +1,12 @@
 import { adminCases } from "./admin";
+import { apiCases } from "./api";
 import { authCases } from "./auth";
+import { crudCases } from "./crud";
 import { inventoryCases } from "./inventory";
 import { loanCases } from "./loans";
+import { restCases } from "./rest";
 import { rnfCases } from "./rnf";
+import { securityCases } from "./security";
 import { serviceCases } from "./services";
 import { ticketCases } from "./tickets";
 import type { TestCase } from "./types";
@@ -18,6 +22,10 @@ export const CASES: TestCase[] = [
   ...inventoryCases,
   ...adminCases,
   ...rnfCases,
+  ...apiCases,
+  ...crudCases,
+  ...restCases,
+  ...securityCases,
 ];
 
 const ids = new Set<string>();
