@@ -10,6 +10,7 @@ import { mockLoans } from "./data/loans";
 import { mockServices } from "./data/services";
 import { mockNotices, mockPendingSeen } from "./data/notices";
 import { mockActivityLogs } from "./generators";
+import { overlapsInstantRange, withinInstantRange } from "@/lib/date-range";
 import {
   INVALID_CREDENTIALS_MESSAGE,
   mockLoginGuard,
@@ -620,12 +621,15 @@ export const handlers = [
   graphql.query("GetTickets", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
-    const { status, assignedToId, submittedById, equipmentId } = variables as {
-      status?: TicketStatus;
-      assignedToId?: string;
-      submittedById?: string;
-      equipmentId?: string;
-    };
+    const { status, assignedToId, submittedById, equipmentId, startDate, endDate } =
+      variables as {
+        status?: TicketStatus;
+        assignedToId?: string;
+        submittedById?: string;
+        equipmentId?: string;
+        startDate?: string;
+        endDate?: string;
+      };
     // El solicitante solo ve sus tickets, mande el filtro que mande
     const scopedSubmittedById = isStaff(caller.role) ? submittedById : caller.id;
     let tickets = [...mockTickets];
@@ -635,6 +639,10 @@ export const handlers = [
       tickets = tickets.filter((t) => t.submittedBy.id === scopedSubmittedById);
     }
     if (equipmentId) tickets = tickets.filter((t) => t.equipmentId === equipmentId);
+    // Rango por fecha de creacion, con los extremos ya en el dia local del cliente
+    if (startDate || endDate) {
+      tickets = tickets.filter((t) => withinInstantRange(t.createdAt, startDate, endDate));
+    }
     return HttpResponse.json({ data: { tickets } });
   }),
 
@@ -659,10 +667,12 @@ export const handlers = [
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
     syncOverdueLoans();
-    const { status, userId, equipmentId } = variables as {
+    const { status, userId, equipmentId, startDate, endDate } = variables as {
       status?: LoanStatus;
       userId?: string;
       equipmentId?: string;
+      startDate?: string;
+      endDate?: string;
     };
     // El solicitante solo ve sus prestamos, mande el filtro que mande
     const scopedUserId = isStaff(caller.role) ? userId : caller.id;
@@ -670,6 +680,10 @@ export const handlers = [
     if (status) loans = filterByStatus<Loan>(loans, status);
     if (scopedUserId) loans = loans.filter((l) => l.user.id === scopedUserId);
     if (equipmentId) loans = loans.filter((l) => l.equipment.id === equipmentId);
+    // Rango por fecha de entrega (issueDate), la que muestra la lista
+    if (startDate || endDate) {
+      loans = loans.filter((l) => withinInstantRange(l.issueDate, startDate, endDate));
+    }
     return HttpResponse.json({ data: { loans } });
   }),
 
@@ -688,9 +702,11 @@ export const handlers = [
   graphql.query("GetServiceRequests", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
-    const { status, requestedById } = variables as {
+    const { status, requestedById, startDate, endDate } = variables as {
       status?: ServiceStatus;
       requestedById?: string;
+      startDate?: string;
+      endDate?: string;
     };
     // El solicitante solo ve sus solicitudes, mande el filtro que mande
     const scopedRequestedById = isStaff(caller.role) ? requestedById : caller.id;
@@ -698,6 +714,10 @@ export const handlers = [
     if (status) services = filterByStatus<ServiceRequest>(services, status);
     if (scopedRequestedById) {
       services = services.filter((s) => s.requestedBy.id === scopedRequestedById);
+    }
+    // Rango por fecha de creacion de la solicitud
+    if (startDate || endDate) {
+      services = services.filter((s) => withinInstantRange(s.createdAt, startDate, endDate));
     }
     return HttpResponse.json({ data: { serviceRequests: services } });
   }),
@@ -845,8 +865,11 @@ export const handlers = [
     let logs = [...mockActivityLogs];
     if (userId) logs = logs.filter((l) => l.userId === userId);
     if (operation) logs = logs.filter((l) => l.operation === operation);
-    if (startDate) logs = logs.filter((l) => l.timestamp >= startDate);
-    if (endDate) logs = logs.filter((l) => l.timestamp <= endDate);
+    // Instantes, no texto: un "hasta" con milisegundos incluye los registros
+    // guardados sin ellos (los del mismo segundo) sin depender del formato
+    if (startDate || endDate) {
+      logs = logs.filter((l) => withinInstantRange(l.timestamp, startDate, endDate));
+    }
     return HttpResponse.json({ data: { activityLogs: logs } });
   }),
 
@@ -1798,12 +1821,23 @@ export const handlers = [
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
     syncReservations();
-    const { status } = variables as { status?: ReservationStatus };
+    const { status, startDate, endDate } = variables as {
+      status?: ReservationStatus;
+      startDate?: string;
+      endDate?: string;
+    };
     // El solicitante solo ve las suyas, mande el filtro que mande
     let reservations = isStaff(caller.role)
       ? [...mockReservations]
       : mockReservations.filter((r) => r.user.id === caller.id);
     if (status) reservations = reservations.filter((r) => r.status === status);
+    // Rango por el horario de la reserva: se incluyen las que se solapan con
+    // esos dias, aunque hayan empezado antes
+    if (startDate || endDate) {
+      reservations = reservations.filter((r) =>
+        overlapsInstantRange(r.startsAt, r.endsAt, startDate, endDate),
+      );
+    }
     reservations.sort((a, b) => b.startsAt.localeCompare(a.startsAt));
     return HttpResponse.json({ data: { reservations } });
   }),
