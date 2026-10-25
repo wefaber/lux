@@ -10,6 +10,13 @@ import {
   validateReservation,
 } from "@/lib/validation";
 import {
+  filterUsers,
+  normalizeStudent,
+  validateImportRow,
+  validateStudent,
+  type ImportRowInput,
+} from "@/lib/students";
+import {
   LOAN_STATUS_CONFIG,
   RESERVATION_STATUS_CONFIG,
   TICKET_STATUS_CONFIG,
@@ -561,14 +568,29 @@ const Query = {
 
   me: (_p: unknown, _a: unknown, ctx: Ctx) => ctx.caller,
 
-  users: (_p: unknown, args: { role?: string; isActive?: boolean }, ctx: Ctx) => {
+  users: (
+    _p: unknown,
+    args: {
+      role?: string;
+      isActive?: boolean;
+      studentGroup?: string;
+      studentShift?: string;
+      subject?: string;
+    },
+    ctx: Ctx,
+  ) => {
     requireRole(ctx, STAFF_ROLES);
     let users = [...ctx.state.users];
-    if (args.role) users = users.filter((u) => u.role === args.role);
     if (args.isActive !== undefined && args.isActive !== null) {
       users = users.filter((u) => u.isActive === args.isActive);
     }
-    return users;
+    // Filtros de la ficha de estudiante; el cliente los aplica tambien en memoria
+    return filterUsers(users, {
+      role: args.role,
+      group: args.studentGroup,
+      shift: args.studentShift,
+      subject: args.subject,
+    });
   },
 
   user: (_p: unknown, args: { id: string }, ctx: Ctx) => {
@@ -930,6 +952,9 @@ const Mutation = {
         password?: string;
         role: string;
         isActive?: boolean;
+        studentGroup?: string | null;
+        studentShift?: string | null;
+        studentSubjects?: string[] | null;
       };
     },
     ctx: Ctx,
@@ -942,13 +967,23 @@ const Mutation = {
     if (ctx.state.users.some((u) => u.dni === input.dni)) {
       throw conflict("Ya existe un usuario con ese documento");
     }
+    const role = input.role as UserRole;
+    const rawStudent = {
+      studentGroup: input.studentGroup ?? null,
+      studentShift: input.studentShift ?? null,
+      studentSubjects: input.studentSubjects ?? [],
+    };
+    const studentError = role === "solicitante" ? firstError(validateStudent(rawStudent)) : null;
+    if (studentError) throw invalid(studentError);
+    const student = normalizeStudent(rawStudent, role);
     const user: User = {
       id: nextId(ctx.state, USER_ID_PREFIX[input.role as UserRole] ?? "u-", ctx.state.users),
       name: input.name,
       dni: input.dni,
       email: input.email,
-      role: input.role as UserRole,
+      role,
       isActive: input.isActive ?? true,
+      ...student,
       createdAt: nowIso(),
       updatedAt: nowIso(),
     };
@@ -978,7 +1013,21 @@ const Mutation = {
     if (typeof rest.dni === "string" && ctx.state.users.some((u) => u.dni === rest.dni && u.id !== user.id)) {
       throw conflict("Ya existe un usuario con ese documento");
     }
-    const next = { ...rest, updatedAt: nowIso() } as Partial<typeof t.users.$inferInsert>;
+    // Sin campo en el input se conserva lo que habia; si el rol deja de ser
+    // solicitante, normalizeStudent vacia la ficha (la base tambien lo exige).
+    const rawStudent = {
+      studentGroup: rest.studentGroup !== undefined ? (rest.studentGroup as string | null) : user.studentGroup,
+      studentShift: rest.studentShift !== undefined ? (rest.studentShift as string | null) : user.studentShift,
+      studentSubjects: rest.studentSubjects !== undefined
+        ? ((rest.studentSubjects as string[] | null) ?? [])
+        : user.studentSubjects,
+    };
+    const studentError = role === "solicitante" ? firstError(validateStudent(rawStudent)) : null;
+    if (studentError) throw invalid(studentError);
+    const student = normalizeStudent(rawStudent, role as UserRole);
+    // Los campos de estudiante se reemplazan por los normalizados, no se copian crudos
+    const { studentGroup: _group, studentShift: _shift, studentSubjects: _subjects, ...base } = rest;
+    const next = { ...base, ...student, updatedAt: nowIso() };
     const passwordHash = password
       ? await Bun.password.hash(String(password), { algorithm: "argon2id" })
       : undefined;
@@ -990,7 +1039,7 @@ const Mutation = {
         ...(passwordHash ? { passwordHash, tokenVersion: sql`${t.users.tokenVersion} + 1` } : {}),
       })
       .where(eq(t.users.id, user.id));
-    Object.assign(user, rest, { updatedAt: next.updatedAt });
+    Object.assign(user, base, student, { updatedAt: next.updatedAt });
     return user;
   },
 
@@ -1009,6 +1058,100 @@ const Mutation = {
       .set({ isActive: false, updatedAt: user.updatedAt })
       .where(eq(t.users.id, user.id));
     return true;
+  },
+
+  // Importación masiva (CSV exportado de Excel). Nunca aborta el lote: cada fila
+  // vuelve con su estado y su error. Actualiza solo la ficha de estudiante de
+  // quien ya existe; no cambia rol, documento, email ni contraseña de nadie.
+  importUsers: async (_p: unknown, args: { rows: ImportRowInput[] }, ctx: Ctx) => {
+    requireRole(ctx, ELEVATED_ROLES);
+    const rows: Array<{ line: number; status: string; userId: string | null; error: string | null }> = [];
+    const seenDni = new Map<string, number>();
+    const seenEmail = new Map<string, number>();
+    let created = 0;
+    let updated = 0;
+    let failed = 0;
+
+    const fail = (line: number, error: string) => {
+      failed++;
+      rows.push({ line, status: "error", userId: null, error });
+    };
+
+    for (const raw of args.rows) {
+      const parsed = validateImportRow(raw);
+      if ("error" in parsed) {
+        fail(raw.line ?? 1, parsed.error);
+        continue;
+      }
+      const { line, name, dni, email, role, password, isActive, student } = parsed.row;
+
+      const firstDni = seenDni.get(dni);
+      if (firstDni !== undefined) {
+        fail(line, `Documento ${dni} repetido en la fila ${firstDni}`);
+        continue;
+      }
+      const emailKey = email.toLowerCase();
+      const firstEmail = seenEmail.get(emailKey);
+      if (firstEmail !== undefined) {
+        fail(line, `Email ${email} repetido en la fila ${firstEmail}`);
+        continue;
+      }
+      seenDni.set(dni, line);
+      seenEmail.set(emailKey, line);
+
+      const byDni = ctx.state.users.find((u) => u.dni === dni);
+      const byEmail = ctx.state.users.find((u) => u.email.toLowerCase() === emailKey);
+      if (byDni && byEmail && byDni.id !== byEmail.id) {
+        fail(line, "El documento y el email pertenecen a usuarios distintos");
+        continue;
+      }
+      const existing = byDni ?? byEmail;
+      if (existing) {
+        if (existing.role !== "solicitante") {
+          fail(line, `La persona ya existe con rol ${existing.role}`);
+          continue;
+        }
+        // Celda vacía = dejar el dato como estaba
+        const nextStudent = {
+          studentGroup: student.studentGroup ?? existing.studentGroup,
+          studentShift: student.studentShift ?? existing.studentShift,
+          studentSubjects: student.studentSubjects.length
+            ? student.studentSubjects
+            : existing.studentSubjects,
+        };
+        const updatedAt = nowIso();
+        await db
+          .update(t.users)
+          .set({ ...nextStudent, updatedAt })
+          .where(eq(t.users.id, existing.id));
+        Object.assign(existing, nextStudent, { updatedAt });
+        updated++;
+        rows.push({ line, status: "updated", userId: existing.id, error: null });
+        continue;
+      }
+
+      const now = nowIso();
+      const user: User = {
+        id: nextId(ctx.state, USER_ID_PREFIX[role] ?? "u-", ctx.state.users),
+        name,
+        dni,
+        email,
+        role,
+        isActive,
+        ...student,
+        createdAt: now,
+        updatedAt: now,
+      };
+      // Sin contraseña en el archivo, la clave inicial es el documento
+      const passwordHash = await Bun.password.hash(password ?? dni, { algorithm: "argon2id" });
+      await db.insert(t.users).values({ ...user, passwordHash });
+      ctx.state.users.push(user);
+      ctx.state.usersById.set(user.id, user);
+      created++;
+      rows.push({ line, status: "created", userId: user.id, error: null });
+    }
+
+    return { created, updated, failed, rows };
   },
 
   createProduct: async (
@@ -2397,6 +2540,12 @@ const AUDIT: Record<keyof typeof Mutation, AuditSpec> = {
   createUser: { entity: "User" },
   updateUser: { entity: "User" },
   deleteUser: { entity: "User", details: () => "Baja lógica (is_active = false)" },
+  importUsers: {
+    entity: "User",
+    id: () => "-",
+    details: (_a, r) =>
+      `Importación CSV: ${r.created} creados, ${r.updated} actualizados, ${r.failed} con error`,
+  },
   createProduct: { entity: "Product" },
   updateProduct: { entity: "Product" },
   softDeleteProduct: { entity: "Product", details: () => "Baja lógica (deleted_at)" },

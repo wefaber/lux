@@ -146,6 +146,7 @@ describe("diccionarios", () => {
       "reports.resolution.total",
       "reports.top.tickets",
       "activity.entity.Ticket",
+      "admin.users.importStatus.error",
     ]);
     const same = keys.filter((k) => en[k] === es[k] && !SAME.has(k));
     expect(same).toEqual([]);

@@ -12,7 +12,7 @@ reglas de permisos, campos calculados, bajas logicas y avisos que los mocks.
 
 - Stack: Bun + Elysia + GraphQL Yoga + Drizzle + drizzle-kit + PostgreSQL + JWT (HS256)
 - GraphQL: `POST /graphql` (GraphiQL en `GET /graphql` solo fuera de produccion)
-- REST: `/api/v1/...` (73 rutas, ver "Rutas REST")
+- REST: `/api/v1/...` (74 rutas, ver "Rutas REST")
 - Salud: `GET /health` (proceso vivo) y `GET /ready` (base alcanzable + migraciones
   aplicadas; 200 solo si esta todo bien, 503 si no; la respuesta no describe la causa,
   que queda en el log del servidor)
@@ -91,7 +91,7 @@ como `String`; el frontend los ordena con `localeCompare` y los parsea con
 
 | Tabla | Columnas principales |
 | --- | --- |
-| `users` | id, name, dni (unique), email, role, is_active, password_hash (argon2id), token_version |
+| `users` | id, name, dni (unique), email, role, is_active, password_hash (argon2id), token_version, student_group, student_shift, student_subjects (jsonb, solo solicitantes) |
 | `locations` | id, kind, number, name, code, created_at, updated_at, deleted_at |
 | `products` | id, machine_id, kind, brand, model, serial_number, part_number, status, issues, location_id, location, deleted_at |
 | `components` | id, name, model, manufacturer, serial_number, part_number, is_factory, is_working, product_id, deleted_at |
@@ -116,6 +116,7 @@ como `String`; el frontend los ordena con `localeCompare` y los parsea con
 | `0002_revoked_tokens` | tabla `revoked_tokens` (logout) |
 | `0003_integrity_fk_check` | 26 claves foraneas y 16 CHECK |
 | `0004_token_version` | `users.token_version` (default 0), para invalidar sesiones al cambiar la contrasena |
+| `0005_student_info` | `users.student_group`, `student_shift` (CHECK `matutino`/`vespertino`/`nocturno`) y `student_subjects` (jsonb array, default `[]`); solo el rol `solicitante` puede tener datos |
 
 Las migraciones se aplican en orden y no se reescriben. Antes de aplicar la 0003 a
 una base con datos viejos (dev, produccion) correr `scripts/preflight-integrity.ts`:
@@ -323,6 +324,7 @@ responde 404. Cuerpo maximo: 1 MB.
 | POST | `/api/v1/users` | `createUser` | Admin |
 | PUT | `/api/v1/users/:id` | `updateUser` | Admin |
 | DELETE | `/api/v1/users/:id` | `deleteUser` | Admin |
+| POST | `/api/v1/users/import` | `importUsers` | Admin |
 | GET | `/api/v1/locations` | `locations` | Autenticado |
 | GET | `/api/v1/locations/:id` | `location` | Autenticado |
 | POST | `/api/v1/locations` | `createLocation` | Staff |

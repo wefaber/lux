@@ -73,4 +73,25 @@ describe.skipIf(!hasDatabase)("restricciones de integridad (PostgreSQL)", () => 
     );
     expect(api?.extensions.code).toBe("VALIDATION_ERROR");
   });
+
+  test("la ficha de estudiante no admite turnos inventados ni materias que no sean un array", async () => {
+    const turno = await rejected(
+      sql`insert into users (id, name, dni, email, role, is_active, password_hash, created_at, updated_at, student_shift)
+          values ('u-test-turno', 'T', '00000002', 't2@x', 'solicitante', true, 'x', 't', 't', 'mañana')`,
+    );
+    expect(turno.api?.extensions.code).toBe("VALIDATION_ERROR");
+    const materias = await rejected(
+      sql`insert into users (id, name, dni, email, role, is_active, password_hash, created_at, updated_at, student_subjects)
+          values ('u-test-materias', 'T', '00000003', 't3@x', 'solicitante', true, 'x', 't', 't', '{}'::jsonb)`,
+    );
+    expect(materias.api?.extensions.code).toBe("VALIDATION_ERROR");
+  });
+
+  test("solo el solicitante puede tener datos de estudiante (CHECK)", async () => {
+    const { api } = await rejected(
+      sql`insert into users (id, name, dni, email, role, is_active, password_hash, created_at, updated_at, student_group)
+          values ('u-test-ficha', 'T', '00000004', 't4@x', 'admin', true, 'x', 't', 't', '1°B')`,
+    );
+    expect(api?.extensions.code).toBe("VALIDATION_ERROR");
+  });
 });
