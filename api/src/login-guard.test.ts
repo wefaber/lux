@@ -77,4 +77,49 @@ describe("LoginGuard", () => {
     for (let i = 0; i < 5; i++) guard.recordFailure(`  ABC${"x".repeat(200)} `, "8.8.8.8");
     expect(guard.check(`abc${"x".repeat(200)}`, "8.8.8.8").locked).toBe(true);
   });
+
+  test("el bloqueo crece 15 -> 30 -> 60 y se queda en el tope", () => {
+    const { guard, advance } = guardWithClock();
+    const failFive = () => {
+      for (let i = 0; i < 5; i++) guard.recordFailure("66666666", "6.6.6.6");
+    };
+
+    failFive();
+    let status = guard.check("66666666", "6.6.6.6");
+    expect(status.locked && status.retryAfterSeconds).toBe(15 * 60);
+
+    advance(15 * MIN);
+    failFive();
+    status = guard.check("66666666", "6.6.6.6");
+    expect(status.locked && status.retryAfterSeconds).toBe(30 * 60);
+
+    advance(30 * MIN);
+    failFive();
+    status = guard.check("66666666", "6.6.6.6");
+    expect(status.locked && status.retryAfterSeconds).toBe(60 * 60);
+
+    advance(60 * MIN);
+    failFive();
+    status = guard.check("66666666", "6.6.6.6");
+    expect(status.locked && status.retryAfterSeconds).toBe(60 * 60);
+  });
+
+  test("un login correcto devuelve la escalada al bloqueo base", () => {
+    const { guard, advance } = guardWithClock();
+    for (let i = 0; i < 5; i++) guard.recordFailure("77777777", "7.7.7.7");
+    advance(15 * MIN);
+    guard.recordSuccess("77777777");
+    for (let i = 0; i < 5; i++) guard.recordFailure("77777777", "7.7.7.7");
+    const status = guard.check("77777777", "7.7.7.7");
+    expect(status.locked && status.retryAfterSeconds).toBe(15 * 60);
+  });
+
+  test("tras un dia sin fallos la escalada se olvida", () => {
+    const { guard, advance } = guardWithClock();
+    for (let i = 0; i < 5; i++) guard.recordFailure("88888888", "8.8.8.8");
+    advance(15 * MIN + 24 * 60 * MIN);
+    for (let i = 0; i < 5; i++) guard.recordFailure("88888888", "8.8.8.8");
+    const status = guard.check("88888888", "8.8.8.8");
+    expect(status.locked && status.retryAfterSeconds).toBe(15 * 60);
+  });
 });

@@ -11,6 +11,11 @@ import { mockServices } from "./data/services";
 import { mockNotices, mockPendingSeen } from "./data/notices";
 import { mockActivityLogs } from "./generators";
 import {
+  INVALID_CREDENTIALS_MESSAGE,
+  mockLoginGuard,
+  mockRequestOrigin,
+} from "./login-guard";
+import {
   firstError,
   locationCode,
   type UserFields,
@@ -478,14 +483,40 @@ function activationError(caller: User, user: User): string | null {
 }
 
 export const handlers = [
-  graphql.query("Login", ({ variables }) => {
+  graphql.query("Login", ({ variables, request }) => {
     const { dni, password } = variables as { dni: string; password: string };
-    const user = mockUsers.find((u) => u.dni === dni && u.isActive);
-    if (!user || mockPasswords[dni] !== password) {
+    const origin = mockRequestOrigin(request);
+    // Mismo orden que la API: primero el bloqueo (y con el mismo mensaje genérico),
+    // después la verificación. El fallo que dispara el bloqueo todavía responde
+    // INVALID_CREDENTIALS; el siguiente pedido ya recibe TOO_MANY_ATTEMPTS.
+    const lock = mockLoginGuard.check(dni, origin);
+    if (lock.locked) {
       return HttpResponse.json({
-        errors: [{ message: "Credenciales inválidas" }],
+        errors: [
+          {
+            message: INVALID_CREDENTIALS_MESSAGE,
+            extensions: {
+              code: "TOO_MANY_ATTEMPTS",
+              status: 429,
+              retryAfterSeconds: lock.retryAfterSeconds,
+            },
+          },
+        ],
       });
     }
+    const user = mockUsers.find((u) => u.dni === dni && u.isActive);
+    if (!user || mockPasswords[dni] !== password) {
+      mockLoginGuard.recordFailure(dni, origin);
+      return HttpResponse.json({
+        errors: [
+          {
+            message: INVALID_CREDENTIALS_MESSAGE,
+            extensions: { code: "INVALID_CREDENTIALS", status: 401 },
+          },
+        ],
+      });
+    }
+    mockLoginGuard.recordSuccess(dni);
     return HttpResponse.json({
       data: {
         login: { ...user, token: `mock-token-${user.id}` },

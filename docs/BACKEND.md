@@ -47,7 +47,8 @@ estan en las rutas `/api/v1`.
 | `NODE_ENV` | con `production` se cierran GraphiQL y la introspeccion | entorno / systemd |
 | `TRUST_PROXY` | con `1`, la IP del cliente es la ultima entrada de `X-Forwarded-For` (la agrega nginx) | entorno / systemd |
 | `LOGIN_MAX_ATTEMPTS` | fallos de login por documento antes del bloqueo (default 5) | entorno |
-| `LOGIN_LOCK_MINUTES` | minutos de bloqueo y de ventana de conteo (default 15) | entorno |
+| `LOGIN_LOCK_MINUTES` | minutos del primer bloqueo y de la ventana de conteo (default 15) | entorno |
+| `LOGIN_LOCK_MAX_MINUTES` | tope del bloqueo incremental: 15, 30, 60... (default 60) | entorno |
 | `LOGIN_IP_MAX_ATTEMPTS` | fallos de login por IP antes del bloqueo (default 50) | entorno |
 | `CORS_ORIGINS` | origenes del navegador que pueden llamar a la API, separados por coma (default: `https://lux.eternum.lat`, `https://dev.eternum.lat`, `http://localhost:5173`, `http://127.0.0.1:5173`). Un `*` se ignora | entorno |
 | `MAX_BODY_BYTES` | tamano maximo del cuerpo de un request (default 262144, 256 KiB); mas da HTTP 413 | entorno |
@@ -195,15 +196,17 @@ la mantiene sincronizada). Con eso el esquema no llega a 3FN estricta.
   `LOGOUT` en la auditoria. Queda pendiente que el frontend llame a `logout` al
   cerrar sesion (hoy solo borra el token del navegador).
 - **Bloqueo por intentos fallidos**: 5 fallos por documento en 15 minutos bloquean ese
-  documento 15 minutos (`TOO_MANY_ATTEMPTS`, HTTP 429, cabecera `Retry-After`); la
-  respuesta ya bloqueada es igual exista o no la cuenta, y su mensaje es el mismo
+  documento (`TOO_MANY_ATTEMPTS`, HTTP 429, cabecera `Retry-After`); el bloqueo es
+  incremental (15, 30, 60 minutos... con tope `LOGIN_LOCK_MAX_MINUTES`, default 60).
+  La respuesta ya bloqueada es igual exista o no la cuenta, y su mensaje es el mismo
   "Credenciales inválidas" de una clave erronea: el bloqueo se reconoce por `code`,
   `status` y `retryAfterSeconds`, no por el texto. Un login correcto limpia el
-  contador de ese documento. Ademas hay un umbral por IP (50 fallos en 15 minutos) contra
+  contador y la escalada de ese documento; un dia sin fallos tambien vuelve al bloqueo
+  base. Ademas hay un umbral por IP (50 fallos en 15 minutos) contra
   el rociado de contrasenas. Cada fallo deja `LOGIN_FAILED` y el bloqueo `ACCOUNT_LOCKED`.
   **Limitacion**: el contador vive en la memoria del proceso; se pierde al reiniciar y
   no se comparte entre los slots del deploy blue/green. Bloquear por documento permite
-  que un tercero deje fuera a una cuenta ajena durante 15 minutos (compromiso aceptado
+  que un tercero deje fuera a una cuenta ajena durante el bloqueo (compromiso aceptado
   frente a la fuerza bruta).
 - Para que la IP por socket sea la del cliente y no la de nginx hay que arrancar con
   `TRUST_PROXY=1`; sin eso, todos los usuarios comparten la IP del proxy.
