@@ -24,6 +24,7 @@ function inSpanish<A extends unknown[], R>(fn: Fn<A, R>): Fn<A, R> {
 export const validateComment = inSpanish(validation.validateComment);
 export const validateComponent = inSpanish(validation.validateComponent);
 export const validateIntervention = inSpanish(validation.validateIntervention);
+export const validateLoan = inSpanish(validation.validateLoan);
 export const validateLocation = inSpanish(validation.validateLocation);
 export const validatePassword = inSpanish(validation.validatePassword);
 export const validateProduct = inSpanish(validation.validateProduct);

@@ -220,6 +220,75 @@ export function validateReservation(
   ]);
 }
 
+// ── Préstamos ────────────────────────────────────────────────────────────────
+// La entrega no puede ser anterior a hoy y la devolución no puede ser anterior
+// a la entrega. Se comparan días de calendario en hora local: NUNCA con
+// toISOString(), que en Uruguay a las 21:00 ya cae en el día siguiente.
+
+export interface LoanFields {
+  issueDate: string;
+  returnDate: string;
+}
+
+const DATE_PREFIX = /^(\d{4})-(\d{2})-(\d{2})/;
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/** Día "YYYY-MM-DD" elegido en la fecha, sin convertirla a UTC. */
+export function localDateOnly(value: string): string | null {
+  const match = DATE_PREFIX.exec(value.trim());
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  const valid =
+    date.getFullYear() === Number(year) &&
+    date.getMonth() === Number(month) - 1 &&
+    date.getDate() === Number(day);
+  return valid ? `${year}-${month}-${day}` : null;
+}
+
+/** Hoy como día de calendario local, en el mismo formato que localDateOnly. */
+export function todayLocalDate(now: number | Date = Date.now()): string {
+  const date = new Date(now);
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+export function validateLoan(
+  loan: LoanFields,
+  now: number | Date = Date.now(),
+): FieldErrors<keyof LoanFields> {
+  const issue = localDateOnly(loan.issueDate);
+  const returning = localDateOnly(loan.returnDate);
+  const today = todayLocalDate(now);
+  // La hora solo desempata cuando las dos fechas caen el mismo día
+  const issueTime = new Date(loan.issueDate).getTime();
+  const returnTime = new Date(loan.returnDate).getTime();
+  return collect<keyof LoanFields>([
+    [
+      "issueDate",
+      !issue
+        ? "Fecha de entrega inválida"
+        : issue < today
+          ? "La fecha de entrega no puede ser anterior a hoy"
+          : null,
+    ],
+    [
+      "returnDate",
+      !returning
+        ? "Fecha de devolución inválida"
+        : !issue
+          ? null
+          : returning < issue
+            ? "La devolución no puede ser anterior a la entrega"
+            : Number.isNaN(returnTime) || returnTime <= issueTime
+              ? "La fecha de devolución debe ser posterior a la de entrega"
+              : null,
+    ],
+  ]);
+}
+
 // Comentario: ni vacio ni un texto interminable
 export function validateComment(body: string): string | null {
   const text = body.trim();

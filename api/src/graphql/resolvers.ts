@@ -5,6 +5,7 @@ import {
   validateComment,
   validateComponent,
   validateIntervention,
+  validateLoan,
   validateLocation,
   validateProduct,
   validateReservation,
@@ -1671,9 +1672,7 @@ const Mutation = {
     if (equipment.status !== "available" || hasOpenLoan(ctx.state, equipment.id)) {
       throw conflict("El equipo no está disponible para préstamo");
     }
-    if (!(new Date(input.returnDate) > new Date(input.issueDate))) {
-      throw invalid("La fecha de devolución debe ser posterior a la de entrega");
-    }
+    assertRules(firstError(validateLoan(input)));
     const components = input.componentIds
       ? ctx.state.components.filter((c) => input.componentIds!.includes(c.id))
       : [];
