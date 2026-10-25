@@ -12,6 +12,7 @@ import { inventory } from "./inventory";
 import { tickets } from "./tickets";
 import { dashboard } from "./dashboard";
 import { profile } from "./profile";
+import { help } from "./help";
 import { validation } from "./validation";
 
 // Espanol: la fuente de las claves (ver ../index.ts). Un diccionario por
@@ -31,6 +32,7 @@ export const es = {
   ...tickets,
   ...dashboard,
   ...profile,
+  ...help,
   ...validation,
 } as const;
 
@@ -47,6 +49,7 @@ export const esParts = [
   tickets,
   dashboard,
   profile,
+  help,
   validation,
   reservations,
   locations,

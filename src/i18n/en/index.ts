@@ -13,6 +13,7 @@ import { inventory } from "./inventory";
 import { tickets } from "./tickets";
 import { dashboard } from "./dashboard";
 import { profile } from "./profile";
+import { help } from "./help";
 import { validation } from "./validation";
 
 // Ingles: tiene que tener exactamente las claves del espanol
@@ -31,5 +32,6 @@ export const en: Record<MessageKey, string> = {
   ...tickets,
   ...dashboard,
   ...profile,
+  ...help,
   ...validation,
 };
