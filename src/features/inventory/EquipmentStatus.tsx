@@ -44,8 +44,9 @@ export function EquipmentStatus() {
     value: products.filter((p) => p.locationId === loc.id && p.issues).length,
   }));
 
+  // La tabla ocupa todo el ancho de la vista: sin un max-w que la recorte
   return (
-    <div className="space-y-8 max-w-6xl">
+    <div className="space-y-8 max-w-full">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           {t("equipmentStatus.title")}
