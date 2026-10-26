@@ -43,6 +43,27 @@
       "when": 1792591030301,
       "tag": "0005_student_info",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793039922394,
+      "tag": "0006_location_special_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793040049441,
+      "tag": "0007_requester_feedback",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793040226362,
+      "tag": "0008_error_reports",
+      "breakpoints": true
     }
   ]
 }

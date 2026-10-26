@@ -10,6 +10,7 @@ import { mockLoans } from "./data/loans";
 import { mockServices } from "./data/services";
 import { mockNotices, mockPendingSeen } from "./data/notices";
 import { mockErrorReports } from "./data/errors";
+import { requesterOverview } from "./requester";
 import { mockActivityLogs } from "./generators";
 import { overlapsInstantRange, withinInstantRange } from "@/lib/date-range";
 import {
@@ -902,6 +903,17 @@ export const handlers = [
             ).length,
           }
         : null,
+      // Lo del solicitante tampoco viaja al staff: cada rol ve su tablero
+      requesterOverview: staff
+        ? null
+        : requesterOverview(
+            caller.id,
+            mockTickets,
+            mockLoans,
+            mockReservations,
+            mockLocations,
+            mockProducts,
+          ),
     };
 
     return HttpResponse.json({ data: { dashboardStats: stats } });
@@ -1005,6 +1017,9 @@ export const handlers = [
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       resolvedAt: null,
+      attendedAt: null,
+      rating: null,
+      ratedAt: null,
     };
     mockTickets.push(newTicket);
     return HttpResponse.json({ data: { createTicket: newTicket } });
@@ -1026,6 +1041,8 @@ export const handlers = [
     handOver("ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, caller, caller);
     ticket.assignedTo = caller;
     ticket.status = "in_progress";
+    // Primera vez que alguien lo toma: es lo que mide el tiempo de atencion
+    ticket.attendedAt ??= new Date().toISOString();
     ticket.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { claimTicket: ticket } });
   }),
@@ -1089,6 +1106,11 @@ export const handlers = [
       ticket.assignedTo = null;
     }
     if (ticket.status === "resolved") ticket.resolvedAt = null;
+    // Al reabrir se cae la valoracion de la resolucion anterior
+    if (status === "in_progress" && ticket.ratedAt) {
+      ticket.rating = null;
+      ticket.ratedAt = null;
+    }
     ticket.status = status;
     ticket.updatedAt = new Date().toISOString();
     if (status === "in_resolution") {
@@ -1126,6 +1148,27 @@ export const handlers = [
     ticket.updatedAt = new Date().toISOString();
     notify(ticket.submittedBy, "ticket", ticket.id, "resolved", caller);
     return HttpResponse.json({ data: { completeTicket: ticket } });
+  }),
+
+  graphql.mutation("RateTicket", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    const { id, rating } = variables as { id: string; rating: number };
+    const ticket = mockTickets.find((t) => t.id === id);
+    if (!ticket) return HttpResponse.json({ errors: [{ message: "Ticket no encontrado" }] });
+    // Cada uno puntua lo suyo: el ticket tiene que ser del que llama
+    if (ticket.submittedBy.id !== caller.id) return HttpResponse.json(FORBIDDEN);
+    if (ticket.status !== "resolved") {
+      return HttpResponse.json({
+        errors: [{ message: "Solo se puede puntuar un ticket resuelto" }],
+      });
+    }
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return HttpResponse.json({ errors: [{ message: "La valoración va de 1 a 5" }] });
+    }
+    ticket.rating = rating;
+    ticket.ratedAt = new Date().toISOString();
+    return HttpResponse.json({ data: { rateTicket: ticket } });
   }),
 
   graphql.mutation("CreateLoan", ({ request, variables }) => {
@@ -1914,6 +1957,7 @@ export const handlers = [
     handOver("ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, tech, caller);
     ticket.assignedTo = tech;
     if (ticket.status === "pending") ticket.status = "in_progress";
+    ticket.attendedAt ??= new Date().toISOString();
     ticket.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { assignTicket: ticket } });
   }),

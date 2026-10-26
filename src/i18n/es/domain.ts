@@ -44,6 +44,7 @@ export const domain = {
   "locationKind.laboratory": "Laboratorio",
   "locationKind.classroom": "Salón",
   "locationKind.administration": "Administración",
+  "locationKind.special": "Área especial",
   "locationKind.other": "Otro",
   "resource.equipment": "Equipo",
   "resource.location": "Espacio",
