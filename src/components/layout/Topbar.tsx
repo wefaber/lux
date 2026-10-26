@@ -1,9 +1,10 @@
 import { Link, useNavigate } from "react-router-dom";
-import { LogOut, Settings, Shield, Zap } from "lucide-react";
+import { HelpCircle, LogOut, Settings, Shield, Zap } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/hooks/useI18n";
 import { LanguageSwitcher } from "@/components/accessibility/LanguageSwitcher";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { ThemeSwitcher } from "@/components/accessibility/ThemeSwitcher";
 import { FontSizeControl } from "@/components/accessibility/FontSizeControl";
 import {
@@ -41,6 +42,17 @@ export function Topbar() {
       </div>
       <div className="hidden md:block" />
       <div className="flex items-center gap-1 sm:gap-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          asChild
+          className="hidden sm:inline-flex"
+          title={t("nav.help")}
+        >
+          <Link to={ROUTES.HELP} aria-label={t("nav.help")}>
+            <HelpCircle className="h-4 w-4" />
+          </Link>
+        </Button>
         {/* Preferencias de letra e idioma: en el telefono viven en el perfil, aca
             no entran y dejaban el avatar cortado */}
         <div className="hidden sm:block">
@@ -79,6 +91,12 @@ export function Topbar() {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link to={ROUTES.HELP} className="flex items-center gap-2">
+                  <HelpCircle className="h-4 w-4" />
+                  {t("nav.help")}
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link to={ROUTES.PROFILE} className="flex items-center gap-2">
                   <Settings className="h-4 w-4" />

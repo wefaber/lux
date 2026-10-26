@@ -23,14 +23,16 @@ import { RejectLoanDialog, ReturnLoanDialog } from "./LoanActionDialogs";
 import { StatusFilter } from "@/components/ui/status-filter";
 import { Input } from "@/components/ui/input";
 import { Pagination, clampPage } from "@/components/ui/pagination";
+import { DateRangeFilter } from "@/components/ui/date-range-filter";
+import { useDateRangeParams } from "@/hooks/useDateRangeParams";
 import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
 import { idQuery, loanPin, pinnedFirst } from "@/lib/pins";
 import { STAFF_ROLES } from "@/lib/roles";
 import { ErrorAlert } from "@/components/ui/error-alert";
 
 const LOANS_QUERY = `
- query GetLoans($status: String, $userId: ID) {
- loans(status: $status, userId: $userId) {
+ query GetLoans($status: String, $userId: ID, $startDate: String, $endDate: String) {
+ loans(status: $status, userId: $userId, startDate: $startDate, endDate: $endDate) {
  id status issueDate returnDate actualReturnDate rejectionReason deliveredAt
  equipment { id brand model serialNumber location }
  user { id name }
@@ -61,6 +63,10 @@ export function LoansPage() {
   const [statusFilter, setStatusFilter] = useState<LoanStatus | "">("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
+  // Rango por fecha de entrega (issueDate), la que se muestra en la columna
+  // "Creado": createdAt es un detalle tecnico que no le dice nada al usuario
+  const { range: dateRange, setRange: setDateRange, active: dateActive, bounds } =
+    useDateRangeParams();
   const [createOpen, setCreateOpen] = useState(false);
   const [rejecting, setRejecting] = useState<Loan | null>(null);
   const [returning, setReturning] = useState<Loan | null>(null);
@@ -77,11 +83,15 @@ export function LoansPage() {
       gql(LOANS_QUERY, {
         status: statusFilter || undefined,
         userId: isStaff ? undefined : user?.id,
+        startDate: bounds?.startDate,
+        endDate: bounds?.endDate,
       }),
-    [statusFilter, isStaff, user?.id],
+    [statusFilter, isStaff, user?.id, bounds?.startDate, bounds?.endDate],
   );
 
   const loans = data?.loans ?? [];
+  // Las metricas salen de los prestamos que devolvio la API: con un rango de
+  // fechas elegido describen las entregas de ese periodo, no todo el historial
   const overdueCount = loans.filter((l) => l.status === "overdue").length;
   // Un préstamo vencido sigue en curso: "Activos" lo incluye y "Vencidos" lo destaca
   const activeCount = loans.filter((l) => l.status === "active").length + overdueCount;
@@ -232,6 +242,13 @@ export function LoansPage() {
               ...LOAN_STATUSES.map((s) => ({ value: s, label: LOAN_STATUS_CONFIG[s].label })),
             ]}
           />
+          <DateRangeFilter
+            value={dateRange}
+            onChange={(next) => {
+              setDateRange(next);
+              setPage(0);
+            }}
+          />
         </div>
 
         {hiddenFinished > 0 && (
@@ -248,7 +265,11 @@ export function LoansPage() {
           <TableSkeleton rows={8} cols={isStaff ? 7 : 5} />
         ) : listed.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground text-sm font-medium">
-            {hiddenFinished > 0 ? t("loans.emptyOpen") : t("loans.empty")}
+            {dateActive
+              ? t("filters.emptyRange")
+              : hiddenFinished > 0
+                ? t("loans.emptyOpen")
+                : t("loans.empty")}
           </div>
         ) : (
           <div

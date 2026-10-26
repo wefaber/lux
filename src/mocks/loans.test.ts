@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mockLoans } from "./data/loans";
 import { mockProducts } from "./data/equipment";
 import type { Loan } from "@/lib/types";
+import { toDateTimeInput } from "@/lib/utils";
 import { gqlAs, useMockServer, USERS } from "@/test/graphql";
 
 // Cada test arma sus propios préstamos sobre equipos propios para no depender
@@ -192,9 +193,33 @@ describe("#13 ciclo de vida completo", () => {
     const res = await gqlAs(SOLICITANTE, CREATE, {
       input: { equipmentId: freeProductId(), issueDate: returnDate, returnDate: issueDate },
     });
-    expect(res.errors?.[0].message).toBe(
-      "La fecha de devolución debe ser posterior a la de entrega",
-    );
+    expect(res.errors?.[0].message).toBe("La devolución no puede ser anterior a la entrega");
+  });
+
+  test("rechaza una entrega con fecha pasada", async () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const res = await gqlAs(SOLICITANTE, CREATE, {
+      input: {
+        equipmentId: freeProductId(),
+        issueDate: toDateTimeInput(yesterday),
+        returnDate: futureDates().returnDate,
+      },
+    });
+    expect(res.errors?.[0].message).toBe("La fecha de entrega no puede ser anterior a hoy");
+  });
+
+  test("acepta la entrega para hoy aunque la hora ya haya pasado", async () => {
+    // La regla es por día: el formulario limita la hora, el handler no
+    const today = toDateTimeInput().slice(0, 10);
+    const res = await gqlAs(SOLICITANTE, CREATE, {
+      input: {
+        equipmentId: freeProductId(),
+        issueDate: `${today}T00:00`,
+        returnDate: futureDates().returnDate,
+      },
+    });
+    expect(res.errors).toBeUndefined();
   });
 });
 

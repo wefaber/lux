@@ -46,8 +46,9 @@ export function OolList() {
     }
   }; // Gestiona el claiming del ticket
 
+  // La lista ocupa todo el ancho de la vista: sin un max-w que la recorte
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-full">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild>
           <Link to={ROUTES.TICKETS}>

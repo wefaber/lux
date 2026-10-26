@@ -56,6 +56,10 @@ export const core = {
   "label.role": "Rol",
   "label.email": "Email",
   "label.dni": "Cédula",
+  "label.student": "Estudiante",
+  "label.group": "Grupo",
+  "label.shift": "Turno",
+  "label.subjects": "Materias",
   "label.optional": "(opcional)",
   "common.of": "de",
 } as const;

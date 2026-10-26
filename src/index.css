@@ -1,6 +1,56 @@
 @import url("https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=DM+Serif+Display:ital@0;1&display=swap");
-@import url("https://cdn.jsdelivr.net/fontsource/fonts/opendyslexic@latest/latin.css");
 @import "tailwindcss";
+
+/* OpenDyslexic se sirve desde public/fonts, no desde un CDN: en redes
+   restringidas o sin internet (aulas, equipos de escritorio) el @import
+   externo fallaba y el interruptor quedaba sin efecto. Los archivos son
+   los de @fontsource/opendyslexic 5.3.0 (licencia en
+   public/fonts/LICENSE-OpenDyslexic.txt).
+   local() primero: si el equipo ya tiene la fuente instalada no se descarga
+   nada; si no, entra el woff2. */
+@font-face {
+  font-family: "OpenDyslexic";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src:
+    local("OpenDyslexic Regular"),
+    local("OpenDyslexic"),
+    url("/fonts/opendyslexic-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "OpenDyslexic";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src:
+    local("OpenDyslexic Bold"),
+    local("OpenDyslexic-Bold"),
+    url("/fonts/opendyslexic-latin-700-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "OpenDyslexic";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src:
+    local("OpenDyslexic Italic"),
+    local("OpenDyslexic-Italic"),
+    url("/fonts/opendyslexic-latin-400-italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "OpenDyslexic";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src:
+    local("OpenDyslexic Bold Italic"),
+    local("OpenDyslexic-BoldItalic"),
+    url("/fonts/opendyslexic-latin-700-italic.woff2") format("woff2");
+}
 
 @custom-variant dark (&:is(.dark *));
 
@@ -37,9 +87,6 @@
   --sidebar-accent-foreground: #171717;
   --sidebar-border: #e5e5e5;
   --sidebar-ring: #a1a1a1;
-  --font-sans: DM Sans, ui-sans-serif, sans-serif, system-ui;
-  --font-serif: DM Serif Display, ui-serif, serif;
-  --font-mono: DM Mono, ui-monospace, monospace;
   --radius: 1.24rem;
   --shadow-x: 0;
   --shadow-y: 1px;
@@ -57,6 +104,12 @@
   --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
   --tracking-normal: 0.01em;
   --spacing: 0.25rem;
+
+  /* Pila del modo dislexico: la fuente auto-hospedada y, si no carga, la que
+     el usuario tenga instalada y por ultimo la sans del sistema. Va aca y no
+     en @theme porque la usa el interruptor de accesibilidad, no una utilidad
+     de Tailwind (que borra las variables que ningun componente usa). */
+  --font-dyslexic: "OpenDyslexic", "OpenDyslexic2", ui-sans-serif, system-ui, sans-serif;
 
   /* App-specific status colors */
   --success: rgb(52, 199, 89);
@@ -103,9 +156,6 @@
   --sidebar-accent-foreground: #edf2f7;
   --sidebar-border: #1e273e;
   --sidebar-ring: #4785d1;
-  --font-sans: DM Sans, ui-sans-serif, sans-serif, system-ui;
-  --font-serif: DM Serif Display, ui-serif, serif;
-  --font-mono: DM Mono, ui-monospace, monospace;
   --radius: 1.24rem;
   --shadow-x: 0;
   --shadow-y: 1px;
@@ -129,6 +179,16 @@
   --warning-border: rgba(255, 159, 10, 0.25);
   --info-bg: rgba(0, 122, 255, 0.15);
   --info-border: rgba(0, 122, 255, 0.25);
+}
+
+/* Tipografias. Viven en @theme (una sola vez, sin auto-referencias) para que
+   las utilidades font-* y --default-font-family salgan de las mismas
+   variables, y html[data-dyslexic="true"] las pueda reemplazar sin que una
+   declaracion duplicada le gane. */
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "DM Serif Display", ui-serif, Georgia, serif;
+  --font-mono: "DM Mono", ui-monospace, "SFMono-Regular", monospace;
 }
 
 @theme inline {
@@ -176,11 +236,6 @@
   --color-info-bg: var(--info-bg);
   --color-info-border: var(--info-border);
 
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
-  --font-serif: var(--font-serif);
-  --font-dyslexic: "OpenDyslexic", sans-serif;
-
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -223,7 +278,46 @@ html {
   flex-direction: column;
 }
 
-/* OpenDyslexic font loaded via Fontsource CDN */
+/* Fuente para dislexia.
+   Ademas de cambiar la familia, se ajusta la escala: OpenDyslexic tiene los
+   trazos anchos y las letras muy juntas, asi que necesita mas aire entre
+   lineas, entre letras y entre palabras que la sans normal. Los valores son
+   proporciones (no px) para que sigan funcionando con los cuatro tamaños de
+   letra (data-font-size). */
+html[data-dyslexic="true"] {
+  --font-family: var(--font-dyslexic);
+  --font-sans: var(--font-dyslexic);
+  --font-serif: var(--font-dyslexic);
+  --font-mono: var(--font-dyslexic);
+
+  /* Interletrado: todas las utilidades tracking-* salen de --tracking-normal
+     (Tailwind resuelve el resto con calc), asi que subir esta sola alcanza y
+     deja tracking-tight en positivo. */
+  --tracking-normal: 0.03em;
+
+  /* Interlineado de las utilidades text-*: misma proporcion que traen por
+     defecto pero ~15% mas alta. Los text-* de titulos grandes casi no cambian
+     para no romper encabezados. */
+  --text-xs--line-height: calc(1.15 / 0.75);
+  --text-sm--line-height: calc(1.45 / 0.875);
+  --text-base--line-height: calc(1.7 / 1);
+  --text-lg--line-height: calc(1.95 / 1.125);
+  --text-xl--line-height: calc(2 / 1.25);
+  --text-2xl--line-height: calc(2.25 / 1.5);
+  --text-3xl--line-height: calc(2.5 / 1.875);
+  --text-4xl--line-height: calc(2.75 / 2.25);
+  --text-6xl--line-height: 1.1;
+  --text-8xl--line-height: 1;
+
+  line-height: 1.65;
+}
+
+/* Entre palabras: hereda a todo el texto, incluidos tablas y textos de tarjetas.
+   Los controles de formulario no heredan (el navegador les fija
+   word-spacing: normal), asi que van nombrados aparte. */
+html[data-dyslexic="true"] :where(body, button, input, select, textarea, option) {
+  word-spacing: 0.08em;
+}
 
 /* Font size variants */
 html[data-font-size="sm"] {
@@ -237,14 +331,6 @@ html[data-font-size="lg"] {
 }
 html[data-font-size="xl"] {
   --font-base-size: 20px;
-}
-
-/* Dyslexic font toggle */
-html[data-dyslexic="true"] {
-  --font-family: "OpenDyslexic", sans-serif;
-  --font-sans: "OpenDyslexic", sans-serif;
-  --font-serif: "OpenDyslexic", sans-serif;
-  --font-mono: "OpenDyslexic", sans-serif;
 }
 
 /* High contrast */

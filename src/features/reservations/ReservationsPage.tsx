@@ -38,13 +38,15 @@ import { ReservationForm, resourceName } from "./ReservationForm";
 import { StatusFilter } from "@/components/ui/status-filter";
 import { Input } from "@/components/ui/input";
 import { Pagination, clampPage } from "@/components/ui/pagination";
+import { DateRangeFilter } from "@/components/ui/date-range-filter";
+import { useDateRangeParams } from "@/hooks/useDateRangeParams";
 import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
 import { idQuery, pinnedFirst, reservationPin } from "@/lib/pins";
 import { ErrorAlert } from "@/components/ui/error-alert";
 
 const RESERVATIONS_QUERY = `
-  query GetReservations($status: String) {
-    reservations(status: $status) {
+  query GetReservations($status: String, $startDate: String, $endDate: String) {
+    reservations(status: $status, startDate: $startDate, endDate: $endDate) {
       id resourceType purpose startsAt endsAt status rejectionReason createdAt updatedAt
       equipment { id machineId brand model }
       location { id name code }
@@ -74,6 +76,10 @@ export function ReservationsPage() {
   const [statusFilter, setStatusFilter] = useState<ReservationStatus | "">("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
+  // Rango por el horario reservado (startsAt/endsAt): se ven las reservas que
+  // ocupan esos dias, aunque hayan empezado antes
+  const { range: dateRange, setRange: setDateRange, active: dateActive, bounds } =
+    useDateRangeParams();
   // null = cerrado, "new" = pedir, Reservation = modificar (staff). ?nuevo=1 abre el alta
   const [editing, setEditing] = useState<Reservation | "new" | null>(() =>
     searchParams.get("nuevo") === "1" ? "new" : null,
@@ -84,8 +90,13 @@ export function ReservationsPage() {
   const [actionError, setActionError] = useState("");
 
   const { data, isLoading, error, refetch } = useAsync<{ reservations: Reservation[] }>(
-    () => gql(RESERVATIONS_QUERY, { status: statusFilter || undefined }),
-    [statusFilter],
+    () =>
+      gql(RESERVATIONS_QUERY, {
+        status: statusFilter || undefined,
+        startDate: bounds?.startDate,
+        endDate: bounds?.endDate,
+      }),
+    [statusFilter, bounds?.startDate, bounds?.endDate],
   );
   const reservations = data?.reservations ?? [];
 
@@ -200,6 +211,13 @@ export function ReservationsPage() {
               ...STATUSES.map((s) => ({ value: s, label: RESERVATION_STATUS_CONFIG[s].label })),
             ]}
           />
+          <DateRangeFilter
+            value={dateRange}
+            onChange={(next) => {
+              setDateRange(next);
+              setPage(0);
+            }}
+          />
         </div>
 
         {hiddenFinished > 0 && (
@@ -220,11 +238,13 @@ export function ReservationsPage() {
         <div className="text-center py-16 text-muted-foreground text-sm">
           {term
             ? t("reservations.emptySearch")
-            : statusFilter
-              ? t("reservations.emptyStatus")
-              : hiddenFinished > 0
-                ? t("reservations.emptyOpen")
-                : t("reservations.empty")}
+            : dateActive
+              ? t("filters.emptyRange")
+              : statusFilter
+                ? t("reservations.emptyStatus")
+                : hiddenFinished > 0
+                  ? t("reservations.emptyOpen")
+                  : t("reservations.empty")}
         </div>
       ) : (
         <div

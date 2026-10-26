@@ -44,15 +44,18 @@ export class MocksUnavailableError extends Error {
 }
 
 // Error de la API: `message` ya viene traducido al idioma activo; `original` es
-// el texto que mando el servidor y `code` su extensions.code, si lo trae
+// el texto que mando el servidor, `code` su extensions.code y `retryAfterSeconds`
+// los segundos de espera cuando la cuenta esta bloqueada
 export class ApiError extends Error {
   readonly code: string | undefined;
   readonly original: string;
-  constructor(original: string, code?: string) {
+  readonly retryAfterSeconds: number | undefined;
+  constructor(original: string, code?: string, retryAfterSeconds?: number) {
     super(translateError(original, code));
     this.name = "ApiError";
     this.code = code;
     this.original = original;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -108,11 +111,18 @@ async function request<T>(query: string, variables?: Record<string, unknown>): P
 async function readData<T>(response: Response): Promise<T> {
   const json = (await response.json()) as {
     data?: T;
-    errors?: Array<{ message: string; extensions?: { code?: string } }>;
+    errors?: Array<{
+      message: string;
+      extensions?: { code?: string; retryAfterSeconds?: number };
+    }>;
   };
 
   if (json.errors && json.errors.length > 0) {
-    throw new ApiError(json.errors[0].message, json.errors[0].extensions?.code);
+    throw new ApiError(
+      json.errors[0].message,
+      json.errors[0].extensions?.code,
+      json.errors[0].extensions?.retryAfterSeconds,
+    );
   }
 
   if (!json.data) {
