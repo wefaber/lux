@@ -43,6 +43,7 @@ export const domain: Translation<typeof es> = {
   "locationKind.laboratory": "Laboratory",
   "locationKind.classroom": "Classroom",
   "locationKind.administration": "Administration",
+  "locationKind.special": "Special area",
   "locationKind.other": "Other",
   "resource.equipment": "Equipment",
   "resource.location": "Space",

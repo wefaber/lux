@@ -1,0 +1,2 @@
+ALTER TABLE "locations" DROP CONSTRAINT "locations_kind_check";--> statement-breakpoint
+ALTER TABLE "locations" ADD CONSTRAINT "locations_kind_check" CHECK ("locations"."kind" in ('laboratory', 'classroom', 'administration', 'special', 'other'));

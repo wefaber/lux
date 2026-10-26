@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, UserCheck, RotateCcw, Undo2, Hourglass, PlayCircle } from "lucide-react";
+import { ArrowLeft, UserCheck, RotateCcw, Undo2, Hourglass, PlayCircle, Star } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/hooks/useI18n";
-import { gql, formatDateTime, errorMessage } from "@/lib/utils";
+import { gql, formatDateTime, errorMessage, cn } from "@/lib/utils";
 import {
   ROUTES,
   TICKET_CATEGORY_LABELS,
@@ -32,6 +32,7 @@ const TICKET_QUERY = `
  equipment { id type machineId kind brand model serialNumber partNumber status issues location components { id name model manufacturer serialNumber partNumber isFactory isWorking } updatedAt createdAt deletedAt }
  diagnosis corrected actionsTaken
  createdAt updatedAt resolvedAt
+ rating ratedAt
  }
  }
 `; // Obtencion de datos del ticket
@@ -45,6 +46,12 @@ const CLAIM_TICKET_MUTATION = `
 const CHANGE_STATUS_MUTATION = `
  mutation ChangeTicketStatus($id: ID!, $status: String!) {
  changeTicketStatus(id: $id, status: $status) { id status }
+ }
+`;
+
+const RATE_TICKET_MUTATION = `
+ mutation RateTicket($id: ID!, $rating: Int!) {
+ rateTicket(id: $id, rating: $rating) { id rating ratedAt }
  }
 `;
 
@@ -72,8 +79,72 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+// Valoracion del solicitante sobre un ticket ya resuelto: una estrella por
+// punto, se puede cambiar mientras el ticket siga resuelto
+function RatingCard({ ticket, onRated }: { ticket: Ticket; onRated: () => void }) {
+  const { t } = useI18n();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  const rate = async (value: number) => {
+    setBusy(true);
+    setError("");
+    setSaved(false);
+    try {
+      await gql(RATE_TICKET_MUTATION, { id: ticket.id, rating: value });
+      setSaved(true);
+      onRated();
+    } catch (err) {
+      setError(errorMessage(err, t("tickets.rating.failed")));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
+      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-0.5">
+        {t("tickets.rating.yourRating")}
+      </p>
+      <p className="text-sm font-medium text-foreground">{t("tickets.rating.title")}</p>
+      <div
+        className="mt-2 flex flex-wrap items-center gap-1"
+        role="group"
+        aria-label={t("tickets.rating.title")}
+      >
+        {[1, 2, 3, 4, 5].map((value) => {
+          const on = ticket.rating !== null && value <= ticket.rating;
+          return (
+            <button
+              key={value}
+              type="button"
+              disabled={busy}
+              onClick={() => rate(value)}
+              aria-label={t("tickets.rating.label", { value })}
+              aria-pressed={ticket.rating === value}
+              className={cn(
+                "rounded-lg p-1.5 transition-colors hover:bg-warning/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40 cursor-pointer",
+                on ? "text-warning" : "text-muted-foreground",
+              )}
+            >
+              <Star className={cn("h-5 w-5", on && "fill-current")} />
+            </button>
+          );
+        })}
+        <span className="ml-2 text-xs text-muted-foreground">
+          {ticket.rating !== null ? `${ticket.rating}/5` : t("tickets.rating.pending")}
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">{t("tickets.rating.help")}</p>
+      {saved && <p className="mt-1 text-xs text-success">{t("tickets.rating.saved")}</p>}
+      {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
 // Vista del solicitante: puede seguir su ticket pero no operar sobre él
-function TicketReadOnly({ ticket }: { ticket: Ticket }) {
+function TicketReadOnly({ ticket, onRated }: { ticket: Ticket; onRated: () => void }) {
   const { t } = useI18n();
   const statusConf = TICKET_STATUS_CONFIG[ticket.status];
   return (
@@ -115,6 +186,7 @@ function TicketReadOnly({ ticket }: { ticket: Ticket }) {
             <p className="leading-relaxed">{ticket.actionsTaken}</p>
           </Field>
         )}
+        {ticket.status === "resolved" && <RatingCard ticket={ticket} onRated={onRated} />}
       </CardContent>
     </Card>
   );
@@ -206,7 +278,7 @@ export function TicketDetail() {
           </CardContent>
         </Card>
       ) : ticket && !isStaff ? (
-        <TicketReadOnly ticket={ticket} />
+        <TicketReadOnly ticket={ticket} onRated={refetch} />
       ) : ticket ? (
         <Card>
           <CardContent className="pt-6">

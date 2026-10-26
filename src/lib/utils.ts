@@ -149,6 +149,18 @@ export function initials(name: string): string {
     .toUpperCase();
 } // Iniciales del nombre para el avatar
 
+export function formatDuration(hours: number): string {
+  const totalMinutes = Math.max(0, Math.round(hours * 60));
+  if (totalMinutes < 60) return t("duration.minutes", { minutes: totalMinutes });
+  const totalHours = Math.round(totalMinutes / 60);
+  if (totalHours < 48) return t("duration.hours", { hours: totalHours });
+  const days = Math.floor(totalHours / 24);
+  const rest = totalHours % 24;
+  return rest === 0
+    ? t("duration.days", { days })
+    : t("duration.daysHours", { days, hours: rest });
+} // Duracion legible ("2 d 10 h"); el "aproximado" lo agrega la pantalla
+
 export function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 } // Mensaje para mostrar de un error atrapado en un catch

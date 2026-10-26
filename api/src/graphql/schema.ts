@@ -51,6 +51,8 @@ export const typeDefs = /* GraphQL */ `
     claimTicket(id: ID!): Ticket!
     completeTicket(id: ID!, input: TicketCompleteInput!): Ticket!
     changeTicketStatus(id: ID!, status: String!): Ticket!
+    # El solicitante puntua un ticket propio ya resuelto (1-5)
+    rateTicket(id: ID!, rating: Int!): Ticket!
     createLoan(input: LoanInput!): Loan!
     approveLoan(id: ID!): Loan!
     rejectLoan(id: ID!, reason: String!): Loan!
@@ -237,6 +239,11 @@ export const typeDefs = /* GraphQL */ `
     createdAt: String!
     updatedAt: String!
     resolvedAt: String
+    # Primera vez que un tecnico tomo el ticket
+    attendedAt: String
+    # Valoracion del solicitante sobre la resolucion (1-5)
+    rating: Int
+    ratedAt: String
   }
 
   type Loan {
@@ -313,7 +320,53 @@ export const typeDefs = /* GraphQL */ `
     pendingServices: Int!
     ticketsByStatus: [TicketStatusCount!]!
     servicesByPeriod: [PeriodCount!]!
+    # Solo para el staff; null para el solicitante
     workQueue: WorkQueue
+    # Solo para el solicitante; null para el staff
+    requesterOverview: RequesterOverview
+  }
+
+  type RequesterOverview {
+    # Tickets propios sin resolver, del ultimo movimiento al mas viejo
+    activeTickets: [Ticket!]!
+    estimates: TicketEstimates!
+    satisfaction: SatisfactionSummary!
+    areas: [RequesterArea!]!
+  }
+
+  type TicketEstimates {
+    # Promedio desde que se creo hasta que un tecnico lo tomo
+    toAttendHours: Float
+    # Promedio desde que se creo hasta que quedo resuelto
+    toResolveHours: Float
+    # Tickets resueltos usados como muestra del promedio general
+    sampleSize: Int!
+    # Solo las categorias con al menos 3 tickets resueltos
+    byCategory: [CategoryEstimate!]!
+  }
+
+  type CategoryEstimate {
+    category: String!
+    toAttendHours: Float
+    toResolveHours: Float
+    sampleSize: Int!
+  }
+
+  type SatisfactionSummary {
+    # Promedio de las valoraciones que dejo el solicitante; null si no puntuo
+    average: Float
+    count: Int!
+  }
+
+  # Un lugar que el solicitante usa, con el estado de los equipos de ese lugar
+  type RequesterArea {
+    location: Location!
+    available: Int!
+    inUse: Int!
+    inRepair: Int!
+    retired: Int!
+    # Tickets propios sin resolver en ese lugar
+    openTickets: Int!
   }
 
   type WorkQueue {

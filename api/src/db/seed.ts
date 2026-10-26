@@ -144,6 +144,9 @@ async function seed(): Promise<void> {
       createdAt: t.createdAt,
       updatedAt: t.updatedAt,
       resolvedAt: t.resolvedAt,
+      attendedAt: t.attendedAt,
+      rating: t.rating,
+      ratedAt: t.ratedAt,
     })),
   );
 
