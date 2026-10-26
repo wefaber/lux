@@ -1,6 +1,8 @@
 import { plain, withLang } from "@/i18n";
 import type { StatusConfig } from "@/lib/constants";
 import * as validation from "@/lib/validation";
+import { validateImportRow as validateImportRowBase } from "@/lib/csv";
+import { validateStudent as validateStudentBase } from "@/lib/students";
 
 // El mock hace de API: igual que el backend real, responde siempre en espanol.
 // El cliente traduce esos mensajes al idioma activo (src/i18n/errors.ts), asi
@@ -22,6 +24,7 @@ function inSpanish<A extends unknown[], R>(fn: Fn<A, R>): Fn<A, R> {
 export const validateComment = inSpanish(validation.validateComment);
 export const validateComponent = inSpanish(validation.validateComponent);
 export const validateIntervention = inSpanish(validation.validateIntervention);
+export const validateLoan = inSpanish(validation.validateLoan);
 export const validateLocation = inSpanish(validation.validateLocation);
 export const validatePassword = inSpanish(validation.validatePassword);
 export const validateNewPassword = inSpanish(validation.validateNewPassword);
@@ -30,3 +33,5 @@ export const validateReservation = inSpanish(validation.validateReservation);
 export const validateServiceRequest = inSpanish(validation.validateServiceRequest);
 export const validateTicket = inSpanish(validation.validateTicket);
 export const validateUser = inSpanish(validation.validateUser);
+export const validateStudent = inSpanish(validateStudentBase);
+export const validateImportRow = inSpanish(validateImportRowBase);

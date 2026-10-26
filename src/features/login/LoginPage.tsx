@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "motion/react";
 import { Zap, AlertCircle, Eye, EyeOff, CheckCircle2 } from "lucide-react";
@@ -18,18 +18,41 @@ interface LocationState {
   passwordChanged?: boolean;
 }
 
+// El bloqueo puede durar hasta una hora: se muestra como mm:ss (15:00, 59:59)
+function formatCountdown(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
 export function LoginPage() {
   const [dni, setDni] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [attempts, setAttempts] = useState(0);
+  // Momento en que se libera el bloqueo y segundos que le quedan, para la cuenta regresiva
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [lockRemaining, setLockRemaining] = useState(0);
+  const isLocked = lockRemaining > 0;
   const { login, isLoading } = useAuth();
   const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as LocationState)?.from?.pathname ?? ROUTES.DASHBOARD;
   const passwordChanged = (location.state as LocationState | null)?.passwordChanged === true;
+
+  useEffect(() => {
+    if (lockedUntil === null) return;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((lockedUntil - Date.now()) / 1000));
+      setLockRemaining(remaining);
+      if (remaining === 0) setLockedUntil(null);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [lockedUntil]);
 
   const runLogin = async (userDni: string, userPassword: string) => {
     setError("");
@@ -38,15 +61,21 @@ export function LoginPage() {
       navigate(from, { replace: true });
     } catch (err) {
       setAttempts((a) => a + 1);
-      // El servidor responde igual que ante una clave errónea, pero marca el bloqueo con
-      // su código: la persona tiene que saber que debe esperar, no seguir probando
-      if (err instanceof ApiError && err.code === "TOO_MANY_ATTEMPTS") setError(err.message);
-      else setError(isMocksUnavailable(err) ? t("login.error.mocks") : t("login.error.credentials"));
+      // La API (y el mock) responden con el mismo texto que una clave errónea para no
+      // delatar si la cuenta existe; el bloqueo se distingue por el código y el tiempo
+      // de espera. Acá se muestra una cuenta regresiva y se deshabilita el formulario.
+      if (err instanceof ApiError && err.code === "TOO_MANY_ATTEMPTS") {
+        const seconds = err.retryAfterSeconds && err.retryAfterSeconds > 0 ? err.retryAfterSeconds : 15 * 60;
+        setLockedUntil(Date.now() + seconds * 1000);
+        return;
+      }
+      setError(isMocksUnavailable(err) ? t("login.error.mocks") : t("login.error.credentials"));
     }
   }; // Autenticacion compartida por el formulario y la burbuja de mocks
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (isLocked) return;
     if (!dni.trim() || !password.trim()) {
       setError(t("login.error.fields"));
       return;
@@ -141,7 +170,22 @@ export function LoginPage() {
               </div>
             </div>
 
-            {error && (
+            {isLocked && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                role="alert"
+                aria-live="polite"
+                className="flex items-start gap-2 rounded-xl bg-destructive/10 border border-destructive/20 px-3 py-2.5"
+              >
+                <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+                <p className="text-xs text-destructive">
+                  {t("login.locked", { time: formatCountdown(lockRemaining) })}
+                </p>
+              </motion.div>
+            )}
+
+            {!isLocked && error && (
               <motion.div
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -152,7 +196,7 @@ export function LoginPage() {
               </motion.div>
             )}
 
-            {attempts >= 3 && (
+            {!isLocked && attempts >= 3 && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -170,13 +214,15 @@ export function LoginPage() {
               </motion.div>
             )}
 
-            <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+            <Button type="submit" className="w-full" size="lg" disabled={isLoading || isLocked}>
               {isLoading ? (
                 <motion.div
                   animate={{ rotate: 360 }}
                   transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                   className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white"
                 />
+              ) : isLocked ? (
+                t("login.locked.button", { time: formatCountdown(lockRemaining) })
               ) : (
                 t("login.submit")
               )}

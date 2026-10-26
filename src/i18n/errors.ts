@@ -27,7 +27,7 @@ export const ERROR_CODE_KEYS: Record<string, MessageKey> = {
 const MESSAGE_PREFIXES = ["error.", "validation."];
 // Los parametros que son etiquetas de dominio ("Marca", "En progreso", "aprobar")
 // se traducen tambien: se reconocen por su texto en espanol
-const LABEL_PREFIXES = ["field.", "status.", "role.", "verb.", "locationKind.", "equipmentKind."];
+const LABEL_PREFIXES = ["field.", "status.", "role.", "shift.", "verb.", "locationKind.", "equipmentKind."];
 
 interface Matcher {
   key: MessageKey;

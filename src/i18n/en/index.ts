@@ -2,6 +2,7 @@ import type { MessageKey } from "..";
 import { app } from "./app";
 import { core } from "./core";
 import { domain } from "./domain";
+import { filters } from "./filters";
 import { errors } from "./errors";
 import { comments } from "./comments";
 import { admin } from "./admin";
@@ -13,6 +14,7 @@ import { inventory } from "./inventory";
 import { tickets } from "./tickets";
 import { dashboard } from "./dashboard";
 import { profile } from "./profile";
+import { help } from "./help";
 import { validation } from "./validation";
 
 // Ingles: tiene que tener exactamente las claves del espanol
@@ -20,6 +22,7 @@ export const en: Record<MessageKey, string> = {
   ...core,
   ...app,
   ...domain,
+  ...filters,
   ...errors,
   ...comments,
   ...admin,
@@ -31,5 +34,6 @@ export const en: Record<MessageKey, string> = {
   ...tickets,
   ...dashboard,
   ...profile,
+  ...help,
   ...validation,
 };

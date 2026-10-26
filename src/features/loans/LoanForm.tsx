@@ -2,8 +2,9 @@ import { useState, type FormEvent } from "react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/hooks/useI18n";
-import { gql, errorMessage } from "@/lib/utils";
+import { gql, errorMessage, toDateTimeInput } from "@/lib/utils";
 import type { Product, User } from "@/lib/types";
+import { validateLoan, type FieldErrors, type LoanFields } from "@/lib/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,8 +39,13 @@ export function LoanForm({ onSuccess }: LoanFormProps) {
   const { t } = useI18n();
   const [equipmentId, setEquipmentId] = useState("");
   const [userId, setUserId] = useState("");
-  const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 16));
-  const [returnDate, setReturnDate] = useState("");
+  // toDateTimeInput usa la fecha local: toISOString() a las 21:00 en Uruguay
+  // ya devuelve el día siguiente
+  const [form, setForm] = useState<LoanFields>({
+    issueDate: toDateTimeInput(),
+    returnDate: "",
+  });
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<keyof LoanFields>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const { hasRole } = useAuth();
@@ -62,15 +68,23 @@ export function LoanForm({ onSuccess }: LoanFormProps) {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!equipmentId || (isStaff && !userId) || !returnDate) {
+    if (!equipmentId || (isStaff && !userId) || !form.returnDate) {
       setError(t("loans.form.required"));
       return;
     }
+    const errors = validateLoan(form);
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
     setSaving(true);
     setError("");
     try {
       await gql(CREATE_LOAN_MUTATION, {
-        input: { equipmentId, userId: isStaff ? userId : undefined, issueDate, returnDate },
+        input: {
+          equipmentId,
+          userId: isStaff ? userId : undefined,
+          issueDate: form.issueDate,
+          returnDate: form.returnDate,
+        },
       });
       onSuccess();
     } catch (err) {
@@ -80,8 +94,16 @@ export function LoanForm({ onSuccess }: LoanFormProps) {
     }
   };
 
+  const update = (key: keyof LoanFields, value: string) => {
+    setForm((f) => ({ ...f, [key]: value }));
+    setFieldErrors((e) => ({ ...e, [key]: undefined }));
+  };
+
+  const fieldError = (key: keyof LoanFields) =>
+    fieldErrors[key] && <p className="text-xs text-destructive">{fieldErrors[key]}</p>;
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+    <form onSubmit={handleSubmit} noValidate className="space-y-4 pt-2">
       <div className="space-y-1.5">
         <Label htmlFor="loan-equipment">{t("loans.form.equipment")}</Label>
         <OptionSelect
@@ -117,20 +139,25 @@ export function LoanForm({ onSuccess }: LoanFormProps) {
           <Input
             id="loan-issue"
             type="datetime-local"
-            value={issueDate}
-            onChange={(e) => setIssueDate(e.target.value)}
+            value={form.issueDate}
+            // La regla es por día: hoy vale a cualquier hora, ayer no
+            min={toDateTimeInput().slice(0, 10)}
+            onChange={(e) => update("issueDate", e.target.value)}
             required
           />
+          {fieldError("issueDate")}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="loan-return">{t("loans.form.returnDate")}</Label>
           <Input
             id="loan-return"
             type="datetime-local"
-            value={returnDate}
-            onChange={(e) => setReturnDate(e.target.value)}
+            value={form.returnDate}
+            min={form.issueDate}
+            onChange={(e) => update("returnDate", e.target.value)}
             required
           />
+          {fieldError("returnDate")}
         </div>
       </div>
 
