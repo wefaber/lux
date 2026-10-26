@@ -25,6 +25,8 @@ export const validation = {
   "validation.code.digit": "{label}: tiene que incluir al menos un número",
   "validation.location.kind": "Elegí el tipo de ubicación",
   "validation.location.number": "Número: entero entre 1 y 99",
+  "validation.location.duplicateCode": "Ya existe {name} ({code})",
+  "validation.location.duplicateName": "Ya existe una ubicación llamada {name}",
   "validation.reservation.startInvalid": "Fecha de inicio inválida",
   "validation.reservation.past": "La reserva no puede empezar en el pasado",
   "validation.reservation.endInvalid": "Fecha de fin inválida",

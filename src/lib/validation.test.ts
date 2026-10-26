@@ -10,7 +10,13 @@ import {
 } from "./validation";
 import { mockComponents, mockProducts } from "@/mocks/data/equipment";
 import { mockLocations } from "@/mocks/data/locations";
-import { locationCode, validateComponent, validateLocation, validateProduct } from "./validation";
+import {
+  locationCode,
+  locationConflict,
+  validateComponent,
+  validateLocation,
+  validateProduct,
+} from "./validation";
 
 describe("validateName", () => {
   test.each([
@@ -65,6 +71,7 @@ describe("locationCode", () => {
     expect(locationCode("laboratory", 2)).toBe("L2");
     expect(locationCode("classroom", 10)).toBe("S10");
     expect(locationCode("administration", 1)).toBe("A1");
+    expect(locationCode("special", 1)).toBe("E1");
     expect(locationCode("laboratory", 0)).toBeNull();
     expect(locationCode("laboratory", 100)).toBeNull();
     expect(locationCode("pasillo", 1)).toBeNull();
@@ -77,6 +84,8 @@ describe("validateLocation", () => {
     expect(
       validateLocation({ kind: "laboratory", number: 3, name: "Laboratorio 3 (Electrónica)" }),
     ).toEqual({});
+    // Las areas especiales llevan su propio nombre
+    expect(validateLocation({ kind: "special", number: 1, name: "Dirección" })).toEqual({});
   });
 
   test("rechaza tipo desconocido, número fuera de rango y nombres sin sentido", () => {
@@ -84,6 +93,37 @@ describe("validateLocation", () => {
     expect(validateLocation({ kind: "laboratory", number: 0, name: "Lab" }).number).toBeDefined();
     expect(validateLocation({ kind: "laboratory", number: 1.5, name: "Lab" }).number).toBeDefined();
     expect(validateLocation({ kind: "laboratory", number: 1, name: "asdasd" }).name).toBeDefined();
+  });
+});
+
+describe("locationConflict", () => {
+  test("avisa el código y el nombre repetidos como lo hace el servidor", () => {
+    expect(
+      locationConflict(
+        { kind: "laboratory", number: 1, name: "Laboratorio de redes", code: "L1" },
+        mockLocations,
+      ),
+    ).toEqual({ number: "Ya existe Laboratorio 1 (L1)" });
+    expect(
+      locationConflict(
+        { kind: "classroom", number: 30, name: "  laboratorio 1 ", code: "S30" },
+        mockLocations,
+      ),
+    ).toEqual({ name: "Ya existe una ubicación llamada laboratorio 1" });
+    expect(
+      locationConflict({ kind: "special", number: 3, name: "Bedelía", code: "E3" }, mockLocations),
+    ).toEqual({});
+  });
+
+  test("al editar no choca consigo misma", () => {
+    const own = mockLocations.find((l) => l.code === "L1")!;
+    expect(
+      locationConflict(
+        { kind: "laboratory", number: 1, name: own.name, code: own.code },
+        mockLocations,
+        own.id,
+      ),
+    ).toEqual({});
   });
 });
 

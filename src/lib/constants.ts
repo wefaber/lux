@@ -184,16 +184,29 @@ export const LOCATION_KIND_LABELS = labels<LocationKind>({
   laboratory: "locationKind.laboratory",
   classroom: "locationKind.classroom",
   administration: "locationKind.administration",
+  special: "locationKind.special",
   other: "locationKind.other",
 }); // Tipos de ubicacion
 
-// Letra de cada tipo: L1 = Laboratorio 1, S2 = Salon 2, A1 = Administracion 1
+// Letra de cada tipo: L1 = Laboratorio 1, S2 = Salon 2, A1 = Administracion 1,
+// E1 = Direccion (area especial)
 export const LOCATION_KIND_LETTER: Record<LocationKind, string> = {
   laboratory: "L",
   classroom: "S",
   administration: "A",
+  special: "E",
   other: "O",
 };
+
+// Orden en que se listan y se ofrecen los tipos: aulas, oficinas y areas
+// especiales antes de "otro"
+export const LOCATION_KIND_ORDER: LocationKind[] = [
+  "laboratory",
+  "classroom",
+  "administration",
+  "special",
+  "other",
+];
 
 export const RESERVATION_STATUS_CONFIG: Record<ReservationStatus, StatusConfig> = {
   pending: statusConfig("status.reservation.pending", "warning"),

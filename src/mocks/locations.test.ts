@@ -136,6 +136,26 @@ describe("#16 modificar ubicaciones", () => {
   });
 });
 
+describe("#6 áreas especiales", () => {
+  test("Dirección y Adscripciones se listan como áreas especiales con código E", async () => {
+    const res = await gqlAs<{ locations: Location[] }>(SOLICITANTE, LIST);
+    const special = res.data!.locations.filter((l) => l.kind === "special");
+    expect(special.map((l) => l.name)).toEqual(
+      expect.arrayContaining(["Dirección", "Adscripciones"]),
+    );
+    for (const l of special) expect(l.code).toBe(`E${l.number}`);
+  });
+
+  test("un área especial nueva se registra con su propia letra", async () => {
+    seq++;
+    const res = await gqlAs<{ createLocation: { code: string } }>(TECNICO, CREATE, {
+      input: { kind: "special", number: seq, name: `Bedelía ${seq}` },
+    });
+    expect(res.errors).toBeUndefined();
+    expect(res.data!.createLocation.code).toBe(`E${seq}`);
+  });
+});
+
 describe("#16 eliminar ubicaciones", () => {
   test("no se elimina una ubicación con equipos", async () => {
     const res = await gqlAs(TECNICO, DELETE, { id: "loc-1" });
