@@ -79,10 +79,16 @@ export function loginIpMaxAttempts(): number {
   return positiveInt("LOGIN_IP_MAX_ATTEMPTS", 50);
 }
 
-/** Minutos de bloqueo, y ventana de conteo de fallos (default 15). */
+/** Minutos del primer bloqueo, y ventana de conteo de fallos (default 15). */
 export function loginLockMinutes(): number {
   loadEnv();
   return positiveInt("LOGIN_LOCK_MINUTES", 15);
+}
+
+/** Tope del bloqueo incremental en minutos (default 60). */
+export function loginLockMaxMinutes(): number {
+  loadEnv();
+  return positiveInt("LOGIN_LOCK_MAX_MINUTES", 60);
 }
 
 /**

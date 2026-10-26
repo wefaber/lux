@@ -1,5 +1,5 @@
 {
-  "id": "c4a79f77-89ee-465c-8b74-c457d689cc9e",
+  "id": "55d1a2f1-b8ea-431b-b429-8e5007cc9ca7",
   "prevId": "da433d57-53f7-463d-9e9d-dbcee1c6359c",
   "version": "7",
   "dialect": "postgresql",
@@ -274,149 +274,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.error_reports": {
-      "name": "error_reports",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "fingerprint": {
-          "name": "fingerprint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "message": {
-          "name": "message",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "stack": {
-          "name": "stack",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "route": {
-          "name": "route",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_agent": {
-          "name": "user_agent",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "role": {
-          "name": "role",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "first_seen": {
-          "name": "first_seen",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "last_seen": {
-          "name": "last_seen",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "occurrences": {
-          "name": "occurrences",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'new'"
-        },
-        "github_issue_url": {
-          "name": "github_issue_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "error_reports_status_idx": {
-          "name": "error_reports_status_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "error_reports_last_seen_idx": {
-          "name": "error_reports_last_seen_idx",
-          "columns": [
-            {
-              "expression": "last_seen",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "error_reports_fingerprint_unique": {
-          "name": "error_reports_fingerprint_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "fingerprint"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "error_reports_status_check": {
-          "name": "error_reports_status_check",
-          "value": "\"error_reports\".\"status\" in ('new', 'triaged', 'resolved')"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.interventions": {
@@ -1838,6 +1695,25 @@
           "notNull": true,
           "default": true
         },
+        "student_group": {
+          "name": "student_group",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "student_shift": {
+          "name": "student_shift",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "student_subjects": {
+          "name": "student_subjects",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
         "password_hash": {
           "name": "password_hash",
           "type": "text",
@@ -1864,7 +1740,29 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "users_student_idx": {
+          "name": "users_student_idx",
+          "columns": [
+            {
+              "expression": "student_group",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "student_shift",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
@@ -1881,6 +1779,18 @@
         "users_role_check": {
           "name": "users_role_check",
           "value": "\"users\".\"role\" in ('root_admin', 'admin', 'tecnico', 'solicitante')"
+        },
+        "users_student_shift_check": {
+          "name": "users_student_shift_check",
+          "value": "\"users\".\"student_shift\" is null or \"users\".\"student_shift\" in ('matutino', 'vespertino', 'nocturno')"
+        },
+        "users_student_info_check": {
+          "name": "users_student_info_check",
+          "value": "\"users\".\"role\" = 'solicitante' or (\"users\".\"student_group\" is null and \"users\".\"student_shift\" is null and \"users\".\"student_subjects\" = '[]'::jsonb)"
+        },
+        "users_student_subjects_check": {
+          "name": "users_student_subjects_check",
+          "value": "jsonb_typeof(\"users\".\"student_subjects\") = 'array'"
         }
       },
       "isRLSEnabled": false

@@ -13,6 +13,7 @@ import type {
   ReservationResource,
   ReservationStatus,
   ErrorReportStatus,
+  StudentShift,
 } from "./types";
 import { plain, type MessageKey } from "@/i18n";
 
@@ -75,6 +76,7 @@ export const ROUTES = {
   LOANS: "/dashboard/loans",
   SERVICES: "/dashboard/service-requests",
   PROFILE: "/dashboard/profile",
+  HELP: "/dashboard/help",
   ADMIN: "/admin",
   ADMIN_USERS: "/admin/users",
   ADMIN_ROLES: "/admin/roles",
@@ -265,6 +267,12 @@ export const ROLE_LABELS = labels<UserRole>({
   tecnico: "role.tecnico",
   solicitante: "role.solicitante",
 }); // Mismas claves que ROLE_CONFIG: un solo lugar para los nombres
+
+export const STUDENT_SHIFT_LABELS = labels<StudentShift>({
+  matutino: "shift.matutino",
+  vespertino: "shift.vespertino",
+  nocturno: "shift.nocturno",
+}); // Turnos de la ficha de estudiante
 
 export const USER_STATUS_CONFIG: Record<"active" | "inactive", StatusConfig> = {
   active: statusConfig("status.user.active", "success"),

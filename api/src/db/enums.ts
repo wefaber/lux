@@ -11,6 +11,7 @@ import type {
   ReservationStatus,
   ServiceStatus,
   ServiceType,
+  StudentShift,
   TicketCategory,
   TicketStatus,
   UserRole,
@@ -26,6 +27,7 @@ function exhaustive<T extends string>() {
 }
 
 export const USER_ROLES = exhaustive<UserRole>()(["root_admin", "admin", "tecnico", "solicitante"]);
+export const STUDENT_SHIFTS = exhaustive<StudentShift>()(["matutino", "vespertino", "nocturno"]);
 export const LOCATION_KINDS = exhaustive<LocationKind>()(["laboratory", "classroom", "administration", "other"]);
 export const EQUIPMENT_STATUSES = exhaustive<EquipmentStatus>()(["available", "in_use", "in_repair", "retired"]);
 export const TICKET_STATUSES = exhaustive<TicketStatus>()(["pending", "in_progress", "in_resolution", "resolved"]);

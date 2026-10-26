@@ -1,10 +1,17 @@
 import { useState, type FormEvent } from "react";
 import { useI18n } from "@/hooks/useI18n";
 import { gql, errorMessage } from "@/lib/utils";
-import { ROLE_LABELS } from "@/lib/constants";
+import { ROLE_LABELS, STUDENT_SHIFT_LABELS } from "@/lib/constants";
 import { ASSIGNABLE_ROLES } from "@/lib/roles";
 import { validateUser, type FieldErrors, type UserFields } from "@/lib/validation";
-import type { User, UserRole } from "@/lib/types";
+import {
+  STUDENT_SHIFTS,
+  normalizeStudent,
+  parseSubjects,
+  validateStudent,
+  type StudentFieldName,
+} from "@/lib/students";
+import type { StudentShift, User, UserRole } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,21 +45,41 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
   const [email, setEmail] = useState(user?.email ?? "");
   const [role, setRole] = useState<UserRole>(user?.role ?? "solicitante");
   const [password, setPassword] = useState("");
+  const [group, setGroup] = useState(user?.studentGroup ?? "");
+  const [shift, setShift] = useState<StudentShift | "">(user?.studentShift ?? "");
+  const [subjects, setSubjects] = useState((user?.studentSubjects ?? []).join(", "));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<keyof UserFields>>({});
+  const [studentErrors, setStudentErrors] = useState<FieldErrors<StudentFieldName>>({});
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
     // Mismas reglas que la API: el error aparece junto al campo sin ir al servidor
     const errors = validateUser({ name, dni, email, role, password }, !isEdit);
+    const rawStudent = {
+      studentGroup: group,
+      studentShift: shift || null,
+      studentSubjects: parseSubjects(subjects),
+    };
+    const studentFieldErrors = role === "solicitante" ? validateStudent(rawStudent) : {};
     setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    setStudentErrors(studentFieldErrors);
+    if (Object.keys(errors).length > 0 || Object.keys(studentFieldErrors).length > 0) return;
 
     setSaving(true);
     try {
-      const input = { name, dni, email, role, ...(password ? { password } : {}) };
+      // Si el rol no es solicitante, aca se vacia la ficha (la base lo exige)
+      const student = normalizeStudent(rawStudent, role);
+      const input = {
+        name,
+        dni,
+        email,
+        role,
+        ...student,
+        ...(password ? { password } : {}),
+      };
       if (isEdit) {
         await gql(UPDATE_USER_MUTATION, { id: user.id, input });
       } else {
@@ -113,6 +140,54 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
         />
         <FieldError message={fieldErrors.email} />
       </div>
+      {role === "solicitante" && (
+        <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-3">
+          <div>
+            <p className="text-sm font-medium text-foreground">{t("admin.userForm.studentSection")}</p>
+            <p className="text-xs text-muted-foreground">{t("admin.userForm.studentHelp")}</p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="uf-group">{t("admin.userForm.group")}</Label>
+              <Input
+                id="uf-group"
+                value={group}
+                onChange={(e) => setGroup(e.target.value)}
+                placeholder={t("admin.userForm.groupPlaceholder")}
+                maxLength={20}
+              />
+              <FieldError message={studentErrors.studentGroup} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="uf-shift">{t("admin.userForm.shift")}</Label>
+              <OptionSelect
+                id="uf-shift"
+                size="md"
+                value={shift}
+                onValueChange={(v) => setShift(v as StudentShift | "")}
+                options={[
+                  { value: "", label: t("admin.userForm.noShift") },
+                  ...STUDENT_SHIFTS.map((value) => ({
+                    value,
+                    label: STUDENT_SHIFT_LABELS[value],
+                  })),
+                ]}
+              />
+              <FieldError message={studentErrors.studentShift} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="uf-subjects">{t("admin.userForm.subjects")}</Label>
+            <Input
+              id="uf-subjects"
+              value={subjects}
+              onChange={(e) => setSubjects(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">{t("admin.userForm.subjectsHelp")}</p>
+            <FieldError message={studentErrors.studentSubjects} />
+          </div>
+        </div>
+      )}
       <div className="space-y-1.5">
         <Label htmlFor="uf-password">
           {t("admin.userForm.password")} {isEdit && t("admin.userForm.passwordKeep")}

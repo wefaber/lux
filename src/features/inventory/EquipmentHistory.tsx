@@ -2,7 +2,9 @@ import { Link } from "react-router-dom";
 import { Ticket as TicketIcon, BookOpen } from "lucide-react";
 import { useAsync } from "@/hooks/useSkeleton";
 import { useI18n } from "@/hooks/useI18n";
+import { useDateRangeParams } from "@/hooks/useDateRangeParams";
 import { gql, formatDate } from "@/lib/utils";
+import { inDateRange } from "@/lib/date-range";
 import {
   LOAN_STATUS_CONFIG,
   ROUTES,
@@ -12,6 +14,7 @@ import {
 import type { Loan, Ticket } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DateRangeFilter } from "@/components/ui/date-range-filter";
 
 // Filtra en el servidor por equipo en vez de traer todos los tickets y prestamos.
 // Son dos operaciones: MSW resuelve cada handler por nombre de operacion.
@@ -49,6 +52,9 @@ export function EquipmentHistory({
   embedded,
 }: EquipmentHistoryProps) {
   const { t } = useI18n();
+  // El historial del equipo (tickets y prestamos) no tiene endpoint propio: se
+  // filtra en el cliente por la fecha que muestra cada entrada
+  const { range: dateRange, setRange: setDateRange, active: dateActive } = useDateRangeParams();
   const { data, isLoading, error } = useAsync<{ tickets: Ticket[]; loans: Loan[] }>(async () => {
     const [{ tickets }, { loans }] = await Promise.all([
       gql<{ tickets: Ticket[] }>(TICKETS_QUERY, { equipmentId }),
@@ -62,7 +68,9 @@ export function EquipmentHistory({
       .filter((tk) => tk.id !== excludeTicketId)
       .map((ticket) => ({ kind: "ticket" as const, date: ticket.createdAt, ticket })),
     ...(data?.loans ?? []).map((loan) => ({ kind: "loan" as const, date: loan.createdAt, loan })),
-  ].toSorted((a, b) => b.date.localeCompare(a.date));
+  ]
+    .filter((entry) => embedded || inDateRange(entry.date, dateRange))
+    .toSorted((a, b) => b.date.localeCompare(a.date));
 
   const body =
     isLoading && !data ? (
@@ -74,7 +82,9 @@ export function EquipmentHistory({
     ) : error ? (
       <p className="text-sm text-destructive">{t("history.loadError", { error })}</p>
     ) : entries.length === 0 ? (
-      <p className="text-sm text-muted-foreground">{t("history.empty")}</p>
+      <p className="text-sm text-muted-foreground">
+        {dateActive ? t("filters.emptyRange") : t("history.empty")}
+      </p>
     ) : (
       <ol className="space-y-2">
         {entries.map((entry) =>
@@ -142,8 +152,9 @@ export function EquipmentHistory({
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="gap-3">
         <CardTitle>{t("history.title")}</CardTitle>
+        <DateRangeFilter value={dateRange} onChange={setDateRange} />
       </CardHeader>
       <CardContent>{body}</CardContent>
     </Card>

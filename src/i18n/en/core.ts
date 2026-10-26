@@ -58,6 +58,10 @@ export const core: Translation<typeof es> = {
   "label.role": "Role",
   "label.email": "Email",
   "label.dni": "ID number",
+  "label.student": "Student",
+  "label.group": "Group",
+  "label.shift": "Shift",
+  "label.subjects": "Subjects",
   "label.optional": "(optional)",
   "common.of": "of",
 };

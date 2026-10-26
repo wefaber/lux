@@ -45,6 +45,8 @@ export const app = {
   "login.submit": "Ingresar",
   "login.footer": "ITI CETP 2026 · Los accesos son gestionados por administración",
   "login.attempts": "{count} intento | {count} intentos",
+  "login.locked": "Demasiados intentos fallidos. Podés volver a intentar en {time}.",
+  "login.locked.button": "Esperá {time}",
   "login.error.fields": "Completá todos los campos.",
   "login.error.dni": "El número de cédula debe tener 7 u 8 dígitos.",
   "login.error.credentials": "Credenciales inválidas. Verificá tu cédula y contraseña.",
