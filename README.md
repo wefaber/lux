@@ -154,10 +154,9 @@ bun format         # Formatting (oxfmt)
 
 ## Documentation
 
-| Document | Contents |
-|----------|----------|
-| [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md) | Architecture, data model, installation and usage |
-| [docs/BACKEND.md](docs/BACKEND.md) | API, GraphQL operations, permissions and migrations |
-| [docs/UML-SECUENCIAS.md](docs/UML-SECUENCIAS.md) | Happy-path sequence diagrams for use cases CU-01 to CU-27 |
-| [docs/I18N.md](docs/I18N.md) | Spanish/English internationalisation |
-| [docs/CAMBIOS.md](docs/CAMBIOS.md) | Corrections applied to the legacy SQL files |
+- [Architecture, installation and operation](docs/ARQUITECTURA.md)
+- [Backend and database](docs/BACKEND.md)
+- [Per-actor navigation flows](docs/FLUJO-NAVEGACION.md) — screens, menus, actions and Mermaid diagrams for each role
+- [Happy-path sequence diagrams (CU-01 to CU-27)](docs/UML-SECUENCIAS.md) — actors, model↔code states and differences
+- [Internationalization (es / en)](docs/I18N.md)
+- [Corrections applied to the legacy SQL files](docs/CAMBIOS.md)

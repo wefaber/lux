@@ -54,6 +54,9 @@ El frontend esta organizado en tres capas logicas, como define el issue [FS-E1 #
 3. La funcion `gql()` es el unico punto de entrada a la API. Ningun componente llama a `fetch()` directamente.
 4. Las rutas protegidas usan `<ProtectedRoute roles={[...]}>` que redirige a `/403` si el rol no coincide.
 
+Los flujos de navegación por actor (pantallas, menú, rutas y guards) están documentados en
+[`FLUJO-NAVEGACION.md`](FLUJO-NAVEGACION.md).
+
 ### Flujo de datos
 
 ```

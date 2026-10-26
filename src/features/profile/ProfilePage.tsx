@@ -243,13 +243,16 @@ export function ProfilePage() {
                   <p className="text-xs text-muted-foreground">{t("profile.a11y.dyslexicHelp")}</p>
                 </div>
                 <button
+                  type="button"
                   onClick={toggleDyslexicFont}
-                  className={`relative h-6 w-11 rounded-full transition-colors cursor-pointer ${dyslexicFont ? "bg-primary" : "bg-black/20 dark:bg-card/20"}`}
+                  className={`relative h-6 w-11 shrink-0 rounded-full transition-colors cursor-pointer ${dyslexicFont ? "bg-primary" : "bg-black/20 dark:bg-card/20"}`}
                   role="switch"
                   aria-checked={dyslexicFont}
+                  aria-label={t("profile.a11y.dyslexic")}
                 >
                   <span
-                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${dyslexicFont ? "" : "-translate-x-5"}`}
+                    aria-hidden="true"
+                    className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${dyslexicFont ? "translate-x-5" : "translate-x-0"}`}
                   />
                 </button>
               </div>

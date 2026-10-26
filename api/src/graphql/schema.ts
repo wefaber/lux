@@ -5,19 +5,19 @@ export const typeDefs = /* GraphQL */ `
   type Query {
     login(dni: String!, password: String!): AuthUser
     me: User
-    users(role: String, isActive: Boolean): [User!]!
+    users(role: String, isActive: Boolean, studentGroup: String, studentShift: String, subject: String): [User!]!
     user(id: ID!): User
     products(status: String, locationId: ID, deletedAt: String, availableForLoan: Boolean): [Product!]!
     product(id: ID!): Product
     productByMachineId(machineId: String!): Product
     components(productId: ID, isWorking: Boolean): [Component!]!
     component(id: ID!): Component
-    tickets(status: String, assignedToId: ID, submittedById: ID, equipmentId: ID): [Ticket!]!
+    tickets(status: String, assignedToId: ID, submittedById: ID, equipmentId: ID, startDate: String, endDate: String): [Ticket!]!
     ticket(id: ID!): Ticket
     oolTickets: [Ticket!]!
-    loans(status: String, userId: ID, equipmentId: ID): [Loan!]!
+    loans(status: String, userId: ID, equipmentId: ID, startDate: String, endDate: String): [Loan!]!
     loan(id: ID!): Loan
-    serviceRequests(status: String, requestedById: ID): [ServiceRequest!]!
+    serviceRequests(status: String, requestedById: ID, startDate: String, endDate: String): [ServiceRequest!]!
     serviceRequest(id: ID!): ServiceRequest
     dashboardStats(period: String): DashboardStats!
     reports: Reports!
@@ -28,7 +28,7 @@ export const typeDefs = /* GraphQL */ `
     intervention(id: ID!): Intervention
     comments(entityType: String!, entityId: ID!): [Comment!]!
     comment(id: ID!): Comment
-    reservations(status: String): [Reservation!]!
+    reservations(status: String, startDate: String, endDate: String): [Reservation!]!
     reservation(id: ID!): Reservation
     notices: [Notice!]!
     pendingNews: [String!]!
@@ -38,6 +38,7 @@ export const typeDefs = /* GraphQL */ `
     createUser(input: UserInput!): User!
     updateUser(id: ID!, input: UserInput!): User!
     deleteUser(id: ID!): Boolean!
+    importUsers(rows: [UserImportRow!]!): UserImportResult!
     createProduct(input: ProductInput!): Product!
     updateProduct(id: ID!, input: ProductUpdateInput!): Product!
     softDeleteProduct(id: ID!): Boolean!
@@ -162,8 +163,27 @@ export const typeDefs = /* GraphQL */ `
     email: String
     role: String!
     isActive: Boolean!
+    # Solo para solicitantes; null / [] cuando no hay dato
+    studentGroup: String
+    studentShift: String
+    studentSubjects: [String!]!
     createdAt: String!
     updatedAt: String!
+  }
+
+  type UserImportRowResult {
+    line: Int!
+    # created | updated | error
+    status: String!
+    userId: ID
+    error: String
+  }
+
+  type UserImportResult {
+    created: Int!
+    updated: Int!
+    failed: Int!
+    rows: [UserImportRowResult!]!
   }
 
   type Product {
@@ -332,6 +352,22 @@ export const typeDefs = /* GraphQL */ `
     password: String
     role: String!
     isActive: Boolean
+    studentGroup: String
+    studentShift: String
+    studentSubjects: [String!]
+  }
+
+  input UserImportRow {
+    line: Int!
+    name: String!
+    dni: String!
+    email: String!
+    role: String
+    password: String
+    isActive: Boolean
+    studentGroup: String
+    studentShift: String
+    studentSubjects: [String!]
   }
 
   input ProductInput {
