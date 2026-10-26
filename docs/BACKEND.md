@@ -12,7 +12,7 @@ reglas de permisos, campos calculados, bajas logicas y avisos que los mocks.
 
 - Stack: Bun + Elysia + GraphQL Yoga + Drizzle + drizzle-kit + PostgreSQL + JWT (HS256)
 - GraphQL: `POST /graphql` (GraphiQL en `GET /graphql` solo fuera de produccion)
-- REST: `/api/v1/...` (73 rutas, ver "Rutas REST")
+- REST: `/api/v1/...` (74 rutas, ver "Rutas REST")
 - Salud: `GET /health` (proceso vivo) y `GET /ready` (base alcanzable + migraciones
   aplicadas; 200 solo si esta todo bien, 503 si no; la respuesta no describe la causa,
   que queda en el log del servidor)
@@ -47,7 +47,8 @@ estan en las rutas `/api/v1`.
 | `NODE_ENV` | con `production` se cierran GraphiQL y la introspeccion | entorno / systemd |
 | `TRUST_PROXY` | con `1`, la IP del cliente es la ultima entrada de `X-Forwarded-For` (la agrega nginx) | entorno / systemd |
 | `LOGIN_MAX_ATTEMPTS` | fallos de login por documento antes del bloqueo (default 5) | entorno |
-| `LOGIN_LOCK_MINUTES` | minutos de bloqueo y de ventana de conteo (default 15) | entorno |
+| `LOGIN_LOCK_MINUTES` | minutos del primer bloqueo y de la ventana de conteo (default 15) | entorno |
+| `LOGIN_LOCK_MAX_MINUTES` | tope del bloqueo incremental: 15, 30, 60... (default 60) | entorno |
 | `LOGIN_IP_MAX_ATTEMPTS` | fallos de login por IP antes del bloqueo (default 50) | entorno |
 | `CORS_ORIGINS` | origenes del navegador que pueden llamar a la API, separados por coma (default: `https://lux.eternum.lat`, `https://dev.eternum.lat`, `http://localhost:5173`, `http://127.0.0.1:5173`). Un `*` se ignora | entorno |
 | `MAX_BODY_BYTES` | tamano maximo del cuerpo de un request (default 262144, 256 KiB); mas da HTTP 413 | entorno |
@@ -91,7 +92,7 @@ como `String`; el frontend los ordena con `localeCompare` y los parsea con
 
 | Tabla | Columnas principales |
 | --- | --- |
-| `users` | id, name, dni (unique), email, role, is_active, password_hash (argon2id), token_version |
+| `users` | id, name, dni (unique), email, role, is_active, password_hash (argon2id), token_version, student_group, student_shift, student_subjects (jsonb, solo solicitantes) |
 | `locations` | id, kind, number, name, code, created_at, updated_at, deleted_at |
 | `products` | id, machine_id, kind, brand, model, serial_number, part_number, status, issues, location_id, location, deleted_at |
 | `components` | id, name, model, manufacturer, serial_number, part_number, is_factory, is_working, product_id, deleted_at |
@@ -116,6 +117,7 @@ como `String`; el frontend los ordena con `localeCompare` y los parsea con
 | `0002_revoked_tokens` | tabla `revoked_tokens` (logout) |
 | `0003_integrity_fk_check` | 26 claves foraneas y 16 CHECK |
 | `0004_token_version` | `users.token_version` (default 0), para invalidar sesiones al cambiar la contrasena |
+| `0005_student_info` | `users.student_group`, `student_shift` (CHECK `matutino`/`vespertino`/`nocturno`) y `student_subjects` (jsonb array, default `[]`); solo el rol `solicitante` puede tener datos |
 
 Las migraciones se aplican en orden y no se reescriben. Antes de aplicar la 0003 a
 una base con datos viejos (dev, produccion) correr `scripts/preflight-integrity.ts`:
@@ -194,15 +196,17 @@ la mantiene sincronizada). Con eso el esquema no llega a 3FN estricta.
   `LOGOUT` en la auditoria. Queda pendiente que el frontend llame a `logout` al
   cerrar sesion (hoy solo borra el token del navegador).
 - **Bloqueo por intentos fallidos**: 5 fallos por documento en 15 minutos bloquean ese
-  documento 15 minutos (`TOO_MANY_ATTEMPTS`, HTTP 429, cabecera `Retry-After`); la
-  respuesta ya bloqueada es igual exista o no la cuenta, y su mensaje es el mismo
+  documento (`TOO_MANY_ATTEMPTS`, HTTP 429, cabecera `Retry-After`); el bloqueo es
+  incremental (15, 30, 60 minutos... con tope `LOGIN_LOCK_MAX_MINUTES`, default 60).
+  La respuesta ya bloqueada es igual exista o no la cuenta, y su mensaje es el mismo
   "Credenciales inválidas" de una clave erronea: el bloqueo se reconoce por `code`,
   `status` y `retryAfterSeconds`, no por el texto. Un login correcto limpia el
-  contador de ese documento. Ademas hay un umbral por IP (50 fallos en 15 minutos) contra
+  contador y la escalada de ese documento; un dia sin fallos tambien vuelve al bloqueo
+  base. Ademas hay un umbral por IP (50 fallos en 15 minutos) contra
   el rociado de contrasenas. Cada fallo deja `LOGIN_FAILED` y el bloqueo `ACCOUNT_LOCKED`.
   **Limitacion**: el contador vive en la memoria del proceso; se pierde al reiniciar y
   no se comparte entre los slots del deploy blue/green. Bloquear por documento permite
-  que un tercero deje fuera a una cuenta ajena durante 15 minutos (compromiso aceptado
+  que un tercero deje fuera a una cuenta ajena durante el bloqueo (compromiso aceptado
   frente a la fuerza bruta).
 - Para que la IP por socket sea la del cliente y no la de nginx hay que arrancar con
   `TRUST_PROXY=1`; sin eso, todos los usuarios comparten la IP del proxy.
@@ -323,6 +327,7 @@ responde 404. Cuerpo maximo: 1 MB.
 | POST | `/api/v1/users` | `createUser` | Admin |
 | PUT | `/api/v1/users/:id` | `updateUser` | Admin |
 | DELETE | `/api/v1/users/:id` | `deleteUser` | Admin |
+| POST | `/api/v1/users/import` | `importUsers` | Admin |
 | GET | `/api/v1/locations` | `locations` | Autenticado |
 | GET | `/api/v1/locations/:id` | `location` | Autenticado |
 | POST | `/api/v1/locations` | `createLocation` | Staff |

@@ -74,7 +74,7 @@ describe("buildVariables", () => {
 });
 
 describe("runRoute: envelope y status HTTP", () => {
-  const user = { id: "u1", name: "Ana", dni: "1", email: "a@x", role: "solicitante", isActive: true, createdAt: "t", updatedAt: "t" };
+  const user = { id: "u1", name: "Ana", dni: "1", email: "a@x", role: "solicitante", isActive: true, studentGroup: "1°B", studentShift: "matutino", studentSubjects: ["Redes"], createdAt: "t", updatedAt: "t" };
   const ticket = {
     id: "tkt-1", title: "t", description: "d", category: "other", status: "pending",
     submittedBy: user, assignedTo: null, equipmentId: null, equipment: null,

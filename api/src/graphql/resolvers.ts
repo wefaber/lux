@@ -1,14 +1,22 @@
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import type { InterventionFields, LocationFields } from "@/lib/validation";
 import {
   locationCode,
   validateComment,
   validateComponent,
   validateIntervention,
+  validateLoan,
   validateLocation,
   validateProduct,
   validateReservation,
 } from "@/lib/validation";
+import {
+  filterUsers,
+  normalizeStudent,
+  validateImportRow,
+  validateStudent,
+  type ImportRowInput,
+} from "@/lib/students";
 import {
   LOAN_STATUS_CONFIG,
   RESERVATION_STATUS_CONFIG,
@@ -53,9 +61,15 @@ import {
   unauthenticated,
 } from "../errors";
 import { writeAudit } from "../audit";
-import { loginIpMaxAttempts, loginLockMinutes, loginMaxAttempts } from "../env";
+import {
+  loginIpMaxAttempts,
+  loginLockMaxMinutes,
+  loginLockMinutes,
+  loginMaxAttempts,
+} from "../env";
 import { LoginGuard } from "../login-guard";
 import { userFieldResolvers } from "./privacy";
+import { exclusiveEnd, overlapsRange, withinInstantRange } from "./date-range";
 import { revokeToken } from "../sessions";
 import { db } from "../db/client";
 import * as t from "../db/schema";
@@ -506,6 +520,7 @@ const loginGuard = new LoginGuard({
   maxAttempts: loginMaxAttempts(),
   ipMaxAttempts: loginIpMaxAttempts(),
   lockMs: loginLockMinutes() * 60 * 1000,
+  maxLockMs: loginLockMaxMinutes() * 60 * 1000,
 });
 
 // Tope de largo de la contrasena que se acepta verificar (evita usar argon2 como DoS).
@@ -561,14 +576,29 @@ const Query = {
 
   me: (_p: unknown, _a: unknown, ctx: Ctx) => ctx.caller,
 
-  users: (_p: unknown, args: { role?: string; isActive?: boolean }, ctx: Ctx) => {
+  users: (
+    _p: unknown,
+    args: {
+      role?: string;
+      isActive?: boolean;
+      studentGroup?: string;
+      studentShift?: string;
+      subject?: string;
+    },
+    ctx: Ctx,
+  ) => {
     requireRole(ctx, STAFF_ROLES);
     let users = [...ctx.state.users];
-    if (args.role) users = users.filter((u) => u.role === args.role);
     if (args.isActive !== undefined && args.isActive !== null) {
       users = users.filter((u) => u.isActive === args.isActive);
     }
-    return users;
+    // Filtros de la ficha de estudiante; el cliente los aplica tambien en memoria
+    return filterUsers(users, {
+      role: args.role,
+      group: args.studentGroup,
+      shift: args.studentShift,
+      subject: args.subject,
+    });
   },
 
   user: (_p: unknown, args: { id: string }, ctx: Ctx) => {
@@ -623,7 +653,14 @@ const Query = {
 
   tickets: (
     _p: unknown,
-    args: { status?: string; assignedToId?: string; submittedById?: string; equipmentId?: string },
+    args: {
+      status?: string;
+      assignedToId?: string;
+      submittedById?: string;
+      equipmentId?: string;
+      startDate?: string;
+      endDate?: string;
+    },
     ctx: Ctx,
   ) => {
     const caller = requireAuth(ctx);
@@ -635,6 +672,10 @@ const Query = {
       tickets = tickets.filter((t) => t.submittedBy.id === scopedSubmittedById);
     }
     if (args.equipmentId) tickets = tickets.filter((t) => t.equipmentId === args.equipmentId);
+    // Rango por fecha de creacion; el cliente manda los extremos ya en su dia local
+    if (args.startDate || args.endDate) {
+      tickets = tickets.filter((t) => withinInstantRange(t.createdAt, args.startDate, args.endDate));
+    }
     return tickets;
   },
 
@@ -654,7 +695,13 @@ const Query = {
 
   loans: (
     _p: unknown,
-    args: { status?: string; userId?: string; equipmentId?: string },
+    args: {
+      status?: string;
+      userId?: string;
+      equipmentId?: string;
+      startDate?: string;
+      endDate?: string;
+    },
     ctx: Ctx,
   ) => {
     const caller = requireAuth(ctx);
@@ -664,6 +711,11 @@ const Query = {
       if (args.status) loans = filterByStatus<Loan>(loans, args.status);
       if (scopedUserId) loans = loans.filter((l) => l.user.id === scopedUserId);
       if (args.equipmentId) loans = loans.filter((l) => l.equipment.id === args.equipmentId);
+      // Rango por fecha de entrega (issueDate): es la que se ve en la lista y la
+      // que le da sentido a "prestamos de este periodo". createdAt es tecnico.
+      if (args.startDate || args.endDate) {
+        loans = loans.filter((l) => withinInstantRange(l.issueDate, args.startDate, args.endDate));
+      }
       return loans;
     });
   },
@@ -678,7 +730,7 @@ const Query = {
 
   serviceRequests: (
     _p: unknown,
-    args: { status?: string; requestedById?: string },
+    args: { status?: string; requestedById?: string; startDate?: string; endDate?: string },
     ctx: Ctx,
   ) => {
     const caller = requireAuth(ctx);
@@ -687,6 +739,12 @@ const Query = {
     if (args.status) services = filterByStatus<ServiceRequest>(services, args.status);
     if (scopedRequestedById) {
       services = services.filter((s) => s.requestedBy.id === scopedRequestedById);
+    }
+    // Rango por fecha de creacion de la solicitud
+    if (args.startDate || args.endDate) {
+      services = services.filter((s) =>
+        withinInstantRange(s.createdAt, args.startDate, args.endDate),
+      );
     }
     return services;
   },
@@ -825,11 +883,15 @@ const Query = {
     ctx: Ctx,
   ) => {
     requireRole(ctx, ELEVATED_ROLES);
+    // El "hasta" es inclusivo (todo el dia local que mando el cliente). El texto
+    // ISO guardado puede no tener milisegundos, asi que en vez de <= se usa
+    // < siguiente milisegundo.
+    const before = args.endDate ? exclusiveEnd(args.endDate) : null;
     const filters = [
       args.userId ? eq(t.activityLogs.userId, args.userId) : undefined,
       args.operation ? eq(t.activityLogs.operation, args.operation) : undefined,
       args.startDate ? gte(t.activityLogs.timestamp, args.startDate) : undefined,
-      args.endDate ? lte(t.activityLogs.timestamp, args.endDate) : undefined,
+      before ? lt(t.activityLogs.timestamp, before) : undefined,
     ].filter((f) => f !== undefined);
     return db
       .select()
@@ -880,13 +942,25 @@ const Query = {
       .toSorted((a, b) => a.createdAt.localeCompare(b.createdAt));
   },
 
-  reservations: async (_p: unknown, args: { status?: string }, ctx: Ctx) => {
+  reservations: async (
+    _p: unknown,
+    args: { status?: string; startDate?: string; endDate?: string },
+    ctx: Ctx,
+  ) => {
     const caller = requireAuth(ctx);
     await syncReservations(ctx.state);
     let reservations = isStaff(caller)
       ? [...ctx.state.reservations]
       : ctx.state.reservations.filter((r) => r.user.id === caller.id);
     if (args.status) reservations = reservations.filter((r) => r.status === args.status);
+    // Rango por el horario de la reserva, no por cuando se pidio: dos dias
+    // consecutivos muestran las reservas que ocupan esos dias, aunque hayan
+    // empezado antes
+    if (args.startDate || args.endDate) {
+      reservations = reservations.filter((r) =>
+        overlapsRange(r.startsAt, r.endsAt, args.startDate, args.endDate),
+      );
+    }
     reservations.sort((a, b) => b.startsAt.localeCompare(a.startsAt));
     return reservations;
   },
@@ -930,6 +1004,9 @@ const Mutation = {
         password?: string;
         role: string;
         isActive?: boolean;
+        studentGroup?: string | null;
+        studentShift?: string | null;
+        studentSubjects?: string[] | null;
       };
     },
     ctx: Ctx,
@@ -942,13 +1019,23 @@ const Mutation = {
     if (ctx.state.users.some((u) => u.dni === input.dni)) {
       throw conflict("Ya existe un usuario con ese documento");
     }
+    const role = input.role as UserRole;
+    const rawStudent = {
+      studentGroup: input.studentGroup ?? null,
+      studentShift: input.studentShift ?? null,
+      studentSubjects: input.studentSubjects ?? [],
+    };
+    const studentError = role === "solicitante" ? firstError(validateStudent(rawStudent)) : null;
+    if (studentError) throw invalid(studentError);
+    const student = normalizeStudent(rawStudent, role);
     const user: User = {
       id: nextId(ctx.state, USER_ID_PREFIX[input.role as UserRole] ?? "u-", ctx.state.users),
       name: input.name,
       dni: input.dni,
       email: input.email,
-      role: input.role as UserRole,
+      role,
       isActive: input.isActive ?? true,
+      ...student,
       createdAt: nowIso(),
       updatedAt: nowIso(),
     };
@@ -978,7 +1065,21 @@ const Mutation = {
     if (typeof rest.dni === "string" && ctx.state.users.some((u) => u.dni === rest.dni && u.id !== user.id)) {
       throw conflict("Ya existe un usuario con ese documento");
     }
-    const next = { ...rest, updatedAt: nowIso() } as Partial<typeof t.users.$inferInsert>;
+    // Sin campo en el input se conserva lo que habia; si el rol deja de ser
+    // solicitante, normalizeStudent vacia la ficha (la base tambien lo exige).
+    const rawStudent = {
+      studentGroup: rest.studentGroup !== undefined ? (rest.studentGroup as string | null) : user.studentGroup,
+      studentShift: rest.studentShift !== undefined ? (rest.studentShift as string | null) : user.studentShift,
+      studentSubjects: rest.studentSubjects !== undefined
+        ? ((rest.studentSubjects as string[] | null) ?? [])
+        : user.studentSubjects,
+    };
+    const studentError = role === "solicitante" ? firstError(validateStudent(rawStudent)) : null;
+    if (studentError) throw invalid(studentError);
+    const student = normalizeStudent(rawStudent, role as UserRole);
+    // Los campos de estudiante se reemplazan por los normalizados, no se copian crudos
+    const { studentGroup: _group, studentShift: _shift, studentSubjects: _subjects, ...base } = rest;
+    const next = { ...base, ...student, updatedAt: nowIso() };
     const passwordHash = password
       ? await Bun.password.hash(String(password), { algorithm: "argon2id" })
       : undefined;
@@ -990,7 +1091,7 @@ const Mutation = {
         ...(passwordHash ? { passwordHash, tokenVersion: sql`${t.users.tokenVersion} + 1` } : {}),
       })
       .where(eq(t.users.id, user.id));
-    Object.assign(user, rest, { updatedAt: next.updatedAt });
+    Object.assign(user, base, student, { updatedAt: next.updatedAt });
     return user;
   },
 
@@ -1009,6 +1110,100 @@ const Mutation = {
       .set({ isActive: false, updatedAt: user.updatedAt })
       .where(eq(t.users.id, user.id));
     return true;
+  },
+
+  // Importación masiva (CSV exportado de Excel). Nunca aborta el lote: cada fila
+  // vuelve con su estado y su error. Actualiza solo la ficha de estudiante de
+  // quien ya existe; no cambia rol, documento, email ni contraseña de nadie.
+  importUsers: async (_p: unknown, args: { rows: ImportRowInput[] }, ctx: Ctx) => {
+    requireRole(ctx, ELEVATED_ROLES);
+    const rows: Array<{ line: number; status: string; userId: string | null; error: string | null }> = [];
+    const seenDni = new Map<string, number>();
+    const seenEmail = new Map<string, number>();
+    let created = 0;
+    let updated = 0;
+    let failed = 0;
+
+    const fail = (line: number, error: string) => {
+      failed++;
+      rows.push({ line, status: "error", userId: null, error });
+    };
+
+    for (const raw of args.rows) {
+      const parsed = validateImportRow(raw);
+      if ("error" in parsed) {
+        fail(raw.line ?? 1, parsed.error);
+        continue;
+      }
+      const { line, name, dni, email, role, password, isActive, student } = parsed.row;
+
+      const firstDni = seenDni.get(dni);
+      if (firstDni !== undefined) {
+        fail(line, `Documento ${dni} repetido en la fila ${firstDni}`);
+        continue;
+      }
+      const emailKey = email.toLowerCase();
+      const firstEmail = seenEmail.get(emailKey);
+      if (firstEmail !== undefined) {
+        fail(line, `Email ${email} repetido en la fila ${firstEmail}`);
+        continue;
+      }
+      seenDni.set(dni, line);
+      seenEmail.set(emailKey, line);
+
+      const byDni = ctx.state.users.find((u) => u.dni === dni);
+      const byEmail = ctx.state.users.find((u) => u.email.toLowerCase() === emailKey);
+      if (byDni && byEmail && byDni.id !== byEmail.id) {
+        fail(line, "El documento y el email pertenecen a usuarios distintos");
+        continue;
+      }
+      const existing = byDni ?? byEmail;
+      if (existing) {
+        if (existing.role !== "solicitante") {
+          fail(line, `La persona ya existe con rol ${existing.role}`);
+          continue;
+        }
+        // Celda vacía = dejar el dato como estaba
+        const nextStudent = {
+          studentGroup: student.studentGroup ?? existing.studentGroup,
+          studentShift: student.studentShift ?? existing.studentShift,
+          studentSubjects: student.studentSubjects.length
+            ? student.studentSubjects
+            : existing.studentSubjects,
+        };
+        const updatedAt = nowIso();
+        await db
+          .update(t.users)
+          .set({ ...nextStudent, updatedAt })
+          .where(eq(t.users.id, existing.id));
+        Object.assign(existing, nextStudent, { updatedAt });
+        updated++;
+        rows.push({ line, status: "updated", userId: existing.id, error: null });
+        continue;
+      }
+
+      const now = nowIso();
+      const user: User = {
+        id: nextId(ctx.state, USER_ID_PREFIX[role] ?? "u-", ctx.state.users),
+        name,
+        dni,
+        email,
+        role,
+        isActive,
+        ...student,
+        createdAt: now,
+        updatedAt: now,
+      };
+      // Sin contraseña en el archivo, la clave inicial es el documento
+      const passwordHash = await Bun.password.hash(password ?? dni, { algorithm: "argon2id" });
+      await db.insert(t.users).values({ ...user, passwordHash });
+      ctx.state.users.push(user);
+      ctx.state.usersById.set(user.id, user);
+      created++;
+      rows.push({ line, status: "created", userId: user.id, error: null });
+    }
+
+    return { created, updated, failed, rows };
   },
 
   createProduct: async (
@@ -1522,9 +1717,7 @@ const Mutation = {
     if (equipment.status !== "available" || hasOpenLoan(ctx.state, equipment.id)) {
       throw conflict("El equipo no está disponible para préstamo");
     }
-    if (!(new Date(input.returnDate) > new Date(input.issueDate))) {
-      throw invalid("La fecha de devolución debe ser posterior a la de entrega");
-    }
+    assertRules(firstError(validateLoan(input)));
     const components = input.componentIds
       ? ctx.state.components.filter((c) => input.componentIds!.includes(c.id))
       : [];
@@ -2397,6 +2590,12 @@ const AUDIT: Record<keyof typeof Mutation, AuditSpec> = {
   createUser: { entity: "User" },
   updateUser: { entity: "User" },
   deleteUser: { entity: "User", details: () => "Baja lógica (is_active = false)" },
+  importUsers: {
+    entity: "User",
+    id: () => "-",
+    details: (_a, r) =>
+      `Importación CSV: ${r.created} creados, ${r.updated} actualizados, ${r.failed} con error`,
+  },
   createProduct: { entity: "Product" },
   updateProduct: { entity: "Product" },
   softDeleteProduct: { entity: "Product", details: () => "Baja lógica (deleted_at)" },

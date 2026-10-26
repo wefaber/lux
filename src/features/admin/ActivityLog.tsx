@@ -10,11 +10,13 @@ import type { ActivityLog as ActivityLogType } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { TableSkeleton } from "@/components/skeletons/TableSkeleton";
+import { DateRangeFilter } from "@/components/ui/date-range-filter";
+import { useDateRangeParams } from "@/hooks/useDateRangeParams";
 import type { StatusColor } from "@/lib/constants";
 
 const LOGS_QUERY = `
- query GetActivityLogs($userId: ID, $operation: String) {
- activityLogs(userId: $userId, operation: $operation) {
+ query GetActivityLogs($userId: ID, $operation: String, $startDate: String, $endDate: String) {
+ activityLogs(userId: $userId, operation: $operation, startDate: $startDate, endDate: $endDate) {
  id userId userName operation entity entityId timestamp details
  }
  }
@@ -68,6 +70,10 @@ const GENERIC_DETAILS = /^Operación (\S+) en (\S+)$/;
 export function ActivityLog() {
   const { t } = useI18n();
   const [search, setSearch] = useState("");
+  // La API ya acepta startDate/endDate: el rango se manda al servidor y queda
+  // en la URL para poder recargar o compartir la consulta
+  const { range: dateRange, setRange: setDateRange, active: dateActive, bounds } =
+    useDateRangeParams();
 
   const details = (text: string | null): string => {
     if (!text) return "—";
@@ -80,8 +86,12 @@ export function ActivityLog() {
   };
 
   const { data, isLoading } = useAsync<{ activityLogs: ActivityLogType[] }>(
-    () => gql(LOGS_QUERY),
-    [],
+    () =>
+      gql(LOGS_QUERY, {
+        startDate: bounds?.startDate,
+        endDate: bounds?.endDate,
+      }),
+    [bounds?.startDate, bounds?.endDate],
   );
 
   const logs = (data?.activityLogs ?? []).filter(
@@ -103,19 +113,26 @@ export function ActivityLog() {
         <p className="text-sm text-muted-foreground mt-0.5">{t("admin.logs.subtitle")}</p>
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder={t("admin.logs.search")}
-          aria-label={t("admin.logs.search")}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-        />
+      <div className="flex gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder={t("admin.logs.search")}
+            aria-label={t("admin.logs.search")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <DateRangeFilter value={dateRange} onChange={setDateRange} />
       </div>
 
       {isLoading ? (
         <TableSkeleton rows={8} cols={5} />
+      ) : logs.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground text-sm">
+          {dateActive ? t("filters.emptyRange") : t("common.noData")}
+        </div>
       ) : (
         <div className="rounded-2xl border border-border overflow-x-auto bg-card/20 backdrop-blur-sm">
           <table className="w-full">

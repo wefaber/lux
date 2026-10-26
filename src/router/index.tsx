@@ -20,6 +20,7 @@ import { LoansPage } from "@/features/loans/LoansPage";
 import { ServiceList } from "@/features/services/ServiceList";
 import { ServiceDetail } from "@/features/services/ServiceDetail";
 import { ProfilePage } from "@/features/profile/ProfilePage";
+import { HelpPage } from "@/features/help/HelpPage";
 import { AdminDashboard } from "@/features/admin/AdminDashboard";
 import { UserManagement } from "@/features/admin/UserManagement";
 import { RolesConfig } from "@/features/admin/RolesConfig";
@@ -126,6 +127,7 @@ export const router = createBrowserRouter([
       { path: "reservations", element: <ReservationsPage /> },
       { path: "service-requests/:id", element: <ServiceDetail /> },
       { path: "profile", element: <ProfilePage /> },
+      { path: "help", element: <HelpPage /> },
     ],
   },
 
