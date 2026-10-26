@@ -34,6 +34,7 @@ export const errors: Translation<typeof es> = {
   "error.user.dupDni": "A user with ID number {dni} already exists",
   "error.user.dupEmail": "A user with email {email} already exists",
   "error.password.wrong": "The current password is not correct",
+  "error.password.same": "The new password must be different from the current one",
   "error.product.dupId": "Equipment with ID {id} already exists",
   "error.product.dupSerial": "Equipment with serial number {serial} already exists",
   "error.product.retireLoans": "Cannot retire: the equipment has loans in progress",

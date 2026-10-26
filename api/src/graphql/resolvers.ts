@@ -7,6 +7,7 @@ import {
   validateIntervention,
   validateLoan,
   validateLocation,
+  validateNewPassword,
   validateProduct,
   validateReservation,
 } from "@/lib/validation";
@@ -2086,6 +2087,9 @@ const Mutation = {
     if (!row) throw notFound("Usuario no encontrado");
     const ok = await Bun.password.verify(args.currentPassword, row.passwordHash);
     if (!ok) throw invalid("La contraseña actual no es correcta");
+    // Repetir la clave actual no es un cambio: se rechaza antes de tocar el hash
+    const error = validateNewPassword(args.currentPassword, args.newPassword);
+    if (error) throw invalid(error);
     const passwordHash = await Bun.password.hash(args.newPassword, { algorithm: "argon2id" });
     await db
       .update(t.users)
