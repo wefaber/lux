@@ -50,6 +50,13 @@
       "when": 1793039922394,
       "tag": "0006_location_special_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793040049441,
+      "tag": "0007_requester_feedback",
+      "breakpoints": true
     }
   ]
 }
