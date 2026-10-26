@@ -13,14 +13,24 @@ const ThemeContext = createContext<ThemeContextType | null>(null);
 
 const STORAGE_KEY = "lux_theme";
 
+const DEFAULT_SETTINGS: ThemeSettings = {
+  theme: "light",
+  fontSize: "md",
+  highContrast: false,
+  dyslexicFont: false,
+};
+
 function loadSettings(): ThemeSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as ThemeSettings; // Parseo de datos de theme y accesibilidad
+    // Se mezcla con los valores por defecto: una preferencia guardada por una
+    // version anterior (sin dyslexicFont, por ejemplo) no deja el atributo en
+    // "undefined" ni apaga el resto de la configuracion.
+    if (raw) return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<ThemeSettings>) };
   } catch {
     // ignore
   }
-  return { theme: "light", fontSize: "md", highContrast: false, dyslexicFont: false }; // En caso de no tener datos se ponen datos por default
+  return DEFAULT_SETTINGS;
 }
 
 function applySettings(settings: ThemeSettings): void {
@@ -32,7 +42,8 @@ function applySettings(settings: ThemeSettings): void {
   }
   html.setAttribute("data-font-size", settings.fontSize);
   html.setAttribute("data-contrast", settings.highContrast ? "high" : "normal");
-  html.setAttribute("data-dyslexic", String(settings.dyslexicFont));
+  // Solo "true" o "false": es lo que selecciona el CSS de la fuente dislexica
+  html.setAttribute("data-dyslexic", settings.dyslexicFont ? "true" : "false");
 } // Aplicacion de configuracion en base a elementos html mediante tailwind
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

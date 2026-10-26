@@ -1,5 +1,5 @@
 {
-  "id": "e99fc6bf-9ce2-4cfd-b9c6-43413ed760b5",
+  "id": "55d1a2f1-b8ea-431b-b429-8e5007cc9ca7",
   "prevId": "da433d57-53f7-463d-9e9d-dbcee1c6359c",
   "version": "7",
   "dialect": "postgresql",
@@ -739,7 +739,7 @@
       "checkConstraints": {
         "locations_kind_check": {
           "name": "locations_kind_check",
-          "value": "\"locations\".\"kind\" in ('laboratory', 'classroom', 'administration', 'special', 'other')"
+          "value": "\"locations\".\"kind\" in ('laboratory', 'classroom', 'administration', 'other')"
         }
       },
       "isRLSEnabled": false
@@ -1695,6 +1695,25 @@
           "notNull": true,
           "default": true
         },
+        "student_group": {
+          "name": "student_group",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "student_shift": {
+          "name": "student_shift",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "student_subjects": {
+          "name": "student_subjects",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
         "password_hash": {
           "name": "password_hash",
           "type": "text",
@@ -1721,7 +1740,29 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "users_student_idx": {
+          "name": "users_student_idx",
+          "columns": [
+            {
+              "expression": "student_group",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "student_shift",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
@@ -1738,6 +1779,18 @@
         "users_role_check": {
           "name": "users_role_check",
           "value": "\"users\".\"role\" in ('root_admin', 'admin', 'tecnico', 'solicitante')"
+        },
+        "users_student_shift_check": {
+          "name": "users_student_shift_check",
+          "value": "\"users\".\"student_shift\" is null or \"users\".\"student_shift\" in ('matutino', 'vespertino', 'nocturno')"
+        },
+        "users_student_info_check": {
+          "name": "users_student_info_check",
+          "value": "\"users\".\"role\" = 'solicitante' or (\"users\".\"student_group\" is null and \"users\".\"student_shift\" is null and \"users\".\"student_subjects\" = '[]'::jsonb)"
+        },
+        "users_student_subjects_check": {
+          "name": "users_student_subjects_check",
+          "value": "jsonb_typeof(\"users\".\"student_subjects\") = 'array'"
         }
       },
       "isRLSEnabled": false

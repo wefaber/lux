@@ -1,6 +1,15 @@
 import { useRef } from "react";
 import { Outlet, NavLink, Link, useNavigate } from "react-router-dom";
-import { Users, Shield, ActivitySquare, ArrowLeft, Zap, BarChart3, LogOut } from "lucide-react";
+import {
+  Users,
+  Shield,
+  ActivitySquare,
+  ArrowLeft,
+  Zap,
+  BarChart3,
+  LogOut,
+  HelpCircle,
+} from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
 import { useI18n } from "@/hooks/useI18n";
@@ -107,6 +116,11 @@ export function AdminLayout() {
             <h1 className="text-sm font-semibold text-foreground truncate">{t("admin.panel")}</h1>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" asChild title={t("nav.help")}>
+              <Link to={ROUTES.HELP} aria-label={t("nav.help")}>
+                <HelpCircle className="h-4 w-4" />
+              </Link>
+            </Button>
             <FontSizeControl />
             <LanguageSwitcher />
             <ThemeSwitcher />
