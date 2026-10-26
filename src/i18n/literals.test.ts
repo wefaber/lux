@@ -16,7 +16,17 @@ import { join, relative } from "node:path";
 const SRC = join(import.meta.dir, "..");
 
 // archivo relativo a src -> literales exactos permitidos
-const EXCEPCIONES: Record<string, string[]> = {};
+const EXCEPCIONES: Record<string, string[]> = {
+  // Alias de encabezados y fila de ejemplo: son datos del formato CSV, no UI
+  "lib/csv.ts": [
+    "nombre completo",
+    "apellido y nombre",
+    "tipo de usuario",
+    "sí",
+    "Ana García",
+    "Matemática|Programación",
+  ],
+};
 
 const PALABRAS = new Set(
   (

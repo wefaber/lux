@@ -11,6 +11,12 @@ import { mockServices } from "./data/services";
 import { mockNotices, mockPendingSeen } from "./data/notices";
 import { requesterOverview } from "./requester";
 import { mockActivityLogs } from "./generators";
+import { overlapsInstantRange, withinInstantRange } from "@/lib/date-range";
+import {
+  INVALID_CREDENTIALS_MESSAGE,
+  mockLoginGuard,
+  mockRequestOrigin,
+} from "./login-guard";
 import {
   firstError,
   locationCode,
@@ -22,15 +28,20 @@ import {
   spanishLabel,
   validateComment,
   validateComponent,
+  validateImportRow,
   validateIntervention,
+  validateLoan,
   validateLocation,
   validateProduct,
   validateReservation,
   validateServiceRequest,
+  validateStudent,
   validateTicket,
   validatePassword,
   validateUser,
 } from "./spanish";
+import { normalizeStudent, filterUsers } from "@/lib/students";
+import type { ImportRowInput, UserImportRow } from "@/lib/csv";
 import {
   CHANGEABLE_RESERVATION_STATUSES,
   CLOSED_SERVICE_STATUSES,
@@ -80,6 +91,7 @@ import type {
   TicketStatus,
   LoanStatus,
   ServiceStatus,
+  StudentShift,
 } from "@/lib/types";
 
 function filterByStatus<T extends { status: string }>(items: T[], status?: string): T[] {
@@ -474,14 +486,40 @@ function activationError(caller: User, user: User): string | null {
 }
 
 export const handlers = [
-  graphql.query("Login", ({ variables }) => {
+  graphql.query("Login", ({ variables, request }) => {
     const { dni, password } = variables as { dni: string; password: string };
-    const user = mockUsers.find((u) => u.dni === dni && u.isActive);
-    if (!user || mockPasswords[dni] !== password) {
+    const origin = mockRequestOrigin(request);
+    // Mismo orden que la API: primero el bloqueo (y con el mismo mensaje genérico),
+    // después la verificación. El fallo que dispara el bloqueo todavía responde
+    // INVALID_CREDENTIALS; el siguiente pedido ya recibe TOO_MANY_ATTEMPTS.
+    const lock = mockLoginGuard.check(dni, origin);
+    if (lock.locked) {
       return HttpResponse.json({
-        errors: [{ message: "Credenciales inválidas" }],
+        errors: [
+          {
+            message: INVALID_CREDENTIALS_MESSAGE,
+            extensions: {
+              code: "TOO_MANY_ATTEMPTS",
+              status: 429,
+              retryAfterSeconds: lock.retryAfterSeconds,
+            },
+          },
+        ],
       });
     }
+    const user = mockUsers.find((u) => u.dni === dni && u.isActive);
+    if (!user || mockPasswords[dni] !== password) {
+      mockLoginGuard.recordFailure(dni, origin);
+      return HttpResponse.json({
+        errors: [
+          {
+            message: INVALID_CREDENTIALS_MESSAGE,
+            extensions: { code: "INVALID_CREDENTIALS", status: 401 },
+          },
+        ],
+      });
+    }
+    mockLoginGuard.recordSuccess(dni);
     return HttpResponse.json({
       data: {
         login: { ...user, token: `mock-token-${user.id}` },
@@ -501,10 +539,22 @@ export const handlers = [
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
     if (!isStaff(caller.role)) return HttpResponse.json(FORBIDDEN);
-    const { role, isActive } = variables as { role?: string; isActive?: boolean };
+    const { role, isActive, studentGroup, studentShift, subject } = variables as {
+      role?: string;
+      isActive?: boolean;
+      studentGroup?: string;
+      studentShift?: string;
+      subject?: string;
+    };
     let users = [...mockUsers];
-    if (role) users = users.filter((u) => u.role === role);
     if (isActive !== undefined) users = users.filter((u) => u.isActive === isActive);
+    // Mismos filtros que la API real (y que la pantalla, que filtra en memoria)
+    users = filterUsers(users, {
+      role: role as UserRole | "",
+      group: studentGroup,
+      shift: studentShift as StudentShift | "",
+      subject,
+    });
     return HttpResponse.json({ data: { users } });
   }),
 
@@ -572,12 +622,15 @@ export const handlers = [
   graphql.query("GetTickets", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
-    const { status, assignedToId, submittedById, equipmentId } = variables as {
-      status?: TicketStatus;
-      assignedToId?: string;
-      submittedById?: string;
-      equipmentId?: string;
-    };
+    const { status, assignedToId, submittedById, equipmentId, startDate, endDate } =
+      variables as {
+        status?: TicketStatus;
+        assignedToId?: string;
+        submittedById?: string;
+        equipmentId?: string;
+        startDate?: string;
+        endDate?: string;
+      };
     // El solicitante solo ve sus tickets, mande el filtro que mande
     const scopedSubmittedById = isStaff(caller.role) ? submittedById : caller.id;
     let tickets = [...mockTickets];
@@ -587,6 +640,10 @@ export const handlers = [
       tickets = tickets.filter((t) => t.submittedBy.id === scopedSubmittedById);
     }
     if (equipmentId) tickets = tickets.filter((t) => t.equipmentId === equipmentId);
+    // Rango por fecha de creacion, con los extremos ya en el dia local del cliente
+    if (startDate || endDate) {
+      tickets = tickets.filter((t) => withinInstantRange(t.createdAt, startDate, endDate));
+    }
     return HttpResponse.json({ data: { tickets } });
   }),
 
@@ -611,10 +668,12 @@ export const handlers = [
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
     syncOverdueLoans();
-    const { status, userId, equipmentId } = variables as {
+    const { status, userId, equipmentId, startDate, endDate } = variables as {
       status?: LoanStatus;
       userId?: string;
       equipmentId?: string;
+      startDate?: string;
+      endDate?: string;
     };
     // El solicitante solo ve sus prestamos, mande el filtro que mande
     const scopedUserId = isStaff(caller.role) ? userId : caller.id;
@@ -622,6 +681,10 @@ export const handlers = [
     if (status) loans = filterByStatus<Loan>(loans, status);
     if (scopedUserId) loans = loans.filter((l) => l.user.id === scopedUserId);
     if (equipmentId) loans = loans.filter((l) => l.equipment.id === equipmentId);
+    // Rango por fecha de entrega (issueDate), la que muestra la lista
+    if (startDate || endDate) {
+      loans = loans.filter((l) => withinInstantRange(l.issueDate, startDate, endDate));
+    }
     return HttpResponse.json({ data: { loans } });
   }),
 
@@ -640,9 +703,11 @@ export const handlers = [
   graphql.query("GetServiceRequests", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
-    const { status, requestedById } = variables as {
+    const { status, requestedById, startDate, endDate } = variables as {
       status?: ServiceStatus;
       requestedById?: string;
+      startDate?: string;
+      endDate?: string;
     };
     // El solicitante solo ve sus solicitudes, mande el filtro que mande
     const scopedRequestedById = isStaff(caller.role) ? requestedById : caller.id;
@@ -650,6 +715,10 @@ export const handlers = [
     if (status) services = filterByStatus<ServiceRequest>(services, status);
     if (scopedRequestedById) {
       services = services.filter((s) => s.requestedBy.id === scopedRequestedById);
+    }
+    // Rango por fecha de creacion de la solicitud
+    if (startDate || endDate) {
+      services = services.filter((s) => withinInstantRange(s.createdAt, startDate, endDate));
     }
     return HttpResponse.json({ data: { serviceRequests: services } });
   }),
@@ -808,8 +877,11 @@ export const handlers = [
     let logs = [...mockActivityLogs];
     if (userId) logs = logs.filter((l) => l.userId === userId);
     if (operation) logs = logs.filter((l) => l.operation === operation);
-    if (startDate) logs = logs.filter((l) => l.timestamp >= startDate);
-    if (endDate) logs = logs.filter((l) => l.timestamp <= endDate);
+    // Instantes, no texto: un "hasta" con milisegundos incluye los registros
+    // guardados sin ellos (los del mismo segundo) sin depender del formato
+    if (startDate || endDate) {
+      logs = logs.filter((l) => withinInstantRange(l.timestamp, startDate, endDate));
+    }
     return HttpResponse.json({ data: { activityLogs: logs } });
   }),
 
@@ -1020,10 +1092,9 @@ export const handlers = [
         errors: [{ message: "El equipo no está disponible para préstamo" }],
       });
     }
-    if (!(new Date(input.returnDate) > new Date(input.issueDate))) {
-      return HttpResponse.json({
-        errors: [{ message: "La fecha de devolución debe ser posterior a la de entrega" }],
-      });
+    const dateError = firstError(validateLoan(input));
+    if (dateError) {
+      return HttpResponse.json({ errors: [{ message: dateError }] });
     }
     const componentIds = input.componentIds ?? [];
     const components = mockComponents.filter(
@@ -1291,11 +1362,22 @@ export const handlers = [
         password?: string;
         role: string;
         isActive?: boolean;
+        studentGroup?: string | null;
+        studentShift?: string | null;
+        studentSubjects?: string[] | null;
       };
     };
     const fields = normalizeUserFields({ ...input, password: input.password ?? "" });
+    const rawStudent = {
+      studentGroup: input.studentGroup ?? null,
+      studentShift: input.studentShift ?? null,
+      studentSubjects: input.studentSubjects ?? [],
+    };
+    const studentError =
+      fields.role === "solicitante" ? firstError(validateStudent(rawStudent)) : null;
     const error =
       firstError(validateUser(fields, true)) ??
+      studentError ??
       (ASSIGNABLE_ROLES.includes(fields.role as UserRole)
         ? null
         : "No se puede crear otro Super Admin") ??
@@ -1309,6 +1391,7 @@ export const handlers = [
       email: fields.email,
       role: fields.role as UserRole,
       isActive: input.isActive ?? true,
+      ...normalizeStudent(rawStudent, fields.role as UserRole),
       createdAt: now,
       updatedAt: now,
     };
@@ -1322,7 +1405,19 @@ export const handlers = [
     if (!hasRole(caller, ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
     const { id, input } = variables as {
       id: string;
-      input: Partial<Pick<User, "name" | "dni" | "email" | "role" | "isActive">> & {
+      input: Partial<
+        Pick<
+          User,
+          | "name"
+          | "dni"
+          | "email"
+          | "role"
+          | "isActive"
+          | "studentGroup"
+          | "studentShift"
+          | "studentSubjects"
+        >
+      > & {
         password?: string;
       };
     };
@@ -1337,9 +1432,20 @@ export const handlers = [
       role: input.role ?? user.role,
       password: input.password ?? "",
     });
+    // Sin campo en el input se conserva lo que habia; un rol distinto de
+    // solicitante deja la ficha vacia (normalizeStudent)
+    const rawStudent = {
+      studentGroup: input.studentGroup !== undefined ? input.studentGroup : user.studentGroup,
+      studentShift: input.studentShift !== undefined ? input.studentShift : user.studentShift,
+      studentSubjects:
+        input.studentSubjects !== undefined ? input.studentSubjects : user.studentSubjects,
+    };
     const togglesActive = input.isActive !== undefined && input.isActive !== user.isActive;
+    const studentError =
+      fields.role === "solicitante" ? firstError(validateStudent(rawStudent)) : null;
     const error =
       firstError(validateUser(fields, false)) ??
+      studentError ??
       roleChangeError(caller, user, fields.role) ??
       duplicateUserError(fields, user.id) ??
       (togglesActive ? activationError(caller, user) : null);
@@ -1355,6 +1461,7 @@ export const handlers = [
       email: fields.email,
       role: fields.role as UserRole,
       isActive: input.isActive ?? user.isActive,
+      ...normalizeStudent(rawStudent, fields.role as UserRole),
       updatedAt: new Date().toISOString(),
     });
     if (fields.password) mockPasswords[user.dni] = fields.password;
@@ -1373,6 +1480,101 @@ export const handlers = [
     user.isActive = false;
     user.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { deleteUser: true } });
+  }),
+
+  // Importación masiva (CSV exportado de Excel). Igual que la API real: cada
+  // fila se valida sola, los errores no abortan el lote y quien ya existe solo
+  // recibe los datos de estudiante del archivo.
+  graphql.mutation("ImportUsers", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { rows } = variables as { rows: ImportRowInput[] };
+    const results: Array<{
+      line: number;
+      status: string;
+      userId: string | null;
+      error: string | null;
+    }> = [];
+    const seenDni = new Map<string, number>();
+    const seenEmail = new Map<string, number>();
+    let created = 0;
+    let updated = 0;
+    let failed = 0;
+    const fail = (line: number, error: string) => {
+      failed++;
+      results.push({ line, status: "error", userId: null, error });
+    };
+
+    for (const raw of rows) {
+      const parsed = validateImportRow(raw);
+      if ("error" in parsed) {
+        fail(raw.line ?? 1, parsed.error);
+        continue;
+      }
+      const row: UserImportRow = parsed.row;
+      const firstDni = seenDni.get(row.dni);
+      if (firstDni !== undefined) {
+        fail(row.line, `Documento ${row.dni} repetido en la fila ${firstDni}`);
+        continue;
+      }
+      const firstEmail = seenEmail.get(row.email);
+      if (firstEmail !== undefined) {
+        fail(row.line, `Email ${row.email} repetido en la fila ${firstEmail}`);
+        continue;
+      }
+      seenDni.set(row.dni, row.line);
+      seenEmail.set(row.email, row.line);
+
+      const byDni = mockUsers.find((u) => u.dni === row.dni);
+      const byEmail = mockUsers.find((u) => u.email.toLowerCase() === row.email);
+      if (byDni && byEmail && byDni.id !== byEmail.id) {
+        fail(row.line, "El documento y el email pertenecen a usuarios distintos");
+        continue;
+      }
+      const existing = byDni ?? byEmail;
+      if (existing) {
+        if (existing.role !== "solicitante") {
+          fail(row.line, `La persona ya existe con rol ${existing.role}`);
+          continue;
+        }
+        // Celda vacia = dejar el dato como estaba
+        Object.assign(existing, {
+          studentGroup: row.studentGroup ?? existing.studentGroup,
+          studentShift: row.studentShift ?? existing.studentShift,
+          studentSubjects: row.studentSubjects.length
+            ? row.studentSubjects
+            : existing.studentSubjects,
+          updatedAt: new Date().toISOString(),
+        });
+        updated++;
+        results.push({ line: row.line, status: "updated", userId: existing.id, error: null });
+        continue;
+      }
+
+      const now = new Date().toISOString();
+      const newUser: User = {
+        id: nextId(USER_ID_PREFIX[row.role], mockUsers),
+        name: row.name,
+        dni: row.dni,
+        email: row.email,
+        role: row.role,
+        isActive: row.isActive,
+        studentGroup: row.studentGroup,
+        studentShift: row.studentShift as User["studentShift"],
+        studentSubjects: row.studentSubjects,
+        createdAt: now,
+        updatedAt: now,
+      };
+      // Sin contraseña en el archivo, la clave inicial es el documento
+      mockPasswords[newUser.dni] = row.password ?? newUser.dni;
+      mockUsers.push(newUser);
+      created++;
+      results.push({ line: row.line, status: "created", userId: newUser.id, error: null });
+    }
+
+    return HttpResponse.json({
+      data: { importUsers: { created, updated, failed, rows: results } },
+    });
   }),
 
   graphql.mutation("CreateProduct", ({ request, variables }) => {
@@ -1663,12 +1865,23 @@ export const handlers = [
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
     syncReservations();
-    const { status } = variables as { status?: ReservationStatus };
+    const { status, startDate, endDate } = variables as {
+      status?: ReservationStatus;
+      startDate?: string;
+      endDate?: string;
+    };
     // El solicitante solo ve las suyas, mande el filtro que mande
     let reservations = isStaff(caller.role)
       ? [...mockReservations]
       : mockReservations.filter((r) => r.user.id === caller.id);
     if (status) reservations = reservations.filter((r) => r.status === status);
+    // Rango por el horario de la reserva: se incluyen las que se solapan con
+    // esos dias, aunque hayan empezado antes
+    if (startDate || endDate) {
+      reservations = reservations.filter((r) =>
+        overlapsInstantRange(r.startsAt, r.endsAt, startDate, endDate),
+      );
+    }
     reservations.sort((a, b) => b.startsAt.localeCompare(a.startsAt));
     return HttpResponse.json({ data: { reservations } });
   }),

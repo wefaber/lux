@@ -1,5 +1,11 @@
 export type UserRole = "root_admin" | "admin" | "tecnico" | "solicitante";
 
+// Turnos de la institucion (UTU/ITI): manana, tarde y noche. Son los tres que
+// usa la matricula local; agregar otro implica migracion y traducciones.
+export type StudentShift = "matutino" | "vespertino" | "nocturno";
+
+// Datos de estudiante: solo tienen sentido para el rol solicitante. Vacios
+// (null / lista vacia) cuando la persona no es estudiante o no se cargaron.
 export interface User {
   id: string;
   name: string;
@@ -7,6 +13,11 @@ export interface User {
   email: string;
   role: UserRole;
   isActive: boolean;
+  /** Grupo o clase: "1°B", "2°A"... */
+  studentGroup: string | null;
+  studentShift: StudentShift | null;
+  /** Materias que cursa; lista vacia si no hay datos */
+  studentSubjects: string[];
   createdAt: string;
   updatedAt: string;
 } // Interfaces de usuario
