@@ -29,14 +29,16 @@ import { OptionSelect } from "@/components/ui/option-select";
 import { StatusFilter } from "@/components/ui/status-filter";
 import { Input } from "@/components/ui/input";
 import { Pagination, clampPage } from "@/components/ui/pagination";
+import { DateRangeFilter } from "@/components/ui/date-range-filter";
+import { useDateRangeParams } from "@/hooks/useDateRangeParams";
 import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
 import { idQuery, pinnedFirst, servicePin } from "@/lib/pins";
 import { STAFF_ROLES } from "@/lib/roles";
 import type { MessageKey } from "@/i18n";
 
 const SERVICES_QUERY = `
-  query GetServiceRequests($requestedById: ID) {
-    serviceRequests(requestedById: $requestedById) {
+  query GetServiceRequests($requestedById: ID, $startDate: String, $endDate: String) {
+    serviceRequests(requestedById: $requestedById, startDate: $startDate, endDate: $endDate) {
       id type status description labNumber softwareName equipmentId resolutionText
       requestedBy { id name }
       assignedTo { id name }
@@ -68,6 +70,9 @@ export function ServiceList() {
   const [assigneeFilter, setAssigneeFilter] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
+  // Rango por fecha de creacion de la solicitud, reflejado en la URL
+  const { range: dateRange, setRange: setDateRange, active: dateActive, bounds } =
+    useDateRangeParams();
   // ?nuevo=1 abre el formulario directo (acceso "Pedir un servicio" del inicio)
   const [searchParams] = useSearchParams();
   const [createOpen, setCreateOpen] = useState(() => searchParams.get("nuevo") === "1");
@@ -75,8 +80,13 @@ export function ServiceList() {
   const isSolicitante = !hasRole(...STAFF_ROLES);
 
   const { data, isLoading, refetch } = useAsync<{ serviceRequests: ServiceRequest[] }>(
-    () => gql(SERVICES_QUERY, { requestedById: isSolicitante ? user?.id : undefined }),
-    [isSolicitante, user?.id],
+    () =>
+      gql(SERVICES_QUERY, {
+        requestedById: isSolicitante ? user?.id : undefined,
+        startDate: bounds?.startDate,
+        endDate: bounds?.endDate,
+      }),
+    [isSolicitante, user?.id, bounds?.startDate, bounds?.endDate],
   ); // Fetch y refetch de datos
 
   const allServices = data?.serviceRequests ?? [];
@@ -148,7 +158,7 @@ export function ServiceList() {
           </div>
           <StatusFilter
             section="service_request"
-            aria-label={t("overview.filterStatus")}
+            aria-label={t("common.filterStatus")}
             value={statusFilter}
             onValueChange={(v) => {
               setStatusFilter(v as ServiceStatus | "");
@@ -177,6 +187,13 @@ export function ServiceList() {
               ]}
             />
           )}
+          <DateRangeFilter
+            value={dateRange}
+            onChange={(next) => {
+              setDateRange(next);
+              setPage(0);
+            }}
+          />
         </div>
 
         {hiddenClosed > 0 && (
@@ -191,7 +208,11 @@ export function ServiceList() {
           <TableSkeleton rows={6} cols={7} />
         ) : services.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground text-sm font-medium">
-            {hiddenClosed > 0 ? t("services.emptyOpen") : t("services.empty")}
+            {dateActive
+              ? t("filters.emptyRange")
+              : hiddenClosed > 0
+                ? t("services.emptyOpen")
+                : t("services.empty")}
           </div>
         ) : (
           <div

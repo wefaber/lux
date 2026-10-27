@@ -14,7 +14,6 @@ export const profile: Translation<typeof es> = {
   "profile.password.confirm": "Confirm new password",
   "profile.password.mismatch": "The passwords do not match.",
   "profile.password.failed": "Could not change the password",
-  "profile.password.success": "Password updated successfully.",
   "profile.password.submit": "Update password",
   "profile.a11y.title": "Accessibility",
   "profile.a11y.theme": "Theme",

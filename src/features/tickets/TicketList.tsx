@@ -39,6 +39,8 @@ import { QrScanner } from "@/components/ui/QrScanner";
 import { EquipmentSearchSelect } from "@/components/search-pickers";
 import { OptionSelect } from "@/components/ui/option-select";
 import { Pagination, clampPage } from "@/components/ui/pagination";
+import { DateRangeFilter } from "@/components/ui/date-range-filter";
+import { useDateRangeParams } from "@/hooks/useDateRangeParams";
 import { NoticeLine, PinMark, pinRowClass } from "@/components/ui/pin";
 import { UnseenDot } from "@/components/ui/unseen-dot";
 import { idQuery, pinnedFirst, ticketPin } from "@/lib/pins";
@@ -47,8 +49,8 @@ import { ErrorAlert } from "@/components/ui/error-alert";
 import { firstError, validateTicket } from "@/lib/validation";
 
 const TICKETS_QUERY = `
-  query GetTickets($submittedById: ID) {
-    tickets(submittedById: $submittedById) {
+  query GetTickets($submittedById: ID, $startDate: String, $endDate: String) {
+    tickets(submittedById: $submittedById, startDate: $startDate, endDate: $endDate) {
       id title description category status
       submittedBy { id name }
       assignedTo { id name }
@@ -81,6 +83,9 @@ export function TicketList() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TicketStatus | "">("");
   const [page, setPage] = useState(0);
+  // Rango por fecha de creacion, en la URL (?desde=&hasta=) para poder compartirlo
+  const { range: dateRange, setRange: setDateRange, active: dateActive, bounds } =
+    useDateRangeParams();
   // ?nuevo=1 abre el formulario y ?equipo=<id> lo trae elegido (accesos del inicio)
   const [searchParams] = useSearchParams();
   const [createOpen, setCreateOpen] = useState(() => searchParams.get("nuevo") === "1");
@@ -97,8 +102,13 @@ export function TicketList() {
   const isSolicitante = !hasRole(...STAFF_ROLES);
 
   const { data, isLoading, error, refetch } = useAsync<{ tickets: Ticket[] }>(
-    () => gql(TICKETS_QUERY, { submittedById: isSolicitante ? user?.id : undefined }),
-    [isSolicitante, user?.id],
+    () =>
+      gql(TICKETS_QUERY, {
+        submittedById: isSolicitante ? user?.id : undefined,
+        startDate: bounds?.startDate,
+        endDate: bounds?.endDate,
+      }),
+    [isSolicitante, user?.id, bounds?.startDate, bounds?.endDate],
   );
 
   const { data: productsData } = useAsync<{ products: Product[] }>(() => gql(PRODUCTS_QUERY), []);
@@ -210,7 +220,7 @@ export function TicketList() {
           />
         </div>
         <OptionSelect
-          aria-label={t("overview.filterStatus")}
+          aria-label={t("common.filterStatus")}
           value={statusFilter}
           onValueChange={(v) => {
             setStatusFilter(v as TicketStatus | "");
@@ -223,6 +233,13 @@ export function TicketList() {
               label: conf.label,
             })),
           ]}
+        />
+        <DateRangeFilter
+          value={dateRange}
+          onChange={(next) => {
+            setDateRange(next);
+            setPage(0);
+          }}
         />
       </div>
 
@@ -238,7 +255,11 @@ export function TicketList() {
         <TableSkeleton rows={8} cols={5} />
       ) : tickets.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground text-sm">
-          {hiddenResolved > 0 ? t("tickets.emptyOpen") : t("tickets.empty")}
+          {dateActive
+            ? t("filters.emptyRange")
+            : hiddenResolved > 0
+              ? t("tickets.emptyOpen")
+              : t("tickets.empty")}
         </div>
       ) : (
         <div

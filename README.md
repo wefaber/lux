@@ -151,3 +151,12 @@ bun format         # Formatting (oxfmt)
 - **Services** — Lab preparation, software installation, equipment setup
 - **Administration** — User management, role configuration, activity log
 - **Accessibility** — Light/dark theme, high contrast, adjustable font size, dyslexic font
+
+## Documentation
+
+- [Architecture, installation and operation](docs/ARQUITECTURA.md)
+- [Backend and database](docs/BACKEND.md)
+- [Per-actor navigation flows](docs/FLUJO-NAVEGACION.md) — screens, menus, actions and Mermaid diagrams for each role
+- [Happy-path sequence diagrams (CU-01 to CU-27)](docs/UML-SECUENCIAS.md) — actors, model↔code states and differences
+- [Internationalization (es / en)](docs/I18N.md)
+- [Corrections applied to the legacy SQL files](docs/CAMBIOS.md)

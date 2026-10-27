@@ -1,10 +1,11 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Compass, LogOut, Settings, Shield } from "lucide-react";
+import { Compass, HelpCircle, LogOut, Settings, Shield } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/hooks/useI18n";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { LanguageSwitcher } from "@/components/accessibility/LanguageSwitcher";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { ThemeSwitcher } from "@/components/accessibility/ThemeSwitcher";
 import { FontSizeControl } from "@/components/accessibility/FontSizeControl";
 import {
@@ -34,6 +35,17 @@ export function Topbar() {
     <header className="sticky h-14 mx-5 my-3 flex items-center top-4 justify-between px-6 glass-topbar rounded-full">
       <div />
       <div className="flex items-center gap-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          asChild
+          className="hidden sm:inline-flex"
+          title={t("nav.help")}
+        >
+          <Link to={ROUTES.HELP} aria-label={t("nav.help")}>
+            <HelpCircle className="h-4 w-4" />
+          </Link>
+        </Button>
         <FontSizeControl />
         <LanguageSwitcher />
         <ThemeSwitcher />
@@ -66,6 +78,12 @@ export function Topbar() {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link to={ROUTES.HELP} className="flex items-center gap-2">
+                  <HelpCircle className="h-4 w-4" />
+                  {t("nav.help")}
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link to={ROUTES.PROFILE} className="flex items-center gap-2">
                   <Settings className="h-4 w-4" />

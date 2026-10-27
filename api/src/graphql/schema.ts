@@ -5,19 +5,19 @@ export const typeDefs = /* GraphQL */ `
   type Query {
     login(dni: String!, password: String!): AuthUser
     me: User
-    users(role: String, isActive: Boolean): [User!]!
+    users(role: String, isActive: Boolean, studentGroup: String, studentShift: String, subject: String): [User!]!
     user(id: ID!): User
     products(status: String, locationId: ID, deletedAt: String, availableForLoan: Boolean): [Product!]!
     product(id: ID!): Product
     productByMachineId(machineId: String!): Product
     components(productId: ID, isWorking: Boolean): [Component!]!
     component(id: ID!): Component
-    tickets(status: String, assignedToId: ID, submittedById: ID, equipmentId: ID): [Ticket!]!
+    tickets(status: String, assignedToId: ID, submittedById: ID, equipmentId: ID, startDate: String, endDate: String): [Ticket!]!
     ticket(id: ID!): Ticket
     oolTickets: [Ticket!]!
-    loans(status: String, userId: ID, equipmentId: ID): [Loan!]!
+    loans(status: String, userId: ID, equipmentId: ID, startDate: String, endDate: String): [Loan!]!
     loan(id: ID!): Loan
-    serviceRequests(status: String, requestedById: ID): [ServiceRequest!]!
+    serviceRequests(status: String, requestedById: ID, startDate: String, endDate: String): [ServiceRequest!]!
     serviceRequest(id: ID!): ServiceRequest
     dashboardStats(period: String): DashboardStats!
     reports: Reports!
@@ -28,7 +28,7 @@ export const typeDefs = /* GraphQL */ `
     intervention(id: ID!): Intervention
     comments(entityType: String!, entityId: ID!): [Comment!]!
     comment(id: ID!): Comment
-    reservations(status: String): [Reservation!]!
+    reservations(status: String, startDate: String, endDate: String): [Reservation!]!
     reservation(id: ID!): Reservation
     notices: [Notice!]!
     pendingNews: [String!]!
@@ -38,6 +38,7 @@ export const typeDefs = /* GraphQL */ `
     createUser(input: UserInput!): User!
     updateUser(id: ID!, input: UserInput!): User!
     deleteUser(id: ID!): Boolean!
+    importUsers(rows: [UserImportRow!]!): UserImportResult!
     createProduct(input: ProductInput!): Product!
     updateProduct(id: ID!, input: ProductUpdateInput!): Product!
     softDeleteProduct(id: ID!): Boolean!
@@ -50,6 +51,8 @@ export const typeDefs = /* GraphQL */ `
     claimTicket(id: ID!): Ticket!
     completeTicket(id: ID!, input: TicketCompleteInput!): Ticket!
     changeTicketStatus(id: ID!, status: String!): Ticket!
+    # El solicitante puntua un ticket propio ya resuelto (1-5)
+    rateTicket(id: ID!, rating: Int!): Ticket!
     createLoan(input: LoanInput!): Loan!
     approveLoan(id: ID!): Loan!
     rejectLoan(id: ID!, reason: String!): Loan!
@@ -162,8 +165,27 @@ export const typeDefs = /* GraphQL */ `
     email: String
     role: String!
     isActive: Boolean!
+    # Solo para solicitantes; null / [] cuando no hay dato
+    studentGroup: String
+    studentShift: String
+    studentSubjects: [String!]!
     createdAt: String!
     updatedAt: String!
+  }
+
+  type UserImportRowResult {
+    line: Int!
+    # created | updated | error
+    status: String!
+    userId: ID
+    error: String
+  }
+
+  type UserImportResult {
+    created: Int!
+    updated: Int!
+    failed: Int!
+    rows: [UserImportRowResult!]!
   }
 
   type Product {
@@ -217,6 +239,11 @@ export const typeDefs = /* GraphQL */ `
     createdAt: String!
     updatedAt: String!
     resolvedAt: String
+    # Primera vez que un tecnico tomo el ticket
+    attendedAt: String
+    # Valoracion del solicitante sobre la resolucion (1-5)
+    rating: Int
+    ratedAt: String
   }
 
   type Loan {
@@ -293,7 +320,53 @@ export const typeDefs = /* GraphQL */ `
     pendingServices: Int!
     ticketsByStatus: [TicketStatusCount!]!
     servicesByPeriod: [PeriodCount!]!
+    # Solo para el staff; null para el solicitante
     workQueue: WorkQueue
+    # Solo para el solicitante; null para el staff
+    requesterOverview: RequesterOverview
+  }
+
+  type RequesterOverview {
+    # Tickets propios sin resolver, del ultimo movimiento al mas viejo
+    activeTickets: [Ticket!]!
+    estimates: TicketEstimates!
+    satisfaction: SatisfactionSummary!
+    areas: [RequesterArea!]!
+  }
+
+  type TicketEstimates {
+    # Promedio desde que se creo hasta que un tecnico lo tomo
+    toAttendHours: Float
+    # Promedio desde que se creo hasta que quedo resuelto
+    toResolveHours: Float
+    # Tickets resueltos usados como muestra del promedio general
+    sampleSize: Int!
+    # Solo las categorias con al menos 3 tickets resueltos
+    byCategory: [CategoryEstimate!]!
+  }
+
+  type CategoryEstimate {
+    category: String!
+    toAttendHours: Float
+    toResolveHours: Float
+    sampleSize: Int!
+  }
+
+  type SatisfactionSummary {
+    # Promedio de las valoraciones que dejo el solicitante; null si no puntuo
+    average: Float
+    count: Int!
+  }
+
+  # Un lugar que el solicitante usa, con el estado de los equipos de ese lugar
+  type RequesterArea {
+    location: Location!
+    available: Int!
+    inUse: Int!
+    inRepair: Int!
+    retired: Int!
+    # Tickets propios sin resolver en ese lugar
+    openTickets: Int!
   }
 
   type WorkQueue {
@@ -332,6 +405,22 @@ export const typeDefs = /* GraphQL */ `
     password: String
     role: String!
     isActive: Boolean
+    studentGroup: String
+    studentShift: String
+    studentSubjects: [String!]
+  }
+
+  input UserImportRow {
+    line: Int!
+    name: String!
+    dni: String!
+    email: String!
+    role: String
+    password: String
+    isActive: Boolean
+    studentGroup: String
+    studentShift: String
+    studentSubjects: [String!]
   }
 
   input ProductInput {

@@ -122,14 +122,17 @@ export const LOCATION_KIND_LABELS: Record<LocationKind, string> = {
   laboratory: "Laboratorio",
   classroom: "Salón",
   administration: "Administración",
+  special: "Área especial",
   other: "Otro",
 }; // Tipos de ubicacion
 
-// Letra de cada tipo: L1 = Laboratorio 1, S2 = Salon 2, A1 = Administracion 1
+// Letra de cada tipo: L1 = Laboratorio 1, S2 = Salon 2, A1 = Administracion 1,
+// E1 = Direccion (area especial)
 export const LOCATION_KIND_LETTER: Record<LocationKind, string> = {
   laboratory: "L",
   classroom: "S",
   administration: "A",
+  special: "E",
   other: "O",
 };
 

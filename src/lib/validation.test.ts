@@ -1,8 +1,22 @@
 import { describe, expect, test } from "bun:test";
-import { suggestMachineId, validateCode, validateMachineId, validateName } from "./validation";
+import {
+  localDateOnly,
+  suggestMachineId,
+  todayLocalDate,
+  validateCode,
+  validateLoan,
+  validateMachineId,
+  validateName,
+} from "./validation";
 import { mockComponents, mockProducts } from "@/mocks/data/equipment";
 import { mockLocations } from "@/mocks/data/locations";
-import { locationCode, validateComponent, validateLocation, validateProduct } from "./validation";
+import {
+  locationCode,
+  locationConflict,
+  validateComponent,
+  validateLocation,
+  validateProduct,
+} from "./validation";
 
 describe("validateName", () => {
   test.each([
@@ -57,6 +71,7 @@ describe("locationCode", () => {
     expect(locationCode("laboratory", 2)).toBe("L2");
     expect(locationCode("classroom", 10)).toBe("S10");
     expect(locationCode("administration", 1)).toBe("A1");
+    expect(locationCode("special", 1)).toBe("E1");
     expect(locationCode("laboratory", 0)).toBeNull();
     expect(locationCode("laboratory", 100)).toBeNull();
     expect(locationCode("pasillo", 1)).toBeNull();
@@ -69,6 +84,8 @@ describe("validateLocation", () => {
     expect(
       validateLocation({ kind: "laboratory", number: 3, name: "Laboratorio 3 (Electrónica)" }),
     ).toEqual({});
+    // Las areas especiales llevan su propio nombre
+    expect(validateLocation({ kind: "special", number: 1, name: "Dirección" })).toEqual({});
   });
 
   test("rechaza tipo desconocido, número fuera de rango y nombres sin sentido", () => {
@@ -76,6 +93,37 @@ describe("validateLocation", () => {
     expect(validateLocation({ kind: "laboratory", number: 0, name: "Lab" }).number).toBeDefined();
     expect(validateLocation({ kind: "laboratory", number: 1.5, name: "Lab" }).number).toBeDefined();
     expect(validateLocation({ kind: "laboratory", number: 1, name: "asdasd" }).name).toBeDefined();
+  });
+});
+
+describe("locationConflict", () => {
+  test("avisa el código y el nombre repetidos como lo hace el servidor", () => {
+    expect(
+      locationConflict(
+        { kind: "laboratory", number: 1, name: "Laboratorio de redes", code: "L1" },
+        mockLocations,
+      ),
+    ).toEqual({ number: "Ya existe Laboratorio 1 (L1)" });
+    expect(
+      locationConflict(
+        { kind: "classroom", number: 30, name: "  laboratorio 1 ", code: "S30" },
+        mockLocations,
+      ),
+    ).toEqual({ name: "Ya existe una ubicación llamada laboratorio 1" });
+    expect(
+      locationConflict({ kind: "special", number: 3, name: "Bedelía", code: "E3" }, mockLocations),
+    ).toEqual({});
+  });
+
+  test("al editar no choca consigo misma", () => {
+    const own = mockLocations.find((l) => l.code === "L1")!;
+    expect(
+      locationConflict(
+        { kind: "laboratory", number: 1, name: own.name, code: own.code },
+        mockLocations,
+        own.id,
+      ),
+    ).toEqual({});
   });
 });
 
@@ -99,4 +147,62 @@ test("todos los equipos y componentes de la semilla cumplen la nomenclatura", ()
     expect(l.code).toBe(locationCode(l.kind, l.number)!);
   }
   for (const c of mockComponents) expect(validateComponent(c)).toEqual({});
+});
+
+describe("validateLoan", () => {
+  // 21 de octubre de 2026, 22:30 hora local (la hora en la que toISOString()
+  // ya devuelve el día siguiente en Uruguay)
+  const now = new Date(2026, 9, 21, 22, 30);
+
+  test("acepta la entrega de hoy aunque sea de noche", () => {
+    expect(
+      validateLoan({ issueDate: "2026-10-21T23:00", returnDate: "2026-10-22T08:00" }, now),
+    ).toEqual({});
+    expect(
+      validateLoan({ issueDate: "2026-10-21T08:00", returnDate: "2026-10-22T08:00" }, now),
+    ).toEqual({});
+  });
+
+  test("rechaza la entrega de ayer", () => {
+    expect(
+      validateLoan({ issueDate: "2026-10-20T23:00", returnDate: "2026-10-22T08:00" }, now),
+    ).toEqual({ issueDate: "La fecha de entrega no puede ser anterior a hoy" });
+  });
+
+  test("rechaza una devolución anterior a la entrega", () => {
+    expect(
+      validateLoan({ issueDate: "2026-10-22T10:00", returnDate: "2026-10-21T10:00" }, now),
+    ).toEqual({ returnDate: "La devolución no puede ser anterior a la entrega" });
+  });
+
+  test("el mismo día, la devolución tiene que ser posterior en hora", () => {
+    expect(
+      validateLoan({ issueDate: "2026-10-22T10:00", returnDate: "2026-10-22T09:00" }, now),
+    ).toEqual({ returnDate: "La fecha de devolución debe ser posterior a la de entrega" });
+    expect(
+      validateLoan({ issueDate: "2026-10-22T10:00", returnDate: "2026-10-22T11:00" }, now),
+    ).toEqual({});
+  });
+
+  test("rechaza fechas inválidas", () => {
+    expect(validateLoan({ issueDate: "", returnDate: "2026-10-22T08:00" }, now)).toEqual({
+      issueDate: "Fecha de entrega inválida",
+    });
+    expect(validateLoan({ issueDate: "ayer", returnDate: "mañana" }, now)).toEqual({
+      issueDate: "Fecha de entrega inválida",
+      returnDate: "Fecha de devolución inválida",
+    });
+    expect(
+      validateLoan({ issueDate: "2026-02-30T10:00", returnDate: "2026-03-02T10:00" }, now)
+        .issueDate,
+    ).toBe("Fecha de entrega inválida");
+  });
+
+  test("el día se lee tal cual, sin pasar por UTC", () => {
+    expect(localDateOnly("2026-10-21T23:30")).toBe("2026-10-21");
+    expect(localDateOnly("2026-10-21T23:30:00.000Z")).toBe("2026-10-21");
+    expect(localDateOnly("2026-10-21")).toBe("2026-10-21");
+    expect(localDateOnly("sin fecha")).toBeNull();
+    expect(todayLocalDate(new Date(2026, 9, 21, 23, 59))).toBe("2026-10-21");
+  });
 });

@@ -1,5 +1,11 @@
 export type UserRole = "root_admin" | "admin" | "tecnico" | "solicitante";
 
+// Turnos de la institucion (UTU/ITI): manana, tarde y noche. Son los tres que
+// usa la matricula local; agregar otro implica migracion y traducciones.
+export type StudentShift = "matutino" | "vespertino" | "nocturno";
+
+// Datos de estudiante: solo tienen sentido para el rol solicitante. Vacios
+// (null / lista vacia) cuando la persona no es estudiante o no se cargaron.
 export interface User {
   id: string;
   name: string;
@@ -7,13 +13,20 @@ export interface User {
   email: string;
   role: UserRole;
   isActive: boolean;
+  /** Grupo o clase: "1°B", "2°A"... */
+  studentGroup: string | null;
+  studentShift: StudentShift | null;
+  /** Materias que cursa; lista vacia si no hay datos */
+  studentSubjects: string[];
   createdAt: string;
   updatedAt: string;
 } // Interfaces de usuario
 
 export type EquipmentStatus = "available" | "in_use" | "in_repair" | "retired"; // Estado del equipamiento
 
-export type LocationKind = "laboratory" | "classroom" | "administration" | "other"; // Tipo de ubicacion
+// "special" son las areas que no son aula ni oficina: Direccion, Adscripciones,
+// Bedelia. Tienen su propia letra (E) para no mezclarlas con administracion
+export type LocationKind = "laboratory" | "classroom" | "administration" | "special" | "other"; // Tipo de ubicacion
 
 export interface Location {
   id: string;
@@ -87,6 +100,11 @@ export interface Ticket {
   createdAt: string;
   updatedAt: string;
   resolvedAt: string | null;
+  /** Primera vez que un tecnico tomo el ticket; null si nadie lo tomo todavia */
+  attendedAt: string | null;
+  /** Valoracion del solicitante sobre la resolucion (1-5); null si no puntuo */
+  rating: number | null;
+  ratedAt: string | null;
 } // Interfaz de ticket
 
 export type LoanStatus = "pending" | "approved" | "rejected" | "active" | "overdue" | "returned"; // Estado del prestamo
@@ -248,6 +266,8 @@ export interface DashboardStats {
   servicesByPeriod: Array<{ date: string; count: number }>;
   /** Carga de trabajo del area: solo llega para el personal, null para el solicitante */
   workQueue: WorkQueue | null;
+  /** Actividad del propio solicitante: solo llega para el, null para el personal */
+  requesterOverview: RequesterOverview | null;
 } // Interfaz de datos del dashboard
 
 export interface WorkQueue {
@@ -257,6 +277,54 @@ export interface WorkQueue {
   overdueLoans: number;
   equipmentInRepair: number;
 } // Lo que esta esperando a alguien del area
+
+// Lo que el solicitante ve de lo suyo: sus tickets en curso, los tiempos
+// estimados del area, como valoro el servicio y los lugares que usa
+export interface RequesterOverview {
+  /** Sus tickets sin resolver, del movimiento mas reciente al mas viejo */
+  activeTickets: Ticket[];
+  estimates: TicketEstimates;
+  satisfaction: SatisfactionSummary;
+  areas: RequesterArea[];
+}
+
+// Promedio historico del area (tickets ya resueltos), en horas
+export interface TicketEstimates {
+  /** Promedio desde que se creo hasta que un tecnico lo tomo */
+  toAttendHours: number | null;
+  /** Promedio desde que se creo hasta que quedo resuelto */
+  toResolveHours: number | null;
+  /** Tickets resueltos usados como muestra */
+  sampleSize: number;
+  /** Solo las categorias con muestra suficiente (>= 3 tickets) */
+  byCategory: CategoryEstimate[];
+}
+
+export interface CategoryEstimate {
+  category: TicketCategory;
+  toAttendHours: number | null;
+  toResolveHours: number | null;
+  sampleSize: number;
+}
+
+export interface SatisfactionSummary {
+  /** Promedio de las valoraciones que dejo el solicitante; null si no puntuo ninguna */
+  average: number | null;
+  /** Cuantas valoro */
+  count: number;
+}
+
+// Un lugar que el solicitante usa (por sus tickets, prestamos o reservas) y
+// como estan los equipos de ese lugar. Nunca es el estado global del sistema.
+export interface RequesterArea {
+  location: Location;
+  available: number;
+  inUse: number;
+  inRepair: number;
+  retired: number;
+  /** Tickets propios sin resolver en ese lugar */
+  openTickets: number;
+}
 
 export interface Reports {
   overdueLoans: Array<{

@@ -45,6 +45,9 @@ async function hashUsers() {
       email: user.email,
       role: user.role,
       isActive: user.isActive,
+      studentGroup: user.studentGroup,
+      studentShift: user.studentShift,
+      studentSubjects: user.studentSubjects,
       passwordHash,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
@@ -141,6 +144,9 @@ async function seed(): Promise<void> {
       createdAt: t.createdAt,
       updatedAt: t.updatedAt,
       resolvedAt: t.resolvedAt,
+      attendedAt: t.attendedAt,
+      rating: t.rating,
+      ratedAt: t.ratedAt,
     })),
   );
 

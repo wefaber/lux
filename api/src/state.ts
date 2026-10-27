@@ -63,6 +63,9 @@ export function toUser(row: t.UserRow): User {
     email: row.email,
     role: row.role as UserRole,
     isActive: row.isActive,
+    studentGroup: row.studentGroup,
+    studentShift: row.studentShift as User["studentShift"],
+    studentSubjects: row.studentSubjects,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -211,6 +214,9 @@ export async function loadState(): Promise<State> {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     resolvedAt: row.resolvedAt,
+    attendedAt: row.attendedAt,
+    rating: row.rating,
+    ratedAt: row.ratedAt,
   }));
 
   const loanComponentsByLoan = new Map<string, Component[]>();

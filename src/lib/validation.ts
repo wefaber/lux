@@ -8,7 +8,7 @@ import {
   TICKET_CATEGORY_LABELS,
   equipmentKindLabel,
 } from "./constants";
-import type { LocationKind } from "./types";
+import type { Location, LocationKind } from "./types";
 
 // Reglas de nomenclatura de equipos. Las usan el formulario (feedback por
 // campo) y los handlers (ultima barrera), para que no diverjan. Los mensajes
@@ -185,6 +185,37 @@ export function validateLocation(l: LocationFields): FieldErrors<keyof LocationF
   ]);
 }
 
+// "Administración" y "administracion" son la misma ubicacion
+export function normalizeLocationName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+}
+
+// Nombre y codigo (tipo + numero) no se repiten entre las ubicaciones vigentes.
+// El servidor es la ultima barrera; esto lo avisa en el campo antes de enviar.
+export function locationConflict(
+  fields: LocationFields & { code: string | null },
+  others: Array<Pick<Location, "id" | "name" | "code">>,
+  exceptId?: string,
+): FieldErrors<keyof LocationFields> {
+  if (!fields.code) return {};
+  const active = others.filter((l) => l.id !== exceptId);
+  const sameCode = active.find((l) => l.code === fields.code);
+  if (sameCode) {
+    return {
+      number: t("validation.location.duplicateCode", { name: sameCode.name, code: fields.code }),
+    };
+  }
+  const normalized = normalizeLocationName(fields.name);
+  if (active.some((l) => normalizeLocationName(l.name) === normalized)) {
+    return { name: t("validation.location.duplicateName", { name: fields.name.trim() }) };
+  }
+  return {};
+}
+
 export interface ReservationFields {
   startsAt: string;
   endsAt: string;
@@ -228,6 +259,72 @@ export function validateReservation(
         : purpose.length > 300
           ? t("validation.reservation.purposeMax")
           : null,
+    ],
+  ]);
+}
+
+// ── Préstamos ────────────────────────────────────────────────────────────────
+// La entrega no puede ser anterior a hoy y la devolución no puede ser anterior
+// a la entrega. Se comparan días de calendario en hora local: NUNCA con
+// toISOString(), que en Uruguay a las 21:00 ya cae en el día siguiente. Las
+// fechas llegan como las elige el <input type="datetime-local">, sin zona.
+
+export interface LoanFields {
+  issueDate: string;
+  returnDate: string;
+}
+
+const DATE_PREFIX = /^(\d{4})-(\d{2})-(\d{2})/;
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/** Día "YYYY-MM-DD" elegido en la fecha, sin convertirla a UTC. */
+export function localDateOnly(value: string): string | null {
+  const match = DATE_PREFIX.exec(value.trim());
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  const valid =
+    date.getFullYear() === Number(year) &&
+    date.getMonth() === Number(month) - 1 &&
+    date.getDate() === Number(day);
+  return valid ? `${year}-${month}-${day}` : null;
+}
+
+/** Hoy como día de calendario local, en el mismo formato que localDateOnly. */
+export function todayLocalDate(now: number | Date = Date.now()): string {
+  const date = new Date(now);
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+export function validateLoan(
+  loan: LoanFields,
+  now: number | Date = Date.now(),
+): FieldErrors<keyof LoanFields> {
+  const issue = localDateOnly(loan.issueDate);
+  const returning = localDateOnly(loan.returnDate);
+  const today = todayLocalDate(now);
+  // La hora solo desempata cuando las dos fechas caen el mismo día
+  const issueTime = new Date(loan.issueDate).getTime();
+  const returnTime = new Date(loan.returnDate).getTime();
+  return collect<keyof LoanFields>([
+    [
+      "issueDate",
+      !issue ? t("error.loan.issueInvalid") : issue < today ? t("error.loan.issuePast") : null,
+    ],
+    [
+      "returnDate",
+      !returning
+        ? t("error.loan.returnInvalid")
+        : !issue
+          ? null
+          : returning < issue
+            ? t("error.loan.returnBeforeIssue")
+            : Number.isNaN(returnTime) || returnTime <= issueTime
+              ? t("error.loan.dates")
+              : null,
     ],
   ]);
 }
@@ -305,6 +402,18 @@ export function validatePassword(password: string): string | null {
   }
   if (password.length > 128) return t("validation.password.max");
   return null;
+}
+
+/**
+ * Contrasena nueva al cambiarla desde el perfil: la politica vigente y, ademas,
+ * no repetir la actual. Comparacion exacta: el hash argon2 de la API distingue
+ * mayusculas y espacios, asi que no hay "variante equivalente" que detectar.
+ */
+export function validateNewPassword(currentPassword: string, newPassword: string): string | null {
+  return (
+    validatePassword(newPassword) ??
+    (newPassword === currentPassword ? t("error.password.same") : null)
+  );
 }
 
 /** `requirePassword`: al crear es obligatoria; al editar, vacia significa "no cambiar". */

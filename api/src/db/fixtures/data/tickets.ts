@@ -22,6 +22,9 @@ export const mockTickets: Ticket[] = [
     createdAt: "2026-05-10T09:30:00Z",
     updatedAt: "2026-05-15T14:00:00Z",
     resolvedAt: null,
+    attendedAt: "2026-05-10T11:15:00Z",
+    rating: null,
+    ratedAt: null,
   },
   {
     id: "tkt-002",
@@ -40,6 +43,9 @@ export const mockTickets: Ticket[] = [
     createdAt: "2026-05-20T08:00:00Z",
     updatedAt: "2026-05-20T08:00:00Z",
     resolvedAt: null,
+    attendedAt: null,
+    rating: null,
+    ratedAt: null,
   },
   {
     id: "tkt-003",
@@ -59,6 +65,9 @@ export const mockTickets: Ticket[] = [
     createdAt: "2026-05-18T11:00:00Z",
     updatedAt: "2026-05-21T09:00:00Z",
     resolvedAt: null,
+    attendedAt: "2026-05-18T15:30:00Z",
+    rating: null,
+    ratedAt: null,
   },
   {
     id: "tkt-004",
@@ -78,6 +87,9 @@ export const mockTickets: Ticket[] = [
     createdAt: "2026-04-28T14:00:00Z",
     updatedAt: "2026-05-02T16:30:00Z",
     resolvedAt: "2026-05-02T16:30:00Z",
+    attendedAt: "2026-04-28T18:20:00Z",
+    rating: 4,
+    ratedAt: "2026-05-03T09:00:00Z",
   },
   {
     id: "tkt-005",
@@ -96,6 +108,9 @@ export const mockTickets: Ticket[] = [
     createdAt: "2026-05-22T07:30:00Z",
     updatedAt: "2026-05-22T07:30:00Z",
     resolvedAt: null,
+    attendedAt: null,
+    rating: null,
+    ratedAt: null,
   },
   {
     id: "tkt-006",
@@ -115,6 +130,9 @@ export const mockTickets: Ticket[] = [
     createdAt: "2026-04-15T10:00:00Z",
     updatedAt: "2026-04-18T17:00:00Z",
     resolvedAt: "2026-04-18T17:00:00Z",
+    attendedAt: "2026-04-15T13:00:00Z",
+    rating: 5,
+    ratedAt: "2026-04-19T08:30:00Z",
   },
   {
     id: "tkt-007",
@@ -133,6 +151,9 @@ export const mockTickets: Ticket[] = [
     createdAt: "2026-05-08T09:00:00Z",
     updatedAt: "2026-05-19T11:00:00Z",
     resolvedAt: null,
+    attendedAt: "2026-05-08T10:30:00Z",
+    rating: null,
+    ratedAt: null,
   },
   {
     id: "tkt-008",
@@ -152,6 +173,9 @@ export const mockTickets: Ticket[] = [
     createdAt: "2026-03-20T08:00:00Z",
     updatedAt: "2026-03-22T15:00:00Z",
     resolvedAt: "2026-03-22T15:00:00Z",
+    attendedAt: "2026-03-20T09:45:00Z",
+    rating: null,
+    ratedAt: null,
   },
   {
     id: "tkt-009",
@@ -171,6 +195,9 @@ export const mockTickets: Ticket[] = [
     createdAt: "2026-05-16T14:00:00Z",
     updatedAt: "2026-05-20T10:00:00Z",
     resolvedAt: null,
+    attendedAt: "2026-05-16T16:00:00Z",
+    rating: null,
+    ratedAt: null,
   },
   {
     id: "tkt-010",
@@ -190,6 +217,9 @@ export const mockTickets: Ticket[] = [
     createdAt: "2026-05-05T09:30:00Z",
     updatedAt: "2026-05-07T17:00:00Z",
     resolvedAt: "2026-05-07T17:00:00Z",
+    attendedAt: "2026-05-05T12:00:00Z",
+    rating: 3,
+    ratedAt: "2026-05-08T10:00:00Z",
   },
   {
     id: "tkt-011",
@@ -208,6 +238,9 @@ export const mockTickets: Ticket[] = [
     createdAt: "2026-05-23T10:00:00Z",
     updatedAt: "2026-05-23T10:00:00Z",
     resolvedAt: null,
+    attendedAt: null,
+    rating: null,
+    ratedAt: null,
   },
   {
     id: "tkt-012",
@@ -226,6 +259,9 @@ export const mockTickets: Ticket[] = [
     createdAt: "2026-05-12T11:00:00Z",
     updatedAt: "2026-05-21T15:00:00Z",
     resolvedAt: null,
+    attendedAt: "2026-05-12T14:30:00Z",
+    rating: null,
+    ratedAt: null,
   },
   {
     id: "tkt-013",
@@ -245,6 +281,9 @@ export const mockTickets: Ticket[] = [
     createdAt: "2026-04-20T08:00:00Z",
     updatedAt: "2026-04-22T18:00:00Z",
     resolvedAt: "2026-04-22T18:00:00Z",
+    attendedAt: "2026-04-20T09:00:00Z",
+    rating: 4,
+    ratedAt: "2026-04-23T09:00:00Z",
   },
   {
     id: "tkt-014",
@@ -263,6 +302,9 @@ export const mockTickets: Ticket[] = [
     createdAt: "2026-05-19T09:00:00Z",
     updatedAt: "2026-05-22T14:00:00Z",
     resolvedAt: null,
+    attendedAt: "2026-05-19T11:00:00Z",
+    rating: null,
+    ratedAt: null,
   },
   {
     id: "tkt-015",
@@ -281,5 +323,8 @@ export const mockTickets: Ticket[] = [
     createdAt: "2026-05-01T07:30:00Z",
     updatedAt: "2026-05-01T10:00:00Z",
     resolvedAt: "2026-05-01T10:00:00Z",
+    attendedAt: "2026-05-01T08:00:00Z",
+    rating: 5,
+    ratedAt: "2026-05-01T12:00:00Z",
   },
 ];

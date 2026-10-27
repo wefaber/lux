@@ -28,6 +28,7 @@ export const ROUTES: RouteSpec[] = [
   { method: "PUT", path: "/auth/password", operation: "changePassword", flagData: () => ({ updated: true }) },
 
   ...crud("users", { list: "users", one: "user", create: "createUser", update: "updateUser", remove: "deleteUser" }),
+  { method: "POST", path: "/users/import", operation: "importUsers", created: true, message: "Importación realizada" },
   ...crud("locations", { list: "locations", one: "location", create: "createLocation", update: "updateLocation", remove: "softDeleteLocation" }),
 
   { method: "GET", path: "/products", operation: "products" },
@@ -48,6 +49,7 @@ export const ROUTES: RouteSpec[] = [
   { method: "PUT", path: "/tickets/:id/claim", operation: "claimTicket" },
   { method: "PUT", path: "/tickets/:id/assign", operation: "assignTicket" },
   { method: "PUT", path: "/tickets/:id/complete", operation: "completeTicket" },
+  { method: "PUT", path: "/tickets/:id/rating", operation: "rateTicket" },
   { method: "DELETE", path: "/tickets/:id", operation: "softDeleteTicket", flagData: deleted },
 
   { method: "GET", path: "/loans", operation: "loans" },

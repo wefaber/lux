@@ -1,6 +1,7 @@
 import { app } from "./app";
 import { core } from "./core";
 import { domain } from "./domain";
+import { filters } from "./filters";
 import { errors } from "./errors";
 import { comments } from "./comments";
 import { admin } from "./admin";
@@ -13,6 +14,7 @@ import { tickets } from "./tickets";
 import { dashboard } from "./dashboard";
 import { profile } from "./profile";
 import { onboarding } from "./onboarding";
+import { help } from "./help";
 import { validation } from "./validation";
 
 // Espanol: la fuente de las claves (ver ../index.ts). Un diccionario por
@@ -21,6 +23,7 @@ export const es = {
   ...core,
   ...app,
   ...domain,
+  ...filters,
   ...errors,
   ...comments,
   ...admin,
@@ -33,6 +36,7 @@ export const es = {
   ...dashboard,
   ...profile,
   ...onboarding,
+  ...help,
   ...validation,
 } as const;
 
@@ -42,6 +46,7 @@ export const esParts = [
   core,
   app,
   domain,
+  filters,
   errors,
   services,
   loans,
@@ -50,6 +55,7 @@ export const esParts = [
   dashboard,
   profile,
   onboarding,
+  help,
   validation,
   reservations,
   locations,
