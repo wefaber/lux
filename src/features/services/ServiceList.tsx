@@ -162,7 +162,7 @@ export function ServiceList() {
           </div>
           <StatusFilter
             section="service_request"
-            aria-label={t("overview.filterStatus")}
+            aria-label={t("common.filterStatus")}
             value={statusFilter}
             onValueChange={(v) => {
               setStatusFilter(v as ServiceStatus | "");

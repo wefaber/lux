@@ -21,6 +21,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useResponsiveTables } from "@/hooks/useResponsiveTables";
+import { OnboardingRoot } from "@/components/onboarding/OnboardingRoot";
 
 const adminNav: Array<{ icon: typeof Users; labelKey: MessageKey; to: string }> = [
   { icon: Users, labelKey: "admin.nav.users", to: ROUTES.ADMIN_USERS },
@@ -164,7 +165,9 @@ export function AdminLayout() {
           ))}
         </nav>
         <main ref={mainRef} className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          <Outlet />
+          <OnboardingRoot>
+            <Outlet />
+          </OnboardingRoot>
         </main>
       </div>
     </div>

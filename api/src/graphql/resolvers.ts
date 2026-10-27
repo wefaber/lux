@@ -7,6 +7,7 @@ import {
   validateIntervention,
   validateLoan,
   validateLocation,
+  validateNewPassword,
   validateProduct,
   validateReservation,
 } from "@/lib/validation";
@@ -69,6 +70,7 @@ import {
 } from "../env";
 import { LoginGuard } from "../login-guard";
 import { userFieldResolvers } from "./privacy";
+import { requesterOverview } from "./requester";
 import { exclusiveEnd, overlapsRange, withinInstantRange } from "./date-range";
 import { revokeToken } from "../sessions";
 import { db } from "../db/client";
@@ -819,6 +821,17 @@ const Query = {
             ).length,
           }
         : null,
+      // Lo del solicitante tampoco viaja al staff: cada rol ve su tablero
+      requesterOverview: staff
+        ? null
+        : requesterOverview(
+            caller.id,
+            state.tickets,
+            state.loans,
+            state.reservations,
+            state.locations,
+            state.products,
+          ),
     };
     return stats;
   },
@@ -1522,6 +1535,9 @@ const Mutation = {
       createdAt: nowIso(),
       updatedAt: nowIso(),
       resolvedAt: null,
+      attendedAt: null,
+      rating: null,
+      ratedAt: null,
     };
     await db.insert(t.tickets).values({
       id: ticket.id,
@@ -1538,6 +1554,9 @@ const Mutation = {
       createdAt: ticket.createdAt,
       updatedAt: ticket.updatedAt,
       resolvedAt: null,
+      attendedAt: null,
+      rating: null,
+      ratedAt: null,
     });
     ctx.state.tickets.push(ticket);
     ctx.state.ticketsById.set(ticket.id, ticket);
@@ -1606,6 +1625,11 @@ const Mutation = {
       ticket.assignedTo = null;
     }
     if (ticket.status === "resolved") ticket.resolvedAt = null;
+    // Al reabrir se cae la valoracion de la resolucion anterior
+    if (status === "in_progress" && ticket.ratedAt) {
+      ticket.rating = null;
+      ticket.ratedAt = null;
+    }
     ticket.status = status;
     ticket.updatedAt = nowIso();
     if (status === "in_resolution") {
@@ -1617,6 +1641,8 @@ const Mutation = {
         status: ticket.status,
         assignedToId: ticket.assignedTo?.id ?? null,
         resolvedAt: ticket.resolvedAt,
+        rating: ticket.rating,
+        ratedAt: ticket.ratedAt,
         updatedAt: ticket.updatedAt,
       })
       .where(eq(t.tickets.id, ticket.id));
@@ -1660,6 +1686,25 @@ const Mutation = {
     return ticket;
   },
 
+  // El solicitante puntua la resolucion de un ticket propio (1-5)
+  rateTicket: async (_p: unknown, args: { id: string; rating: number }, ctx: Ctx) => {
+    const caller = requireAuth(ctx);
+    const ticket = ctx.state.tickets.find((t) => t.id === args.id);
+    if (!ticket) throw notFound("Ticket no encontrado");
+    if (ticket.submittedBy.id !== caller.id) throw forbidden();
+    if (ticket.status !== "resolved") throw invalid("Solo se puede puntuar un ticket resuelto");
+    if (!Number.isInteger(args.rating) || args.rating < 1 || args.rating > 5) {
+      throw invalid("La valoración va de 1 a 5");
+    }
+    ticket.rating = args.rating;
+    ticket.ratedAt = nowIso();
+    await db
+      .update(t.tickets)
+      .set({ rating: ticket.rating, ratedAt: ticket.ratedAt })
+      .where(eq(t.tickets.id, ticket.id));
+    return ticket;
+  },
+
   claimTicket: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
     const caller = requireRole(ctx, STAFF_ROLES);
     const ticket = ctx.state.tickets.find((t) => t.id === args.id);
@@ -1668,10 +1713,17 @@ const Mutation = {
     await handOver(ctx.state, "ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, caller, caller);
     ticket.assignedTo = caller;
     ticket.status = "in_progress";
+    // Primera vez que alguien lo toma: es lo que mide el tiempo de atencion
+    ticket.attendedAt ??= nowIso();
     ticket.updatedAt = nowIso();
     await db
       .update(t.tickets)
-      .set({ assignedToId: caller.id, status: "in_progress", updatedAt: ticket.updatedAt })
+      .set({
+        assignedToId: caller.id,
+        status: "in_progress",
+        attendedAt: ticket.attendedAt,
+        updatedAt: ticket.updatedAt,
+      })
       .where(eq(t.tickets.id, ticket.id));
     return ticket;
   },
@@ -1687,10 +1739,16 @@ const Mutation = {
     await handOver(ctx.state, "ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, tech, caller);
     ticket.assignedTo = tech;
     if (ticket.status === "pending") ticket.status = "in_progress";
+    ticket.attendedAt ??= nowIso();
     ticket.updatedAt = nowIso();
     await db
       .update(t.tickets)
-      .set({ assignedToId: tech.id, status: ticket.status, updatedAt: ticket.updatedAt })
+      .set({
+        assignedToId: tech.id,
+        status: ticket.status,
+        attendedAt: ticket.attendedAt,
+        updatedAt: ticket.updatedAt,
+      })
       .where(eq(t.tickets.id, ticket.id));
     return ticket;
   },
@@ -2086,6 +2144,9 @@ const Mutation = {
     if (!row) throw notFound("Usuario no encontrado");
     const ok = await Bun.password.verify(args.currentPassword, row.passwordHash);
     if (!ok) throw invalid("La contraseña actual no es correcta");
+    // Repetir la clave actual no es un cambio: se rechaza antes de tocar el hash
+    const error = validateNewPassword(args.currentPassword, args.newPassword);
+    if (error) throw invalid(error);
     const passwordHash = await Bun.password.hash(args.newPassword, { algorithm: "argon2id" });
     await db
       .update(t.users)
@@ -2608,6 +2669,7 @@ const AUDIT: Record<keyof typeof Mutation, AuditSpec> = {
   claimTicket: { entity: "Ticket" },
   completeTicket: { entity: "Ticket", details: (a) => `Corregido: ${a.input.corrected ? "sí" : "no"}` },
   changeTicketStatus: { entity: "Ticket", details: (a) => `Estado: ${a.status}` },
+  rateTicket: { entity: "Ticket", details: (a) => `Valoración: ${a.rating}` },
   createLoan: { entity: "Loan", details: (a) => `Equipo ${a.input.equipmentId}` },
   approveLoan: { entity: "Loan" },
   rejectLoan: { entity: "Loan", details: reason },

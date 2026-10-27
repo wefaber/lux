@@ -149,6 +149,11 @@ export const tickets = pgTable(
     createdAt,
     updatedAt,
     resolvedAt: text("resolved_at"),
+    // Primera vez que un tecnico tomo el ticket (tiempo de atencion)
+    attendedAt: text("attended_at"),
+    // Valoracion del solicitante sobre la resolucion (1-5), con su fecha
+    rating: integer("rating"),
+    ratedAt: text("rated_at"),
     deletedAt: text("deleted_at"),
   },
   (t) => [
@@ -157,6 +162,7 @@ export const tickets = pgTable(
     index("tickets_assigned_to_idx").on(t.assignedToId),
     check("tickets_status_check", oneOf(t.status, TICKET_STATUSES)),
     check("tickets_category_check", oneOf(t.category, TICKET_CATEGORIES)),
+    check("tickets_rating_check", sql`${t.rating} is null or ${t.rating} between 1 and 5`),
   ],
 );
 

@@ -1,15 +1,16 @@
 import { useState, type FormEvent } from "react";
-import { Plus, Pencil, Trash2, MapPin } from "lucide-react";
+import { Plus, Pencil, Trash2, MapPin, Search } from "lucide-react";
 import { useLocations } from "@/hooks/useLocations";
 import { useI18n } from "@/hooks/useI18n";
 import { gql, formatDate, cn, errorMessage } from "@/lib/utils";
 import {
   locationCode,
+  locationConflict,
   validateLocation,
   type FieldErrors,
   type LocationFields,
 } from "@/lib/validation";
-import { LOCATION_KIND_LABELS } from "@/lib/constants";
+import { LOCATION_KIND_LABELS, LOCATION_KIND_ORDER } from "@/lib/constants";
 import type { Location, LocationKind } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,12 +44,32 @@ export function LocationsPage() {
   // null = cerrado, "new" = alta, Location = edicion
   const [editing, setEditing] = useState<Location | "new" | null>(null);
   const [deleting, setDeleting] = useState<Location | null>(null);
+  const [search, setSearch] = useState("");
+  const [kindFilter, setKindFilter] = useState<LocationKind | "">("");
 
   const done = () => {
     setEditing(null);
     setDeleting(null);
     refetch();
   };
+
+  const term = search.trim().toLowerCase();
+  // Las areas se ordenan por tipo (aulas, oficinas, especiales) y numero, no
+  // por el orden en que se dieron de alta
+  const visible = locations
+    .filter(
+      (l) =>
+        (!kindFilter || l.kind === kindFilter) &&
+        (!term ||
+          l.name.toLowerCase().includes(term) ||
+          l.code.toLowerCase().includes(term)),
+    )
+    .toSorted(
+      (a, b) =>
+        LOCATION_KIND_ORDER.indexOf(a.kind) - LOCATION_KIND_ORDER.indexOf(b.kind) ||
+        a.number - b.number,
+    );
+  const equipment = locations.reduce((sum, l) => sum + l.productCount, 0);
 
   return (
     <div className="space-y-6 max-w-full">
@@ -65,6 +86,36 @@ export function LocationsPage() {
         </Button>
       </div>
 
+      <div className="flex gap-3 flex-wrap items-center">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute z-10 left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder={t("locations.search")}
+            aria-label={t("locations.searchLabel")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <OptionSelect
+          aria-label={t("locations.filterKind")}
+          value={kindFilter}
+          onValueChange={(v) => setKindFilter(v as LocationKind | "")}
+          options={[
+            { value: "", label: t("locations.allKinds") },
+            ...LOCATION_KIND_ORDER.map((kind) => ({
+              value: kind,
+              label: LOCATION_KIND_LABELS[kind],
+            })),
+          ]}
+        />
+        {locations.length > 0 && (
+          <p className="text-xs text-muted-foreground ms-auto">
+            {t("locations.summary", { count: locations.length, equipment })}
+          </p>
+        )}
+      </div>
+
       {error && <ErrorAlert>{t("common.error", { error })}</ErrorAlert>}
 
       {isLoading && locations.length === 0 ? (
@@ -72,6 +123,20 @@ export function LocationsPage() {
       ) : locations.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground text-sm">
           {t("locations.empty")}
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="text-center py-16 space-y-3">
+          <p className="text-muted-foreground text-sm">{t("locations.emptyFiltered")}</p>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSearch("");
+              setKindFilter("");
+            }}
+          >
+            {t("locations.clearFilters")}
+          </Button>
         </div>
       ) : (
         <div
@@ -101,7 +166,7 @@ export function LocationsPage() {
               </tr>
             </thead>
             <tbody>
-              {locations.map((l) => (
+              {visible.map((l) => (
                 <tr
                   key={l.id}
                   className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
@@ -167,8 +232,11 @@ export function LocationsPage() {
   );
 }
 
-// Nombre sugerido a partir del tipo y el numero: Laboratorio 3
+// Nombre sugerido a partir del tipo y el numero: Laboratorio 3. Las areas
+// especiales se llaman por su nombre (Direccion, Adscripciones), asi que no se
+// propone uno automatico
 function autoName(kind: string, number: number): string {
+  if (kind === "special") return "";
   return `${LOCATION_KIND_LABELS[kind as LocationKind]} ${Number.isInteger(number) ? number : ""}`.trim();
 }
 
@@ -188,7 +256,7 @@ function LocationForm({ location, existing, onDone, onCancel }: LocationFormProp
   const [form, setForm] = useState<LocationFields>(() => {
     const kind = location?.kind ?? "laboratory";
     const number = location?.number ?? nextNumber(kind);
-    return { kind, number, name: location?.name ?? `${LOCATION_KIND_LABELS[kind]} ${number}` };
+    return { kind, number, name: location?.name ?? autoName(kind, number) };
   });
   // Mientras no se escriba un nombre propio, sigue al tipo y numero (Laboratorio 3)
   const [nameTouched, setNameTouched] = useState(location !== null);
@@ -211,9 +279,12 @@ function LocationForm({ location, existing, onDone, onCancel }: LocationFormProp
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    // Las mismas reglas que la API, incluidos los duplicados de nombre y codigo
     const errors = validateLocation(form);
-    setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    const conflict = locationConflict({ ...form, code }, existing, location?.id);
+    const all = { ...conflict, ...errors };
+    setFieldErrors(all);
+    if (Object.keys(all).length > 0) return;
     setSaving(true);
     setError("");
     try {

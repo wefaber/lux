@@ -5,6 +5,8 @@ interface MetricCardProps {
   label: string;
   value: number | string;
   color: string;
+  /** Aclaracion corta debajo del numero (opcional) */
+  hint?: string;
   /** Si viene, la tarjeta lleva a esa seccion */
   to?: string;
 }
@@ -12,7 +14,7 @@ interface MetricCardProps {
 const CARD_CLASS =
   "block rounded-2xl border border-border/70 bg-card/40 backdrop-blur-xl p-4 transition-all duration-300 hover:border-primary/20 hover:bg-card/75 hover:shadow-md hover:-translate-y-[2px] sm:p-6";
 
-export function MetricCard({ icon: Icon, label, value, color, to }: MetricCardProps) {
+export function MetricCard({ icon: Icon, label, value, color, hint, to }: MetricCardProps) {
   const content = (
     <>
       <div
@@ -25,6 +27,7 @@ export function MetricCard({ icon: Icon, label, value, color, to }: MetricCardPr
         {label}
       </p>
       <p className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{value}</p>
+      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
     </>
   );
 

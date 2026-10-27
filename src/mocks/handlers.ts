@@ -1,5 +1,5 @@
 import { graphql, HttpResponse } from "msw";
-import { mockUsers, mockPasswords } from "./data/users";
+import { mockUsers, mockPasswords, mockTokenVersions } from "./data/users";
 import { mockProducts, mockComponents } from "./data/equipment";
 import { mockLocations } from "./data/locations";
 import { mockInterventions } from "./data/interventions";
@@ -9,6 +9,7 @@ import { mockTickets } from "./data/tickets";
 import { mockLoans } from "./data/loans";
 import { mockServices } from "./data/services";
 import { mockNotices, mockPendingSeen } from "./data/notices";
+import { requesterOverview } from "./requester";
 import { mockActivityLogs } from "./generators";
 import { overlapsInstantRange, withinInstantRange } from "@/lib/date-range";
 import {
@@ -36,7 +37,7 @@ import {
   validateServiceRequest,
   validateStudent,
   validateTicket,
-  validatePassword,
+  validateNewPassword,
   validateUser,
 } from "./spanish";
 import { normalizeStudent, filterUsers } from "@/lib/students";
@@ -118,12 +119,30 @@ const USER_ID_PREFIX: Record<UserRole, string> = {
 };
 
 // Simula la verificacion de un token en un backend real: lo resuelve desde
-// el header Authorization en vez de leer localStorage directamente.
+// el header Authorization en vez de leer localStorage directamente. El token
+// lleva la version con la que se emitio, asi que subirla (cambio de contrasena)
+// deja sin efecto los tokens anteriores, igual que token_version en la API.
+const MOCK_TOKEN_PREFIX = "mock-token-";
+const TOKEN_VERSION_SUFFIX = /-v(\d+)$/;
+
+function mockToken(user: User): string {
+  return `${MOCK_TOKEN_PREFIX}${user.id}-v${mockTokenVersions[user.id] ?? 0}`;
+}
+
+function bumpTokenVersion(userId: string): void {
+  mockTokenVersions[userId] = (mockTokenVersions[userId] ?? 0) + 1;
+}
+
 function getCaller(request: Request): User | null {
   const authHeader = request.headers.get("Authorization");
   const token = authHeader?.match(/^Bearer (.+)$/)?.[1];
-  const userId = token?.match(/^mock-token-(.+)$/)?.[1];
-  if (!userId) return null;
+  if (!token?.startsWith(MOCK_TOKEN_PREFIX)) return null;
+  const rest = token.slice(MOCK_TOKEN_PREFIX.length);
+  const versionMatch = TOKEN_VERSION_SUFFIX.exec(rest);
+  // Un token sin sufijo es de la version 0 (los que arman los tests)
+  const userId = versionMatch ? rest.slice(0, versionMatch.index) : rest;
+  const version = versionMatch ? Number(versionMatch[1]) : 0;
+  if ((mockTokenVersions[userId] ?? 0) !== version) return null;
   return mockUsers.find((u) => u.id === userId && u.isActive) ?? null;
 }
 
@@ -521,7 +540,7 @@ export const handlers = [
     mockLoginGuard.recordSuccess(dni);
     return HttpResponse.json({
       data: {
-        login: { ...user, token: `mock-token-${user.id}` },
+        login: { ...user, token: mockToken(user) },
       },
     });
   }),
@@ -798,6 +817,17 @@ export const handlers = [
             ).length,
           }
         : null,
+      // Lo del solicitante tampoco viaja al staff: cada rol ve su tablero
+      requesterOverview: staff
+        ? null
+        : requesterOverview(
+            caller.id,
+            mockTickets,
+            mockLoans,
+            mockReservations,
+            mockLocations,
+            mockProducts,
+          ),
     };
 
     return HttpResponse.json({ data: { dashboardStats: stats } });
@@ -901,6 +931,9 @@ export const handlers = [
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       resolvedAt: null,
+      attendedAt: null,
+      rating: null,
+      ratedAt: null,
     };
     mockTickets.push(newTicket);
     return HttpResponse.json({ data: { createTicket: newTicket } });
@@ -922,6 +955,8 @@ export const handlers = [
     handOver("ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, caller, caller);
     ticket.assignedTo = caller;
     ticket.status = "in_progress";
+    // Primera vez que alguien lo toma: es lo que mide el tiempo de atencion
+    ticket.attendedAt ??= new Date().toISOString();
     ticket.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { claimTicket: ticket } });
   }),
@@ -985,6 +1020,11 @@ export const handlers = [
       ticket.assignedTo = null;
     }
     if (ticket.status === "resolved") ticket.resolvedAt = null;
+    // Al reabrir se cae la valoracion de la resolucion anterior
+    if (status === "in_progress" && ticket.ratedAt) {
+      ticket.rating = null;
+      ticket.ratedAt = null;
+    }
     ticket.status = status;
     ticket.updatedAt = new Date().toISOString();
     if (status === "in_resolution") {
@@ -1022,6 +1062,27 @@ export const handlers = [
     ticket.updatedAt = new Date().toISOString();
     notify(ticket.submittedBy, "ticket", ticket.id, "resolved", caller);
     return HttpResponse.json({ data: { completeTicket: ticket } });
+  }),
+
+  graphql.mutation("RateTicket", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    const { id, rating } = variables as { id: string; rating: number };
+    const ticket = mockTickets.find((t) => t.id === id);
+    if (!ticket) return HttpResponse.json({ errors: [{ message: "Ticket no encontrado" }] });
+    // Cada uno puntua lo suyo: el ticket tiene que ser del que llama
+    if (ticket.submittedBy.id !== caller.id) return HttpResponse.json(FORBIDDEN);
+    if (ticket.status !== "resolved") {
+      return HttpResponse.json({
+        errors: [{ message: "Solo se puede puntuar un ticket resuelto" }],
+      });
+    }
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return HttpResponse.json({ errors: [{ message: "La valoración va de 1 a 5" }] });
+    }
+    ticket.rating = rating;
+    ticket.ratedAt = new Date().toISOString();
+    return HttpResponse.json({ data: { rateTicket: ticket } });
   }),
 
   graphql.mutation("CreateLoan", ({ request, variables }) => {
@@ -1421,7 +1482,11 @@ export const handlers = [
       ...normalizeStudent(rawStudent, fields.role as UserRole),
       updatedAt: new Date().toISOString(),
     });
-    if (fields.password) mockPasswords[user.dni] = fields.password;
+    if (fields.password) {
+      mockPasswords[user.dni] = fields.password;
+      // Un reset de un administrador tambien corta las sesiones abiertas
+      bumpTokenVersion(user.id);
+    }
     return HttpResponse.json({ data: { updateUser: user } });
   }),
 
@@ -1778,11 +1843,11 @@ export const handlers = [
     if (mockPasswords[caller.dni] !== currentPassword) {
       return HttpResponse.json(errorBody("La contraseña actual no es correcta"));
     }
-    const error =
-      validatePassword(newPassword ?? "") ??
-      (newPassword === currentPassword ? "La nueva contraseña tiene que ser distinta" : null);
+    const error = validateNewPassword(currentPassword, newPassword ?? "");
     if (error) return HttpResponse.json(errorBody(error));
     mockPasswords[caller.dni] = newPassword;
+    // Cierra las sesiones abiertas, la actual incluida: hay que volver a entrar
+    bumpTokenVersion(caller.id);
     return HttpResponse.json({ data: { changePassword: true } });
   }),
 
@@ -1810,6 +1875,7 @@ export const handlers = [
     handOver("ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, tech, caller);
     ticket.assignedTo = tech;
     if (ticket.status === "pending") ticket.status = "in_progress";
+    ticket.attendedAt ??= new Date().toISOString();
     ticket.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { assignTicket: ticket } });
   }),

@@ -1,12 +1,13 @@
 import { useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
-import { Lock, Type } from "lucide-react";
+import { Compass, Lock, Type } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { useTheme } from "@/hooks/useTheme";
 import { useI18n } from "@/hooks/useI18n";
+import { useOnboarding } from "@/hooks/useOnboarding";
 import { gql, initials, errorMessage } from "@/lib/utils";
-import { ROLE_CONFIG, ROLE_LABELS, SPRING_TRANSITION } from "@/lib/constants";
-import { validatePassword } from "@/lib/validation";
+import { ROLE_CONFIG, ROLE_LABELS, ROUTES, SPRING_TRANSITION } from "@/lib/constants";
+import { validateNewPassword } from "@/lib/validation";
 import type { User } from "@/lib/types";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import { LanguageSwitcher } from "@/components/accessibility/LanguageSwitcher";
 import { ThemeSwitcher } from "@/components/accessibility/ThemeSwitcher";
 import { FontSizeControl } from "@/components/accessibility/FontSizeControl";
 import { HighContrastToggle } from "@/components/accessibility/HighContrastToggle";
+import { DyslexicFontToggle } from "@/components/accessibility/DyslexicFontToggle";
 import { Separator } from "@/components/ui/separator";
 import { ErrorAlert } from "@/components/ui/error-alert";
 
@@ -51,12 +53,12 @@ function ProfileFields({ user }: { user: User }) {
 export function ProfilePage() {
   const { user, logout } = useAuth();
   const { t } = useI18n();
-  const { dyslexicFont, toggleDyslexicFont } = useTheme();
+  const { openGuide } = useOnboarding();
+  const navigate = useNavigate();
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [pwError, setPwError] = useState("");
-  const [pwSuccess, setPwSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
 
   if (!user) return null;
@@ -64,12 +66,13 @@ export function ProfilePage() {
   const handleChangePassword = async (e: FormEvent) => {
     e.preventDefault();
     setPwError("");
-    setPwSuccess(false);
     if (newPw !== confirmPw) {
       setPwError(t("profile.password.mismatch"));
       return;
     }
-    const invalid = validatePassword(newPw);
+    // La politica y la regla de "distinta de la actual" viven en lib/validation,
+    // compartidas con el mock: el backend vuelve a aplicarlas.
+    const invalid = validateNewPassword(currentPw, newPw);
     if (invalid) {
       setPwError(invalid);
       return;
@@ -77,12 +80,13 @@ export function ProfilePage() {
     setSaving(true);
     try {
       await gql(CHANGE_PASSWORD_MUTATION, { currentPassword: currentPw, newPassword: newPw });
-      setPwSuccess(true);
       setCurrentPw("");
       setNewPw("");
       setConfirmPw("");
-      // La API revoca las sesiones previas al cambiar la clave: se vuelve a pedir el login
-      window.setTimeout(logout, 2500);
+      // Cambiar la clave invalida todas las sesiones, esta incluida: se cierra
+      // la actual y se vuelve al login con un aviso
+      logout();
+      navigate(ROUTES.LOGIN, { replace: true, state: { passwordChanged: true } });
     } catch (err) {
       setPwError(errorMessage(err, t("profile.password.failed")));
     } finally {
@@ -92,11 +96,17 @@ export function ProfilePage() {
 
   return (
     <div className="flex flex-col space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          {t("profile.title")}
-        </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">{t("profile.subtitle")}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {t("profile.title")}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{t("profile.subtitle")}</p>
+        </div>
+        <Button variant="secondary" size="sm" onClick={openGuide}>
+          <Compass className="h-3.5 w-3.5" />
+          {t("onboarding.reopen")}
+        </Button>
       </div>
 
       <motion.div
@@ -175,11 +185,6 @@ export function ProfilePage() {
                   />
                 </div>
                 <ErrorAlert>{pwError}</ErrorAlert>
-                {pwSuccess && (
-                  <div className="rounded-xl bg-[rgba(52,199,89,0.08)] border border-success-border p-3 text-sm text-success">
-                    {t("profile.password.success")}
-                  </div>
-                )}
                 <div className="flex justify-end">
                   <Button type="submit" size="sm" disabled={saving}>
                     {saving ? t("common.saving") : t("profile.password.submit")}
@@ -244,19 +249,7 @@ export function ProfilePage() {
                   </p>
                   <p className="text-xs text-muted-foreground">{t("profile.a11y.dyslexicHelp")}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={toggleDyslexicFont}
-                  className={`relative h-6 w-11 shrink-0 rounded-full transition-colors cursor-pointer ${dyslexicFont ? "bg-primary" : "bg-black/20 dark:bg-card/20"}`}
-                  role="switch"
-                  aria-checked={dyslexicFont}
-                  aria-label={t("profile.a11y.dyslexic")}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${dyslexicFont ? "translate-x-5" : "translate-x-0"}`}
-                  />
-                </button>
+                <DyslexicFontToggle />
               </div>
             </CardContent>
           </Card>

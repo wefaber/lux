@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "motion/react";
-import { Zap, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { Zap, AlertCircle, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/hooks/useI18n";
 import { LanguageSwitcher } from "@/components/accessibility/LanguageSwitcher";
@@ -14,6 +14,8 @@ import { DevCredentials } from "./DevCredentials";
 
 interface LocationState {
   from?: { pathname: string };
+  /** true cuando se llega despues de cambiar la contrasena (sesiones cerradas) */
+  passwordChanged?: boolean;
 }
 
 // El bloqueo puede durar hasta una hora: se muestra como mm:ss (15:00, 59:59)
@@ -38,6 +40,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as LocationState)?.from?.pathname ?? ROUTES.DASHBOARD;
+  const passwordChanged = (location.state as LocationState | null)?.passwordChanged === true;
 
   useEffect(() => {
     if (lockedUntil === null) return;
@@ -117,6 +120,16 @@ export function LoginPage() {
         </div>
 
         <div className="rounded-2xl border border-border bg-card/40 p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.06)] backdrop-blur-xl">
+          {passwordChanged && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-start gap-2 rounded-xl bg-[rgba(52,199,89,0.08)] border border-success-border px-3 py-2.5 mb-5"
+            >
+              <CheckCircle2 className="h-4 w-4 text-success mt-0.5 shrink-0" />
+              <p className="text-xs text-success">{t("login.notice.passwordChanged")}</p>
+            </motion.div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-5" noValidate>
             <div className="space-y-1.5">
               <Label htmlFor="dni">{t("login.dni")}</Label>

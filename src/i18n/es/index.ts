@@ -13,6 +13,7 @@ import { inventory } from "./inventory";
 import { tickets } from "./tickets";
 import { dashboard } from "./dashboard";
 import { profile } from "./profile";
+import { onboarding } from "./onboarding";
 import { help } from "./help";
 import { validation } from "./validation";
 
@@ -34,6 +35,7 @@ export const es = {
   ...tickets,
   ...dashboard,
   ...profile,
+  ...onboarding,
   ...help,
   ...validation,
 } as const;
@@ -52,6 +54,7 @@ export const esParts = [
   tickets,
   dashboard,
   profile,
+  onboarding,
   help,
   validation,
   reservations,

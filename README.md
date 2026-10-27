@@ -157,4 +157,6 @@ bun format         # Formatting (oxfmt)
 - [Architecture, installation and operation](docs/ARQUITECTURA.md)
 - [Backend and database](docs/BACKEND.md)
 - [Per-actor navigation flows](docs/FLUJO-NAVEGACION.md) — screens, menus, actions and Mermaid diagrams for each role
+- [Happy-path sequence diagrams (CU-01 to CU-27)](docs/UML-SECUENCIAS.md) — actors, model↔code states and differences
 - [Internationalization (es / en)](docs/I18N.md)
+- [Corrections applied to the legacy SQL files](docs/CAMBIOS.md)

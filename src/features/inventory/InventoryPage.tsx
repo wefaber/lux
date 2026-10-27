@@ -127,7 +127,7 @@ export function InventoryPage() {
           onLocationChange={setLocationFilter}
         />
         <OptionSelect
-          aria-label={t("overview.filterStatus")}
+          aria-label={t("common.filterStatus")}
           value={statusFilter}
           onValueChange={(v) => setStatusFilter(v as EquipmentStatus | "")}
           options={[

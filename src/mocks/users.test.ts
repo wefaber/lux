@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { mockPasswords, mockUsers } from "./data/users";
-import { FORBIDDEN, gqlAs, useMockServer, USERS } from "@/test/graphql";
+import { FORBIDDEN, gqlAs, gqlWithToken, useMockServer, USERS } from "@/test/graphql";
 
 useMockServer();
 
@@ -9,7 +9,8 @@ const { ROOT, ADMIN, TECNICO } = USERS;
 const UPDATE = `mutation UpdateUser($id: ID!, $input: UserInput!) { updateUser(id: $id, input: $input) { id dni role isActive } }`;
 const CREATE = `mutation CreateUser($input: UserInput!) { createUser(input: $input) { id role } }`;
 const CHANGE_PW = `mutation ChangePassword($currentPassword: String!, $newPassword: String!) { changePassword(currentPassword: $currentPassword, newPassword: $newPassword) }`;
-const LOGIN = `query Login($dni: String!, $password: String!) { login(dni: $dni, password: $password) { id } }`;
+const LOGIN = `query Login($dni: String!, $password: String!) { login(dni: $dni, password: $password) { id token } }`;
+const ME = `query GetMe { me { id } }`;
 
 const user = (id: string) => mockUsers.find((u) => u.id === id)!;
 const errorOf = (res: { errors?: Array<{ message: string }> }) => res.errors?.[0].message;
@@ -129,7 +130,7 @@ describe("edición de usuarios", () => {
 });
 
 describe("cambio de contraseña", () => {
-  test("exige la actual y la cambia de verdad", async () => {
+  test("exige la actual, valida la nueva y no acepta repetir la actual", async () => {
     const me = user(TECNICO);
     const current = mockPasswords[me.dni];
     expect(
@@ -141,10 +142,41 @@ describe("cambio de contraseña", () => {
       errorOf(await gqlAs(TECNICO, CHANGE_PW, { currentPassword: current, newPassword: "123" })),
     ).toBe("La contraseña debe tener al menos 6 caracteres");
     expect(
+      errorOf(await gqlAs(TECNICO, CHANGE_PW, { currentPassword: current, newPassword: current })),
+    ).toBe("La nueva contraseña tiene que ser distinta");
+    expect(mockPasswords[me.dni]).toBe(current);
+  });
+
+  test("la nueva contraseña sirve para entrar y cierra las sesiones abiertas", async () => {
+    const me = user(TECNICO);
+    const current = mockPasswords[me.dni];
+    const before = await gqlAs<{ login: { token: string } }>(null, LOGIN, {
+      dni: me.dni,
+      password: current,
+    });
+    const previousToken = before.data!.login.token;
+
+    expect(
       errorOf(
         await gqlAs(TECNICO, CHANGE_PW, { currentPassword: current, newPassword: "nueva123" }),
       ),
     ).toBeUndefined();
     expect(mockPasswords[me.dni]).toBe("nueva123");
+
+    // El token emitido antes del cambio quedo sin efecto
+    const stale = await gqlWithToken<{ me: { id: string } | null }>(previousToken, ME);
+    expect(stale.data!.me).toBeNull();
+
+    // La clave anterior ya no entra y la nueva abre una sesion vigente
+    expect(errorOf(await gqlAs(null, LOGIN, { dni: me.dni, password: current }))).toBe(
+      "Credenciales inválidas",
+    );
+    const after = await gqlAs<{ login: { id: string; token: string } }>(null, LOGIN, {
+      dni: me.dni,
+      password: "nueva123",
+    });
+    expect(after.data!.login.id).toBe(me.id);
+    const fresh = await gqlWithToken<{ me: { id: string } | null }>(after.data!.login.token, ME);
+    expect(fresh.data!.me?.id).toBe(me.id);
   });
 });
