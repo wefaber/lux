@@ -29,6 +29,11 @@ export const schema = `
     # Secciones (ticket | service_request | reservation | loan) con pedidos
     # pendientes que el staff no vio todavia; vacio para el solicitante
     pendingNews: [String!]!
+    # Issue tracker: solo admin/root_admin
+    errorReports(status: String, search: String, limit: Int): [ErrorReport!]!
+    errorReport(id: ID!): ErrorReport
+    errorReportSettings: ErrorReportSettings!
+    githubIssueDraft(id: ID!): String!
   }
 
   type Mutation {
@@ -74,6 +79,10 @@ export const schema = `
     cancelReservation(id: ID!): Reservation!
     acknowledgeNotice(id: ID!): Boolean!
     markPendingSeen(section: String!): Boolean!
+    # Publica: la usa POST /api/v1/errors desde el navegador
+    reportError(input: ErrorReportInput!): ErrorReport!
+    updateErrorReportStatus(id: ID!, status: String!): ErrorReport!
+    createGithubIssue(id: ID!): GithubIssueResult!
   }
 
   type Reservation {
@@ -382,6 +391,45 @@ export const schema = `
   type PeriodCount {
     date: String!
     count: Int!
+  }
+
+  type ErrorReport {
+    id: ID!
+    fingerprint: String!
+    message: String!
+    stack: String
+    route: String!
+    userAgent: String
+    role: String
+    firstSeen: String!
+    lastSeen: String!
+    occurrences: Int!
+    # new | triaged | resolved
+    status: String!
+    githubIssueUrl: String
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type ErrorReportSettings {
+    githubConfigured: Boolean!
+    llmConfigured: Boolean!
+    repository: String
+  }
+
+  type GithubIssueResult {
+    url: String!
+    usedLlm: Boolean!
+    alreadyExisted: Boolean!
+  }
+
+  input ErrorReportInput {
+    fingerprint: String!
+    message: String!
+    stack: String
+    route: String!
+    userAgent: String
+    role: String
   }
 
   type ActivityLog {

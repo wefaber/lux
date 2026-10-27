@@ -357,6 +357,37 @@ export interface AuthUser extends User {
   token: string;
 } // Interfaz de auth user con token de usuario extendiendo usuario
 
+export type ErrorReportStatus = "new" | "triaged" | "resolved"; // Ciclo de vida de un error reportado
+
+export interface ErrorReport {
+  id: string;
+  fingerprint: string;
+  message: string;
+  stack: string | null;
+  route: string;
+  userAgent: string | null;
+  role: string | null;
+  firstSeen: string;
+  lastSeen: string;
+  occurrences: number;
+  status: ErrorReportStatus;
+  githubIssueUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+} // Error del frontend agrupado por huella
+
+export interface ErrorReportSettings {
+  githubConfigured: boolean;
+  llmConfigured: boolean;
+  repository: string | null;
+} // Que integraciones estan configuradas (nunca incluye credenciales)
+
+export interface GithubIssueResult {
+  url: string;
+  usedLlm: boolean;
+  alreadyExisted: boolean;
+} // Resultado de crear el issue en GitHub
+
 export type FontSize = "sm" | "md" | "lg" | "xl"; // Tamaños de fuentes
 export type Theme = "light" | "dark"; // Tipos de temas
 

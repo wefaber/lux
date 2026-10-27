@@ -32,6 +32,12 @@ export const typeDefs = /* GraphQL */ `
     reservation(id: ID!): Reservation
     notices: [Notice!]!
     pendingNews: [String!]!
+    # Issue tracker (solo admin/root_admin). reportError es la unica operacion
+    # publica y se usa desde POST /api/v1/errors.
+    errorReports(status: String, search: String, limit: Int): [ErrorReport!]!
+    errorReport(id: ID!): ErrorReport
+    errorReportSettings: ErrorReportSettings!
+    githubIssueDraft(id: ID!): String!
   }
 
   type Mutation {
@@ -82,6 +88,9 @@ export const typeDefs = /* GraphQL */ `
     cancelReservation(id: ID!): Reservation!
     acknowledgeNotice(id: ID!): Boolean!
     markPendingSeen(section: String!): Boolean!
+    reportError(input: ErrorReportInput!): ErrorReport!
+    updateErrorReportStatus(id: ID!, status: String!): ErrorReport!
+    createGithubIssue(id: ID!): GithubIssueResult!
   }
 
   type Reservation {
@@ -385,6 +394,46 @@ export const typeDefs = /* GraphQL */ `
   type PeriodCount {
     date: String!
     count: Int!
+  }
+
+  type ErrorReport {
+    id: ID!
+    fingerprint: String!
+    message: String!
+    stack: String
+    route: String!
+    userAgent: String
+    role: String
+    firstSeen: String!
+    lastSeen: String!
+    occurrences: Int!
+    # new | triaged | resolved
+    status: String!
+    githubIssueUrl: String
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type ErrorReportSettings {
+    githubConfigured: Boolean!
+    llmConfigured: Boolean!
+    # owner/repo cuando hay credenciales; nunca el token
+    repository: String
+  }
+
+  type GithubIssueResult {
+    url: String!
+    usedLlm: Boolean!
+    alreadyExisted: Boolean!
+  }
+
+  input ErrorReportInput {
+    fingerprint: String!
+    message: String!
+    stack: String
+    route: String!
+    userAgent: String
+    role: String
   }
 
   type ActivityLog {

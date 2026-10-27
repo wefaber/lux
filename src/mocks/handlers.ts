@@ -1,4 +1,4 @@
-import { graphql, HttpResponse } from "msw";
+import { graphql, http, HttpResponse } from "msw";
 import { mockUsers, mockPasswords, mockTokenVersions } from "./data/users";
 import { mockProducts, mockComponents } from "./data/equipment";
 import { mockLocations } from "./data/locations";
@@ -9,6 +9,7 @@ import { mockTickets } from "./data/tickets";
 import { mockLoans } from "./data/loans";
 import { mockServices } from "./data/services";
 import { mockNotices, mockPendingSeen } from "./data/notices";
+import { mockErrorReports } from "./data/errors";
 import { requesterOverview } from "./requester";
 import { mockActivityLogs } from "./generators";
 import { overlapsInstantRange, withinInstantRange } from "@/lib/date-range";
@@ -17,6 +18,13 @@ import {
   mockLoginGuard,
   mockRequestOrigin,
 } from "./login-guard";
+import {
+  MAX_FP_MESSAGE,
+  MAX_FP_ROUTE,
+  MAX_FP_STACK,
+  MAX_FP_USER_AGENT,
+  sanitizeErrorText,
+} from "@/lib/error-fingerprint";
 import {
   firstError,
   locationCode,
@@ -91,6 +99,8 @@ import type {
   TicketStatus,
   LoanStatus,
   ServiceStatus,
+  ErrorReport,
+  ErrorReportStatus,
   StudentShift,
 } from "@/lib/types";
 
@@ -159,6 +169,100 @@ const PERIOD_BUCKETS: Record<DashboardPeriod, { days: number; bucketDays: number
 
 const UNAUTHENTICATED = { errors: [{ message: "No autenticado" }] };
 const FORBIDDEN = { errors: [{ message: "No tenés permisos para esta acción" }] };
+
+// ── Issue tracker ────────────────────────────────────────────────────────────
+// Misma forma que la API real: POST publico (upsert por huella) + lecturas y
+// acciones de triage para administradores.
+const ERROR_REPORT_STATUSES = new Set<ErrorReportStatus>(["new", "triaged", "resolved"]);
+const ERROR_REPORT_ROLES = new Set(["root_admin", "admin", "tecnico", "solicitante", "anonymous"]);
+
+interface MockReportInput {
+  fingerprint?: unknown;
+  message?: unknown;
+  stack?: unknown;
+  route?: unknown;
+  userAgent?: unknown;
+  role?: unknown;
+}
+
+function mockReportError(input: MockReportInput, caller: User | null) {
+  const fingerprint = String(input.fingerprint ?? "").trim();
+  if (!/^[a-z0-9]{8,64}$/i.test(fingerprint)) {
+    return { error: "La huella del error no es válida" as string };
+  }
+  const message = sanitizeErrorText(input.message, MAX_FP_MESSAGE);
+  if (!message) return { error: "El mensaje del error es obligatorio" };
+  const route = sanitizeErrorText(input.route, MAX_FP_ROUTE) || "/";
+  const stack = sanitizeErrorText(input.stack, MAX_FP_STACK) || null;
+  const userAgent = sanitizeErrorText(input.userAgent, MAX_FP_USER_AGENT) || null;
+  const role = caller?.role ?? String(input.role ?? "anonymous");
+  const now = new Date().toISOString();
+  const existing = mockErrorReports.find((r) => r.fingerprint === fingerprint);
+  if (existing) {
+    Object.assign(existing, {
+      message,
+      stack,
+      route,
+      userAgent,
+      role: ERROR_REPORT_ROLES.has(role) ? role : "anonymous",
+      lastSeen: now,
+      updatedAt: now,
+      occurrences: existing.occurrences + 1,
+    });
+    return { report: existing };
+  }
+  const report: ErrorReport = {
+    id: nextId("err-", mockErrorReports, 3),
+    fingerprint,
+    message,
+    stack,
+    route,
+    userAgent,
+    role: ERROR_REPORT_ROLES.has(role) ? role : "anonymous",
+    firstSeen: now,
+    lastSeen: now,
+    occurrences: 1,
+    status: "new",
+    githubIssueUrl: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+  mockErrorReports.push(report);
+  return { report };
+}
+
+function mockIssueDraft(report: ErrorReport): string {
+  return [
+    "## Contexto",
+    "",
+    `- **Ruta:** \`${report.route}\``,
+    `- **Rol:** ${report.role ?? "anonymous"}`,
+    `- **Navegador:** ${report.userAgent ?? "no informado"}`,
+    `- **Huella:** \`${report.fingerprint}\``,
+    `- **Ocurrencias:** ${report.occurrences}`,
+    `- **Primera vez:** ${report.firstSeen}`,
+    `- **Última vez:** ${report.lastSeen}`,
+    "",
+    "## Pasos para reproducir",
+    "",
+    `1. Abrir \`${report.route}\` con una sesión del rol indicado.`,
+    "2. Repetir la acción que disparó el error.",
+    "",
+    "## Error",
+    "",
+    "~~~text",
+    report.message,
+    "~~~",
+    "",
+    "## Stack",
+    "",
+    "~~~text",
+    report.stack ?? "(sin stack)",
+    "~~~",
+    "",
+    "_Generado por Lux Issue Tracker (mock)._",
+  ].join("\n");
+}
 
 // Estados en los que el prestamo compromete el equipo: aprobado y todavia no
 // entregado, o entregado y todavia no devuelto.
@@ -2379,5 +2483,128 @@ export const handlers = [
     }
     location.deletedAt = new Date().toISOString();
     return HttpResponse.json({ data: { softDeleteLocation: true } });
+  }),
+
+  // ── Issue tracker ──────────────────────────────────────────────────────────
+  // POST publico (sin sesion) que usa el navegador. Devuelve el sobre de
+  // /api/v1 y hace upsert por fingerprint, igual que la API real.
+  http.post("*/api/v1/errors", async ({ request }) => {
+    let input: MockReportInput;
+    try {
+      const parsed: unknown = await request.json();
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
+      input = parsed as MockReportInput;
+    } catch {
+      return HttpResponse.json(
+        { status: 400, message: "El cuerpo debe ser un objeto JSON", data: null },
+        { status: 400 },
+      );
+    }
+    const result = mockReportError(input, getCaller(request));
+    if (result.error) {
+      return HttpResponse.json(
+        { status: 422, message: result.error, data: null },
+        { status: 422 },
+      );
+    }
+    return HttpResponse.json(
+      { status: 201, message: "Error registrado", data: result.report },
+      { status: 201 },
+    );
+  }),
+
+  graphql.query("GetErrorReports", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { status, search, limit } = variables as {
+      status?: string;
+      search?: string;
+      limit?: number;
+    };
+    const needle = search?.trim().toLowerCase();
+    const reports = mockErrorReports
+      .filter((r) => !status || r.status === status)
+      .filter(
+        (r) =>
+          !needle ||
+          r.message.toLowerCase().includes(needle) ||
+          r.route.toLowerCase().includes(needle) ||
+          r.fingerprint.toLowerCase().includes(needle),
+      )
+      .toSorted((a, b) => b.lastSeen.localeCompare(a.lastSeen))
+      .slice(0, Math.min(Math.max(Number(limit ?? 500), 1), 500));
+    return HttpResponse.json({ data: { errorReports: reports } });
+  }),
+
+  graphql.query("GetErrorReport", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { id } = variables as { id: string };
+    const report = mockErrorReports.find((r) => r.id === id);
+    if (!report) return HttpResponse.json({ errors: [{ message: "Reporte de error no encontrado" }] });
+    return HttpResponse.json({ data: { errorReport: report } });
+  }),
+
+  // El mock no tiene credenciales reales: refleja el estado "sin configurar"
+  // para que la UI muestre el camino de copiar el borrador.
+  graphql.query("GetErrorReportSettings", ({ request }) => {
+    if (!hasRole(getCaller(request), ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
+    return HttpResponse.json({
+      data: {
+        errorReportSettings: { githubConfigured: false, llmConfigured: false, repository: null },
+      },
+    });
+  }),
+
+  graphql.query("GetGithubIssueDraft", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { id } = variables as { id: string };
+    const report = mockErrorReports.find((r) => r.id === id);
+    if (!report) return HttpResponse.json({ errors: [{ message: "Reporte de error no encontrado" }] });
+    return HttpResponse.json({ data: { githubIssueDraft: mockIssueDraft(report) } });
+  }),
+
+  graphql.mutation("ReportError", ({ request, variables }) => {
+    const { input } = variables as { input: MockReportInput };
+    const result = mockReportError(input, getCaller(request));
+    if (result.error) return HttpResponse.json({ errors: [{ message: result.error }] });
+    return HttpResponse.json({ data: { reportError: result.report } });
+  }),
+
+  graphql.mutation("UpdateErrorReportStatus", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { id, status } = variables as { id: string; status: string };
+    if (!ERROR_REPORT_STATUSES.has(status as ErrorReportStatus)) {
+      return HttpResponse.json({ errors: [{ message: "Estado del reporte inválido" }] });
+    }
+    const report = mockErrorReports.find((r) => r.id === id);
+    if (!report) return HttpResponse.json({ errors: [{ message: "Reporte de error no encontrado" }] });
+    report.status = status as ErrorReportStatus;
+    report.updatedAt = new Date().toISOString();
+    return HttpResponse.json({ data: { updateErrorReportStatus: report } });
+  }),
+
+  graphql.mutation("CreateGithubIssue", ({ request, variables }) => {
+    if (!hasRole(getCaller(request), ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { id } = variables as { id: string };
+    const report = mockErrorReports.find((r) => r.id === id);
+    if (!report) return HttpResponse.json({ errors: [{ message: "Reporte de error no encontrado" }] });
+    if (report.githubIssueUrl) {
+      return HttpResponse.json({
+        data: {
+          createGithubIssue: {
+            url: report.githubIssueUrl,
+            usedLlm: false,
+            alreadyExisted: true,
+          },
+        },
+      });
+    }
+    return HttpResponse.json({
+      errors: [
+        {
+          message:
+            "GitHub no está configurado: definí GITHUB_TOKEN y GITHUB_REPO en la API. Mientras tanto, copiá el borrador local.",
+        },
+      ],
+    });
   }),
 ];

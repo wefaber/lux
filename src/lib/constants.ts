@@ -12,6 +12,7 @@ import type {
   NoticeKind,
   ReservationResource,
   ReservationStatus,
+  ErrorReportStatus,
   StudentShift,
 } from "./types";
 import { plain, type MessageKey } from "@/i18n";
@@ -81,10 +82,17 @@ export const ROUTES = {
   ADMIN_ROLES: "/admin/roles",
   ADMIN_LOGS: "/admin/logs",
   ADMIN_REPORTS: "/admin/reports",
+  ADMIN_ISSUES: "/admin/issues",
   NOT_FOUND: "/404",
   FORBIDDEN: "/403",
   SERVER_ERROR: "/500",
 } as const; // Rutas de la aplicacion, constantes y de solo lectura
+
+export const ERROR_REPORT_STATUS_CONFIG: Record<ErrorReportStatus, StatusConfig> = {
+  new: statusConfig("status.errorReport.new", "destructive"),
+  triaged: statusConfig("status.errorReport.triaged", "warning"),
+  resolved: statusConfig("status.errorReport.resolved", "success"),
+}; // Triage de los errores reportados por el frontend
 
 export const TICKET_STATUS_CONFIG: Record<TicketStatus, StatusConfig> = {
   pending: statusConfig("status.ticket.pending", "muted"), // distinto de in_resolution: la dona del dashboard los separa por color

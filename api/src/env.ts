@@ -128,6 +128,49 @@ export function maxBodyBytes(): number {
   return positiveInt("MAX_BODY_BYTES", 256 * 1024);
 }
 
+/**
+ * Credenciales del issue tracker. GITHUB_TOKEN y GITHUB_REPO son las unicas
+ * obligatorias para crear issues; el LLM es opcional. Se leen en cada llamada
+ * (no al importar) para que los tests puedan cambiar el entorno.
+ */
+export interface GithubEnv {
+  token: string;
+  repo: string;
+}
+
+export function githubConfig(): GithubEnv | null {
+  loadEnv();
+  const token = process.env.GITHUB_TOKEN?.trim();
+  const repo = process.env.GITHUB_REPO?.trim();
+  if (!token || !repo) return null;
+  return { token, repo };
+}
+
+export interface LlmEnv {
+  endpoint: string;
+  apiKey?: string;
+  model?: string;
+}
+
+export function llmConfig(): LlmEnv | null {
+  loadEnv();
+  const endpoint = process.env.LLM_ENDPOINT?.trim();
+  if (!endpoint) return null;
+  return {
+    endpoint,
+    apiKey: process.env.LLM_API_KEY?.trim() || undefined,
+    model: process.env.LLM_MODEL?.trim() || undefined,
+  };
+}
+
+/** Reportes aceptados por IP y ventana (`ERROR_REPORT_RATE_LIMIT`, default 30 por minuto). */
+export function errorReportRateLimit(): { max: number; windowMs: number } {
+  loadEnv();
+  const max = positiveInt("ERROR_REPORT_RATE_LIMIT", 30);
+  const minutes = positiveInt("ERROR_REPORT_RATE_WINDOW_MINUTES", 1);
+  return { max, windowMs: minutes * 60 * 1000 };
+}
+
 /** Profundidad maxima de una operacion GraphQL (`GRAPHQL_MAX_DEPTH`, default 10). */
 export function graphqlMaxDepth(): number {
   loadEnv();

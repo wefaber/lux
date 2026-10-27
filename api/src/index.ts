@@ -39,6 +39,7 @@ const REQUIRED_TABLES = [
   "pending_seen",
   "activity_logs",
   "revoked_tokens",
+  "error_reports",
 ];
 
 async function readiness(): Promise<boolean> {

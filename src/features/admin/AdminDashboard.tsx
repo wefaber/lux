@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { Users, Shield, ActivitySquare, ArrowRight, BarChart3 } from "lucide-react";
+import { Users, Shield, ActivitySquare, ArrowRight, BarChart3, Bug } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ROUTES, SPRING_TRANSITION } from "@/lib/constants";
 import { useAsync } from "@/hooks/useSkeleton";
@@ -47,6 +47,13 @@ export function AdminDashboard() {
       description: t("admin.home.reportsDetail"),
       to: ROUTES.ADMIN_REPORTS,
       color: "rgb(175,82,222)",
+    },
+    {
+      icon: Bug,
+      title: t("admin.home.issues"),
+      description: t("admin.home.issuesDetail"),
+      to: ROUTES.ADMIN_ISSUES,
+      color: "rgb(202,44,33)",
     },
   ];
 
