@@ -14,6 +14,7 @@ import { inventory } from "./inventory";
 import { tickets } from "./tickets";
 import { dashboard } from "./dashboard";
 import { profile } from "./profile";
+import { onboarding } from "./onboarding";
 import { help } from "./help";
 import { validation } from "./validation";
 
@@ -34,6 +35,7 @@ export const en: Record<MessageKey, string> = {
   ...tickets,
   ...dashboard,
   ...profile,
+  ...onboarding,
   ...help,
   ...validation,
 };

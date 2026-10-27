@@ -1,7 +1,8 @@
 import { Link, useNavigate } from "react-router-dom";
-import { LogOut, Settings, Shield, HelpCircle } from "lucide-react";
+import { Compass, HelpCircle, LogOut, Settings, Shield } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/hooks/useI18n";
+import { useOnboarding } from "@/hooks/useOnboarding";
 import { LanguageSwitcher } from "@/components/accessibility/LanguageSwitcher";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import { initials } from "@/lib/utils";
 export function Topbar() {
   const { user, logout, hasRole } = useAuth();
   const { t } = useI18n();
+  const { openGuide } = useOnboarding();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -87,6 +89,10 @@ export function Topbar() {
                   <Settings className="h-4 w-4" />
                   {t("topbar.profile")}
                 </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={openGuide} className="flex items-center gap-2">
+                <Compass className="h-4 w-4" />
+                {t("onboarding.reopen")}
               </DropdownMenuItem>
               {hasRole(...ADMIN_ROLES) && (
                 <DropdownMenuItem asChild>
