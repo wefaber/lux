@@ -106,7 +106,7 @@ export function OolList() {
                   <td className="px-4 py-3">
                     <Link
                       to={`${ROUTES.TICKETS}/${tk.id}`}
-                      className="text-sm font-medium text-foreground hover:underline"
+                      className="inline-flex min-h-11 items-center text-sm font-medium text-foreground hover:underline sm:min-h-0"
                     >
                       {tk.title}
                     </Link>

@@ -11,6 +11,9 @@ export const app = {
   "nav.services": "Solicitudes",
   "nav.reservations": "Reservas",
   "nav.profile": "Perfil",
+  "nav.more": "Más",
+  "nav.moreDescription": "Otras secciones de la aplicación",
+  "nav.main": "Navegación principal",
   "nav.unseen": "avisos sin ver",
   "sidebar.expand": "Expandir sidebar",
   "sidebar.collapse": "Colapsar sidebar",
@@ -49,6 +52,8 @@ export const app = {
   "login.locked.button": "Esperá {time}",
   "login.error.fields": "Completá todos los campos.",
   "login.error.dni": "El número de cédula debe tener 7 u 8 dígitos.",
+  "login.notice.passwordChanged":
+    "Contraseña actualizada. Por seguridad cerramos todas las sesiones: ingresá de nuevo con la contraseña nueva.",
   "login.error.credentials": "Credenciales inválidas. Verificá tu cédula y contraseña.",
   "login.error.mocks":
     "No responde el servidor de datos de prueba. Recargá la página e intentá de nuevo.",

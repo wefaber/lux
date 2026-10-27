@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OptionSelect } from "@/components/ui/option-select";
+import { DialogFooter } from "@/components/ui/dialog";
 import { ErrorAlert } from "@/components/ui/error-alert";
 
 const CREATE_USER_MUTATION = `
@@ -202,7 +203,7 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
         <FieldError message={fieldErrors.password} />
       </div>
       <ErrorAlert>{error}</ErrorAlert>
-      <div className="flex justify-end gap-2">
+      <DialogFooter>
         <Button type="submit" size="sm" disabled={saving}>
           {saving
             ? t("common.saving")
@@ -210,7 +211,7 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
               ? t("admin.userForm.saveChanges")
               : t("admin.userForm.submit")}
         </Button>
-      </div>
+      </DialogFooter>
     </form>
   );
 }

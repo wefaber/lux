@@ -13,6 +13,9 @@ export const app: Translation<typeof es> = {
   "nav.services": "Requests",
   "nav.reservations": "Reservations",
   "nav.profile": "Profile",
+  "nav.more": "More",
+  "nav.moreDescription": "Other app sections",
+  "nav.main": "Main navigation",
   "nav.unseen": "unseen notices",
   "sidebar.expand": "Expand sidebar",
   "sidebar.collapse": "Collapse sidebar",
@@ -51,6 +54,8 @@ export const app: Translation<typeof es> = {
   "login.locked.button": "Wait {time}",
   "login.error.fields": "Fill in all the fields.",
   "login.error.dni": "The ID number must have 7 or 8 digits.",
+  "login.notice.passwordChanged":
+    "Password updated. For security we closed every session: sign in again with the new password.",
   "login.error.credentials": "Invalid credentials. Check your ID number and password.",
   "login.error.mocks": "The test data server is not responding. Reload the page and try again.",
   "wait.preparing": "Getting the system ready...",

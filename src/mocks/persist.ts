@@ -1,4 +1,4 @@
-import { mockUsers, mockPasswords } from "./data/users";
+import { mockUsers, mockPasswords, mockTokenVersions } from "./data/users";
 import { mockProducts, mockComponents } from "./data/equipment";
 import { mockLocations } from "./data/locations";
 import { mockInterventions } from "./data/interventions";
@@ -37,7 +37,10 @@ const ARRAYS = {
   errorReports: mockErrorReports,
 } as const;
 
-type Store = { [K in keyof typeof ARRAYS]: unknown[] } & { passwords: Record<string, string> };
+type Store = { [K in keyof typeof ARRAYS]: unknown[] } & {
+  passwords: Record<string, string>;
+  tokenVersions: Record<string, number>;
+};
 
 // Un prestamo apunta al MISMO objeto que el equipo de la lista de equipos (y
 // los handlers cambian el estado del equipo a traves del prestamo). JSON a
@@ -86,7 +89,11 @@ let resetting = false;
 
 export function saveMockData(): void {
   if (resetting) return;
-  const store: Store = { ...ARRAYS, passwords: mockPasswords };
+  const store: Store = {
+    ...ARRAYS,
+    passwords: mockPasswords,
+    tokenVersions: mockTokenVersions,
+  };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: VERSION, data: encode(store) }));
   } catch {
@@ -128,6 +135,10 @@ export function restoreMockData(): void {
   if (store.passwords) {
     for (const key of Object.keys(mockPasswords)) delete mockPasswords[key];
     Object.assign(mockPasswords, store.passwords);
+  }
+  if (store.tokenVersions) {
+    for (const key of Object.keys(mockTokenVersions)) delete mockTokenVersions[key];
+    Object.assign(mockTokenVersions, store.tokenVersions);
   }
 }
 

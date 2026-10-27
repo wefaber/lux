@@ -306,7 +306,7 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
                       {t("form.machineIdHelp")}{" "}
                       <button
                         type="button"
-                        className="font-mono text-primary font-semibold hover:underline cursor-pointer"
+                        className="inline-flex min-h-11 items-center font-mono font-semibold text-primary hover:underline cursor-pointer sm:min-h-0"
                         onClick={() => update("machineId", suggestion)}
                       >
                         {suggestion}
@@ -344,7 +344,7 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
                   {field("partNumber", t("label.partNumber"), { mono: true, upper: true })}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <label className="flex items-center gap-3 cursor-pointer">
+                  <label className="flex min-h-11 items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={form.isFactory}
@@ -353,7 +353,7 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
                     />
                     <span className="text-sm text-foreground">{t("form.isFactory")}</span>
                   </label>
-                  <label className="flex items-center gap-3 cursor-pointer">
+                  <label className="flex min-h-11 items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={form.isWorking}

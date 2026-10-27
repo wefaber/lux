@@ -177,7 +177,7 @@ export function ReservationsPage() {
             {staff ? t("reservations.subtitle.staff") : t("reservations.subtitle.own")}
           </p>
         </div>
-        <Button size="sm" onClick={() => setEditing("new")}>
+        <Button size="sm" className="shrink-0 whitespace-nowrap" onClick={() => setEditing("new")}>
           <Plus className="h-3.5 w-3.5" />
           {t("reservations.new")}
         </Button>
@@ -426,7 +426,7 @@ function IconAction({ label, icon: Icon, variant = "ghost", disabled, onClick }:
         <Button
           size="sm"
           variant={variant}
-          className="h-8 w-8 px-0"
+          className="h-11 w-11 px-0 sm:h-8 sm:w-8"
           aria-label={label}
           disabled={disabled}
           onClick={onClick}

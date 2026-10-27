@@ -404,6 +404,18 @@ export function validatePassword(password: string): string | null {
   return null;
 }
 
+/**
+ * Contrasena nueva al cambiarla desde el perfil: la politica vigente y, ademas,
+ * no repetir la actual. Comparacion exacta: el hash argon2 de la API distingue
+ * mayusculas y espacios, asi que no hay "variante equivalente" que detectar.
+ */
+export function validateNewPassword(currentPassword: string, newPassword: string): string | null {
+  return (
+    validatePassword(newPassword) ??
+    (newPassword === currentPassword ? t("error.password.same") : null)
+  );
+}
+
 /** `requirePassword`: al crear es obligatoria; al editar, vacia significa "no cambiar". */
 export function validateUser(
   u: UserFields,

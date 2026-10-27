@@ -257,3 +257,8 @@ export const mockPasswords: Record<string, string> = {
   "66778899": "sol2026",
   "77889900": "sol2026",
 };
+
+// Version del token de cada usuario: arranca en 0 y sube al cambiar (o
+// resetear) la contrasena. Un token emitido con una version anterior deja de
+// autenticar, como token_version en la API real.
+export const mockTokenVersions: Record<string, number> = {};

@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EquipmentSearchSelect, LabSearchSelect } from "@/components/search-pickers";
 import type { Product, ServiceType } from "@/lib/types";
 import { ErrorAlert } from "@/components/ui/error-alert";
+import { DialogFooter } from "@/components/ui/dialog";
 import { firstError, validateServiceRequest } from "@/lib/validation";
 
 const CREATE_SERVICE_MUTATION = `
@@ -80,7 +81,7 @@ export function ServiceForm({ onSuccess }: ServiceFormProps) {
               key={kind}
               type="button"
               onClick={() => setType(kind)}
-              className={`rounded-xl border py-2.5 px-3 text-sm text-left transition-all cursor-pointer ${
+              className={`min-h-11 rounded-xl border px-3 py-2.5 text-left text-sm transition-all cursor-pointer sm:min-h-0 ${
                 type === kind
                   ? "border-[rgba(0,122,255,0.3)] bg-info-bg text-primary"
                   : "border-border bg-card/40 text-muted-foreground hover:bg-muted/50"
@@ -142,11 +143,11 @@ export function ServiceForm({ onSuccess }: ServiceFormProps) {
 
       <ErrorAlert>{error}</ErrorAlert>
 
-      <div className="flex justify-end">
+      <DialogFooter>
         <Button type="submit" disabled={saving}>
           {saving ? t("services.form.sending") : t("services.form.submit")}
         </Button>
-      </div>
+      </DialogFooter>
     </form>
   );
 }

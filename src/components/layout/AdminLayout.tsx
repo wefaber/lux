@@ -22,6 +22,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useResponsiveTables } from "@/hooks/useResponsiveTables";
+import { OnboardingRoot } from "@/components/onboarding/OnboardingRoot";
 
 const adminNav: Array<{ icon: typeof Users; labelKey: MessageKey; to: string }> = [
   { icon: Users, labelKey: "admin.nav.users", to: ROUTES.ADMIN_USERS },
@@ -108,8 +109,8 @@ export function AdminLayout() {
       </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="h-14 flex items-center justify-between gap-2 px-4 md:px-6 glass-topbar">
-          <div className="flex items-center gap-1 min-w-0">
+        <header className="flex h-14 items-center justify-between gap-2 px-3 glass-topbar sm:px-4 md:px-6">
+          <div className="flex min-w-0 items-center gap-1">
             <Button variant="ghost" size="icon" className="md:hidden shrink-0" asChild>
               <Link to={ROUTES.DASHBOARD} aria-label={t("admin.backToDashboard")}>
                 <ArrowLeft className="h-4 w-4" />
@@ -117,14 +118,19 @@ export function AdminLayout() {
             </Button>
             <h1 className="text-sm font-semibold text-foreground truncate">{t("admin.panel")}</h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             <Button variant="ghost" size="icon" asChild title={t("nav.help")}>
               <Link to={ROUTES.HELP} aria-label={t("nav.help")}>
                 <HelpCircle className="h-4 w-4" />
               </Link>
             </Button>
-            <FontSizeControl />
-            <LanguageSwitcher />
+            {/* En el telefono no entran y cortaban el cierre de sesion: quedan en el perfil */}
+            <div className="hidden sm:block">
+              <FontSizeControl />
+            </div>
+            <div className="hidden sm:block">
+              <LanguageSwitcher />
+            </div>
             <ThemeSwitcher />
             <Button
               variant="ghost"
@@ -140,7 +146,7 @@ export function AdminLayout() {
         {/* En el telefono las secciones van en una fila que se desplaza de costado */}
         <nav
           aria-label={t("admin.sections")}
-          className="md:hidden flex gap-1 overflow-x-auto px-4 py-2 border-b border-border"
+          className="md:hidden flex gap-1 overflow-x-auto scroll-px-3 px-3 py-2 border-b border-border snap-x"
         >
           {adminNav.map(({ icon: Icon, labelKey, to }) => (
             <NavLink
@@ -148,7 +154,7 @@ export function AdminLayout() {
               to={to}
               className={({ isActive }) =>
                 cn(
-                  "flex shrink-0 items-center gap-2 rounded-xl px-3 py-1.5 text-sm whitespace-nowrap transition-colors",
+                  "flex min-h-11 shrink-0 snap-start items-center gap-2 rounded-xl px-3 py-2 text-sm whitespace-nowrap transition-colors",
                   isActive
                     ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-sm"
                     : "text-muted-foreground hover:bg-sidebar-accent",
@@ -161,7 +167,9 @@ export function AdminLayout() {
           ))}
         </nav>
         <main ref={mainRef} className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          <Outlet />
+          <OnboardingRoot>
+            <Outlet />
+          </OnboardingRoot>
         </main>
       </div>
     </div>
