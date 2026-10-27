@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Compass, HelpCircle, LogOut, Settings, Shield } from "lucide-react";
+import { Compass, HelpCircle, LogOut, Settings, Shield, Zap } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/hooks/useI18n";
 import { useOnboarding } from "@/hooks/useOnboarding";
@@ -32,9 +32,18 @@ export function Topbar() {
   };
 
   return (
-    <header className="sticky h-14 mx-5 my-3 flex items-center top-4 justify-between px-6 glass-topbar rounded-full">
-      <div />
-      <div className="flex items-center gap-3">
+    <header className="sticky top-2 mx-3 my-2 flex h-14 items-center justify-between rounded-full px-3 glass-topbar sm:top-4 sm:mx-5 sm:my-3 sm:px-6">
+      {/* En el telefono el menu lateral no esta: la marca hace de referencia */}
+      <div className="flex items-center gap-2 md:hidden">
+        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
+          <Zap className="h-4 w-4 text-primary-foreground" />
+        </div>
+        <span className="text-sm font-semibold tracking-tight text-foreground">
+          {t("app.name")}
+        </span>
+      </div>
+      <div className="hidden md:block" />
+      <div className="flex items-center gap-1 sm:gap-3">
         <Button
           variant="ghost"
           size="icon"
@@ -46,13 +55,19 @@ export function Topbar() {
             <HelpCircle className="h-4 w-4" />
           </Link>
         </Button>
-        <FontSizeControl />
-        <LanguageSwitcher />
+        {/* Preferencias de letra e idioma: en el telefono viven en el perfil, aca
+            no entran y dejaban el avatar cortado */}
+        <div className="hidden sm:block">
+          <FontSizeControl />
+        </div>
+        <div className="hidden sm:block">
+          <LanguageSwitcher />
+        </div>
         <ThemeSwitcher />
         {user && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2.5 rounded-xl px-2 py-1 hover:bg-muted transition-colors cursor-pointer">
+              <button className="flex min-h-11 min-w-11 items-center gap-2.5 rounded-xl px-1 hover:bg-muted transition-colors cursor-pointer sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1">
                 <Avatar className="h-7 w-7">
                   <AvatarFallback className="text-xs">{initials(user.name)}</AvatarFallback>
                 </Avatar>

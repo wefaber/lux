@@ -5,6 +5,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -107,10 +108,12 @@ export function QrScanner({ open, onOpenChange, onScan }: QrScannerProps) {
             {t("ui.qr.hint")}
           </p>
         </div>
-        <Button className="mt-5" variant="secondary" onClick={() => onOpenChange(false)}>
-          <X className="h-3.5 w-3.5" />
-          {t("common.cancel")}
-        </Button>
+        <DialogFooter>
+          <Button className="max-sm:w-full" variant="secondary" onClick={() => onOpenChange(false)}>
+            <X className="h-3.5 w-3.5" />
+            {t("common.cancel")}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

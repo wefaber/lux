@@ -159,7 +159,7 @@ export function LoansPage() {
 
   return (
     <div className="space-y-8 max-w-full">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             {t("loans.title")}
@@ -168,7 +168,7 @@ export function LoansPage() {
             {isStaff ? t("loans.subtitle.staff") : t("loans.subtitle.requester")}
           </p>
         </div>
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
+        <Button size="sm" className="shrink-0 whitespace-nowrap" onClick={() => setCreateOpen(true)}>
           <Plus className="h-3.5 w-3.5" />
           {isStaff ? t("loans.register") : t("loans.request")}
         </Button>
@@ -183,7 +183,7 @@ export function LoansPage() {
       ) : (
         <div
           className={cn(
-            "grid grid-cols-1 sm:grid-cols-3 gap-4 transition-all duration-300 ease-out",
+            "grid grid-cols-3 gap-2 sm:gap-4 transition-all duration-300 ease-out",
             isLoading && "opacity-75 blur-xs pointer-events-none",
           )}
         >
@@ -198,12 +198,15 @@ export function LoansPage() {
           ].map((m) => (
             <div
               key={m.label}
-              className="rounded-2xl border border-border/70 bg-card/40 backdrop-blur-xl p-6 transition-all duration-300 hover:border-primary/20 hover:bg-card/75 hover:shadow-md"
+              className="rounded-2xl border border-border/70 bg-card/40 backdrop-blur-xl p-3 transition-all duration-300 hover:border-primary/20 hover:bg-card/75 hover:shadow-md sm:p-6"
             >
-              <p className="text-xs text-muted-foreground uppercase tracking-widest font-semibold mb-1">
+              <p className="mb-1 text-[10px] font-semibold uppercase leading-tight tracking-wider text-muted-foreground sm:text-xs sm:tracking-widest">
                 {m.label}
               </p>
-              <p className="text-3xl font-bold tracking-tight" style={{ color: m.color }}>
+              <p
+                className="text-xl font-bold tracking-tight sm:text-3xl"
+                style={{ color: m.color }}
+              >
                 {m.value}
               </p>
             </div>

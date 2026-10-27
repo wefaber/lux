@@ -125,9 +125,11 @@ export function ProfilePage() {
               </Avatar>
               <div className="min-w-0 flex-1">
                 <h2 className="text-lg font-semibold text-foreground truncate">{user.name}</h2>
-                <div className="flex items-center gap-2 mt-1">
-                  <Badge color={ROLE_CONFIG[user.role].color}>{ROLE_CONFIG[user.role].label}</Badge>
-                  <span className="text-xs text-muted-foreground truncate">{user.email}</span>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <Badge color={ROLE_CONFIG[user.role].color} className="whitespace-nowrap">
+                    {ROLE_CONFIG[user.role].label}
+                  </Badge>
+                  <span className="min-w-0 truncate text-xs text-muted-foreground">{user.email}</span>
                 </div>
               </div>
               <div className="hidden sm:grid grid-cols-2 gap-x-10 gap-y-3 shrink-0">

@@ -79,7 +79,7 @@ export function NoticeLine({ notice }: { notice: Notice }) {
         onClick={markSeen}
         disabled={saving}
         aria-label={t("ui.notice.markSeenLabel", { text, id: notice.entityId })}
-        className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 px-1.5 py-0.5 font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-500/15 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+        className="inline-flex min-h-9 items-center gap-1 rounded-md border border-amber-500/40 px-2 py-1 font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-500/15 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
       >
         <Check className="h-3 w-3" />
         {saving ? t("ui.notice.marking") : t("ui.notice.markSeen")}

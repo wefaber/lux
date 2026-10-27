@@ -179,21 +179,21 @@ export function TicketList() {
 
   return (
     <div className="space-y-3 max-w-full">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             {t("tickets.title")}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">{t("tickets.subtitle")}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {/* Cualquier rol puede reportar un incidente; OOL es una accion extra del staff */}
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
+          <Button size="sm" className="shrink-0 whitespace-nowrap" onClick={() => setCreateOpen(true)}>
             <Plus className="h-3.5 w-3.5" />
             {t("tickets.new")}
           </Button>
           {hasRole(...STAFF_ROLES) && (
-            <Button variant="secondary" size="sm" asChild className="relative">
+            <Button variant="secondary" size="sm" asChild className="relative shrink-0 whitespace-nowrap">
               <Link to={`${ROUTES.TICKETS}/ool`}>
                 <AlertCircle className="h-3.5 w-3.5" />
                 {t("tickets.ool")}
@@ -311,7 +311,7 @@ export function TicketList() {
                     <td className="px-4 py-2 min-w-48 max-w-72 whitespace-normal">
                       <Link
                         to={`${ROUTES.TICKETS}/${tk.id}`}
-                        className="text-sm font-semibold text-foreground hover:underline"
+                        className="inline-flex min-h-11 items-center text-sm font-semibold text-foreground hover:underline sm:min-h-0"
                       >
                         {truncate(tk.title, 48)}
                       </Link>

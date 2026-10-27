@@ -23,7 +23,7 @@ export function WorkQueue({ queue }: { queue: WorkQueueData }) {
           <Link
             key={key}
             to={to}
-            className="flex flex-col gap-1 rounded-2xl border border-border/70 bg-card/40 backdrop-blur-xl px-5 py-4 transition-all duration-300 hover:border-primary/20 hover:bg-card/75 hover:shadow-md hover:-translate-y-[2px]"
+            className="flex flex-col gap-1 rounded-2xl border border-border/70 bg-card/40 backdrop-blur-xl px-5 py-4 transition-all duration-300 hover:border-primary/20 hover:bg-card/75 hover:shadow-md hover:-translate-y-[2px] max-lg:last:col-span-2"
           >
             <span className="text-2xl font-bold tracking-tight text-foreground">{queue[key]}</span>
             <span className="text-xs text-muted-foreground">{t(labelKey)}</span>
