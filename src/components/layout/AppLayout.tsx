@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { useLocation, useOutlet } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
@@ -11,6 +11,10 @@ import { OnboardingRoot } from "@/components/onboarding/OnboardingRoot";
 
 export function AppLayout() {
   const location = useLocation();
+  // El elemento se captura por ruta: <Outlet /> lee la ruta vigente al
+  // renderizar, asi que la pagina que sale (AnimatePresence) pasaba a mostrar la
+  // nueva dentro de su fade-out y despues se montaba de nuevo.
+  const outlet = useOutlet();
   const mainRef = useRef<HTMLElement>(null);
   useResponsiveTables(mainRef); // tablas que no entran -> tarjetas
 
@@ -32,7 +36,7 @@ export function AppLayout() {
                   {...PAGE_TRANSITION}
                   className="min-h-full p-4 pb-[calc(6rem+env(safe-area-inset-bottom,0px))] sm:p-6 sm:pb-[calc(6rem+env(safe-area-inset-bottom,0px))] md:pb-6 lg:px-8 lg:py-4"
                 >
-                  <Outlet />
+                  {outlet}
                 </motion.div>
               </AnimatePresence>
             </main>
