@@ -249,10 +249,34 @@ html[data-dyslexic="true"] {
 
 /* High contrast */
 html[data-contrast="high"] {
-  --border: rgba(0, 0, 0, 0.3);
+  --background: #ffffff;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --muted: #dde2ea;
+  --foreground: #000000;
+  --muted-foreground: #2b3445;
+  --success: #134d20;
+  --warning: #5c3a00;
+  --info: #003a7d;
+  --destructive: #861a13;
+  --border: #767676;
+  --input: #767676;
+  --ring: #000000;
 }
 html.dark[data-contrast="high"] {
-  --border: rgba(255, 255, 255, 0.3);
+  --background: #000000;
+  --card: #0a0f1a;
+  --popover: #0a0f1a;
+  --muted: #1a2233;
+  --foreground: #ffffff;
+  --muted-foreground: #b8c2d1;
+  --success: #6ee08c;
+  --warning: #ffb84d;
+  --info: #8ec5ff;
+  --destructive: #f2a7a2;
+  --border: #8a96a8;
+  --input: #8a96a8;
+  --ring: #ffffff;
 }
 
 /* Glass utilities — single variants; CSS vars handle light/dark automatically */
