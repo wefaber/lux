@@ -1,7 +1,7 @@
 name: Deploy
 
 # Cada push a main actualiza https://lux.eternum.lat sin downtime, igual que el
-# preview de dev: /home/hermes/deploy/lux-prod.sh clona main en el slot idle,
+# preview de dev: deploy/lux-prod.sh (versionado en este repo) clona main en el slot idle,
 # buildea, corre migraciones, levanta la API de ese slot, espera /ready y recien
 # ahi mueve el symlink y el upstream. Si la verificacion publica falla vuelve
 # solo al slot anterior. El slot viejo sigue corriendo: rollback = switch.
@@ -24,11 +24,15 @@ jobs:
     env:
       SITE: https://lux.eternum.lat
     steps:
+      # El deploy vive en el repo (deploy/lux-prod.sh): lo que se mergea es lo
+      # que corre. Lo unico que queda fuera son los .env de /home/hermes/deploy/env.
+      - uses: actions/checkout@v4
+
       - name: Estado antes del deploy
-        run: /home/hermes/deploy/lux-prod.sh --status || true
+        run: ./deploy/lux-prod.sh --status || true
 
       - name: Deploy blue/green
-        run: /home/hermes/deploy/lux-prod.sh
+        run: ./deploy/lux-prod.sh
 
       - name: Verificar publicacion
         env:
