@@ -177,7 +177,7 @@ export const ROUTES: RouteSpec[] = [
   // Mobile (#98). El escaneo y las notas aceptan el cuerpo como `input`; las notas
   // son privadas de quien las escribe.
   { method: "POST", path: "/scans", operation: "recordScan", created: true },
-  { method: "GET", path: "/products/:productId/notes", operation: "myEquipmentNotes" },
+  { method: "GET", path: "/products/:id/notes", operation: "myEquipmentNotes", paramAliases: { productId: "id" } },
   { method: "POST", path: "/equipment-notes", operation: "upsertEquipmentNote", created: true },
   {
     method: "DELETE",

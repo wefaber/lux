@@ -43,6 +43,13 @@ export interface RouteSpec {
   message?: string;
   /** `data` cuando la operacion devuelve `true` (bajas, logout...). */
   flagData?: (params: Record<string, string>) => unknown;
+  /**
+   * Argumento GraphQL -> nombre del segmento en el path, cuando difieren. Elysia
+   * exige un unico nombre de parametro por posicion (`/products/:id` vs
+   * `/products/:productId/notes` rompe el router al compilar), asi que el path
+   * usa el nombre convencional y el argumento se resuelve por alias.
+   */
+  paramAliases?: Record<string, string>;
 }
 
 /** Contrato de toda respuesta de /api/v1: `status`, `message` y `data`. */
@@ -139,11 +146,13 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 export function buildVariables(
   field: GraphQLField<unknown, unknown>,
   input: { params: Record<string, string>; query: URLSearchParams; body: unknown },
+  paramAliases: Record<string, string> = {},
 ): Record<string, unknown> {
   const variables: Record<string, unknown> = {};
   for (const arg of field.args) {
+    const paramName = paramAliases[arg.name] ?? arg.name;
     let value: unknown;
-    if (input.params[arg.name] !== undefined) value = input.params[arg.name];
+    if (input.params[paramName] !== undefined) value = input.params[paramName];
     else if (arg.name === "input" && isInputObjectType(getNamedType(arg.type))) value = input.body;
     else if (isPlainObject(input.body) && arg.name in input.body) value = input.body[arg.name];
     else if (input.query.has(arg.name)) value = coerceQueryValue(arg, input.query.get(arg.name)!);
@@ -179,7 +188,7 @@ export async function runRoute(
   const { spec } = route;
   let variables: Record<string, unknown>;
   try {
-    variables = buildVariables(route.field, input);
+    variables = buildVariables(route.field, input, spec.paramAliases);
   } catch (error) {
     return failure(error as GraphQLError);
   }

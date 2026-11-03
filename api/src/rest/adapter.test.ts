@@ -1,9 +1,12 @@
 import { describe, expect, spyOn, test } from "bun:test";
+import { Elysia } from "elysia";
 import { buildSchema, type GraphQLSchema } from "graphql";
 import { createSchema } from "graphql-yoga";
+import type { Ctx } from "../context";
 import { conflict, forbidden, tooManyAttempts } from "../errors";
 import { typeDefs } from "../graphql/schema";
 import { buildVariables, compileRoutes, runRoute, type RouteSpec } from "./adapter";
+import { restPlugin } from "./plugin";
 import { ROUTES } from "./routes";
 
 const sdl: GraphQLSchema = buildSchema(typeDefs);
@@ -265,14 +268,31 @@ describe("runRoute: envelope y status HTTP", () => {
 });
 
 describe("RouteSpec", () => {
-  test("los paths usan el mismo nombre de parametro que el argumento GraphQL", () => {
+  test("cada segmento del path resuelve un argumento (directo o por paramAliases)", () => {
     const specs: RouteSpec[] = ROUTES.filter((r) => r.path.includes(":"));
     const compiled = compileRoutes(sdl, specs);
     for (const route of compiled) {
       const names = [...route.spec.path.matchAll(/:(\w+)/g)].map((m) => m[1]);
+      const aliased = new Set(Object.values(route.spec.paramAliases ?? {}));
       for (const name of names) {
-        expect(route.field.args.map((a) => a.name)).toContain(name);
+        const direct = route.field.args.some((a) => a.name === name);
+        expect(direct || aliased.has(name)).toBe(true);
+      }
+      for (const arg of route.field.args) {
+        const alias = route.spec.paramAliases?.[arg.name];
+        if (alias !== undefined) expect(names).toContain(alias);
       }
     }
+  });
+
+  // El router de Elysia exige un unico nombre de parametro por posicion: dos
+  // rutas como /products/:id y /products/:productId/notes lo hacen explotar al
+  // compilar (el proceso moria antes de escuchar, sin llegar a /ready).
+  test("el plugin REST monta el router sin colisiones de parametros", async () => {
+    const app = new Elysia().use(
+      restPlugin({ schema: sdl, createContext: async () => ({}) as unknown as Ctx }),
+    );
+    const response = await app.handle(new Request("http://127.0.0.1/api/v1/products/abc/notes"));
+    expect(response.status).not.toBe(404);
   });
 });
