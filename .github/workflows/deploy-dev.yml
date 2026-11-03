@@ -26,9 +26,8 @@ jobs:
       - name: Estado antes del deploy
         run: /home/hermes/deploy/lux-dev.sh --status || true
 
-      # El modo (mocks vs Postgres real) lo decide el propio script: si la rama
-      # trae api/, despliega la API y sirve datos reales; si no, publica el SPA
-      # con MSW y el banner del sitio aclara que los datos son simulados.
+      # Dev siempre corre contra la API real y Postgres: el script levanta la API
+      # del slot idle y falla si la rama no trae api/. Nunca publica MSW.
       - name: Deploy blue/green
         run: /home/hermes/deploy/lux-dev.sh
 

@@ -4,11 +4,13 @@ import "./index.css";
 import App from "./App.tsx";
 import { installGlobalErrorTracking } from "@/lib/error-tracker";
 
+// MSW es opt-in: solo con VITE_ENABLE_MOCKS=true (.env.local o `bun run dev:mocks`).
+// Ni dev.eternum.lat ni produccion lo usan: hablan con la API real.
 // La condicion va inline y no en una constante compartida: si se importa de
 // otro modulo, rolldown deja de plegarla y un build sin mocks igual arrastra
 // el chunk de MSW (623 KB) y las credenciales de prueba.
 async function enableMocking(): Promise<void> {
-  if (import.meta.env.DEV || import.meta.env.VITE_ENABLE_MOCKS === "true") {
+  if (import.meta.env.VITE_ENABLE_MOCKS === "true") {
     const { worker } = await import("./mocks/browser");
     await worker.start({ onUnhandledRequest: "bypass" });
   }

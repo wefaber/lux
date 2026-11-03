@@ -63,9 +63,9 @@ export function isMocksUnavailable(error: unknown): boolean {
   return error instanceof MocksUnavailableError;
 } // Permite distinguir "el servidor de prueba no responde" de "credenciales malas"
 
-// Mismo par de condiciones que arranca MSW en main.tsx, inline por el mismo
+// Misma condicion que arranca MSW en main.tsx, inline por el mismo
 // motivo: asi un build sin mocks pliega esta rama y no arrastra nada.
-const MOCKS_ENABLED = import.meta.env.DEV || import.meta.env.VITE_ENABLE_MOCKS === "true";
+const MOCKS_ENABLED = import.meta.env.VITE_ENABLE_MOCKS === "true";
 
 const MOCKS_DOWN_STATUS = new Set([404, 405]);
 
@@ -156,9 +156,7 @@ export function formatDuration(hours: number): string {
   if (totalHours < 48) return t("duration.hours", { hours: totalHours });
   const days = Math.floor(totalHours / 24);
   const rest = totalHours % 24;
-  return rest === 0
-    ? t("duration.days", { days })
-    : t("duration.daysHours", { days, hours: rest });
+  return rest === 0 ? t("duration.days", { days }) : t("duration.daysHours", { days, hours: rest });
 } // Duracion legible ("2 d 10 h"); el "aproximado" lo agrega la pantalla
 
 export function errorMessage(err: unknown, fallback: string): string {
