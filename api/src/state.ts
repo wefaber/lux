@@ -124,6 +124,40 @@ export function toProduct(row: t.ProductRow): Product {
   };
 }
 
+/** Busca las relaciones de un ticket; `loadState` y las queries acotadas las resuelven distinto. */
+export interface TicketLookup {
+  user: (id: string | null) => User | null;
+  product: (id: string | null) => Product | null;
+  location: (id: string) => Location | null;
+}
+
+export function toTicket(row: t.TicketRow, lookup: TicketLookup): Ticket {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    category: row.category as Ticket["category"],
+    priority: row.priority as Ticket["priority"],
+    status: row.status as Ticket["status"],
+    submittedBy: lookup.user(row.submittedById)!,
+    assignedTo: lookup.user(row.assignedToId),
+    equipmentId: row.equipmentId,
+    equipment: lookup.product(row.equipmentId),
+    locationId: row.locationId,
+    location: row.locationId ? lookup.location(row.locationId) : null,
+    templateId: row.templateId,
+    diagnosis: row.diagnosis,
+    corrected: row.corrected,
+    actionsTaken: row.actionsTaken,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    resolvedAt: row.resolvedAt,
+    attendedAt: row.attendedAt,
+    rating: row.rating,
+    ratedAt: row.ratedAt,
+  };
+}
+
 function index<T extends { id: string }>(rows: T[]): Map<string, T> {
   return new Map(rows.map((r) => [r.id, r]));
 }
@@ -198,30 +232,13 @@ export async function loadState(): Promise<State> {
     id ? (productsById.get(id) ?? null) : null;
   const userById = (id: string | null): User | null => (id ? (usersById.get(id) ?? null) : null);
 
-  const tickets: Ticket[] = ticketRows.map((row) => ({
-    id: row.id,
-    title: row.title,
-    description: row.description,
-    category: row.category as Ticket["category"],
-    priority: row.priority as Ticket["priority"],
-    status: row.status as Ticket["status"],
-    submittedBy: userById(row.submittedById)!,
-    assignedTo: userById(row.assignedToId),
-    equipmentId: row.equipmentId,
-    equipment: ticketEquipment(row.equipmentId),
-    locationId: row.locationId,
-    location: row.locationId ? (locationsById.get(row.locationId) ?? null) : null,
-    templateId: row.templateId,
-    diagnosis: row.diagnosis,
-    corrected: row.corrected,
-    actionsTaken: row.actionsTaken,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-    resolvedAt: row.resolvedAt,
-    attendedAt: row.attendedAt,
-    rating: row.rating,
-    ratedAt: row.ratedAt,
-  }));
+  const tickets: Ticket[] = ticketRows.map((row) =>
+    toTicket(row, {
+      user: userById,
+      product: ticketEquipment,
+      location: (id) => locationsById.get(id) ?? null,
+    }),
+  );
 
   const loanComponentsByLoan = new Map<string, Component[]>();
   for (const link of loanComponentRows) {
