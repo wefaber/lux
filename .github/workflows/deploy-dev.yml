@@ -1,7 +1,7 @@
 name: Deploy dev preview
 
-# Cada push a dev actualiza https://dev.eternum.lat sin downtime: el script
-# clona esa rama en el slot idle, buildea, corre migraciones, levanta la API de
+# Cada push a dev actualiza https://dev.eternum.lat sin downtime: deploy/lux-dev.sh
+# (versionado en este repo) clona esa rama en el slot idle, buildea, corre migraciones, levanta la API de
 # ese slot, espera /ready y recien ahi mueve el symlink y el upstream. Si la
 # verificacion publica falla, vuelve solo al slot anterior y el run queda en
 # rojo. El slot viejo nunca se apaga, asi que el rollback es un switch.
@@ -23,13 +23,17 @@ jobs:
     env:
       SITE: https://dev.eternum.lat
     steps:
+      # El deploy vive en el repo (deploy/lux-dev.sh): lo que se mergea es lo
+      # que corre. Lo unico que queda fuera son los .env de /home/hermes/deploy/env.
+      - uses: actions/checkout@v4
+
       - name: Estado antes del deploy
-        run: /home/hermes/deploy/lux-dev.sh --status || true
+        run: ./deploy/lux-dev.sh --status || true
 
       # Dev siempre corre contra la API real y Postgres: el script levanta la API
       # del slot idle y falla si la rama no trae api/. Nunca publica MSW.
       - name: Deploy blue/green
-        run: /home/hermes/deploy/lux-dev.sh
+        run: ./deploy/lux-dev.sh
 
       # El script ya verifica contra la URL publica; esto cierra el circulo del
       # lado del workflow: lo que sirve dev.eternum.lat tiene que ser el commit
