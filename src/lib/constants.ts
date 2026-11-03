@@ -14,6 +14,8 @@ import type {
   ReservationStatus,
   ErrorReportStatus,
   StudentShift,
+  TicketPriority,
+  TemplateStatus,
 } from "./types";
 import { plain, type MessageKey } from "@/i18n";
 
@@ -77,16 +79,30 @@ export const ROUTES = {
   SERVICES: "/dashboard/service-requests",
   PROFILE: "/dashboard/profile",
   HELP: "/dashboard/help",
+  INCIDENT_TEMPLATES: "/dashboard/incident-templates",
+  // Vista telefono (#98): layout propio bajo /dashboard/m
+  MOBILE: "/dashboard/m",
+  MOBILE_SCAN: "/dashboard/m/scan",
+  MOBILE_TICKETS: "/dashboard/m/tickets",
+  MOBILE_LOAN: "/dashboard/m/loan",
+  MOBILE_INCIDENT: "/dashboard/m/incident",
+  MOBILE_NEW_EQUIPMENT: "/dashboard/m/equipment/new",
   ADMIN: "/admin",
   ADMIN_USERS: "/admin/users",
   ADMIN_ROLES: "/admin/roles",
   ADMIN_LOGS: "/admin/logs",
   ADMIN_REPORTS: "/admin/reports",
   ADMIN_ISSUES: "/admin/issues",
+  ADMIN_INCIDENT_TEMPLATES: "/admin/incident-templates",
   NOT_FOUND: "/404",
   FORBIDDEN: "/403",
   SERVER_ERROR: "/500",
 } as const; // Rutas de la aplicacion, constantes y de solo lectura
+
+/** La ruta es de la vista telefono (/dashboard/m y lo que cuelga de ahi) */
+export function isMobilePath(pathname: string): boolean {
+  return pathname === ROUTES.MOBILE || pathname.startsWith(`${ROUTES.MOBILE}/`);
+}
 
 export const ERROR_REPORT_STATUS_CONFIG: Record<ErrorReportStatus, StatusConfig> = {
   new: statusConfig("status.errorReport.new", "destructive"),
@@ -113,6 +129,22 @@ export const TICKET_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
   in_resolution: ["in_progress", "resolved"],
   resolved: ["in_progress"],
 };
+
+export const TICKET_PRIORITIES: TicketPriority[] = ["low", "medium", "high", "critical"];
+
+export const TICKET_PRIORITY_CONFIG: Record<TicketPriority, StatusConfig> = {
+  low: statusConfig("status.priority.low", "muted"),
+  medium: statusConfig("status.priority.medium", "info"),
+  high: statusConfig("status.priority.high", "warning"),
+  critical: statusConfig("status.priority.critical", "destructive"),
+}; // Prioridad del ticket: etiqueta y color de badge
+
+export const TEMPLATE_STATUS_CONFIG: Record<TemplateStatus, StatusConfig> = {
+  draft: statusConfig("status.template.draft", "muted"),
+  testing: statusConfig("status.template.testing", "warning"),
+  approved: statusConfig("status.template.approved", "success"),
+  retired: statusConfig("status.template.retired", "destructive"),
+}; // Ciclo de vida de una plantilla de incidencia
 
 export const EQUIPMENT_STATUS_CONFIG: Record<EquipmentStatus, StatusConfig> = {
   available: statusConfig("status.equipment.available", "success"),

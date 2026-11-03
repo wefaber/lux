@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { gql, errorMessage } from "@/lib/utils";
 import { useAsync } from "@/hooks/useSkeleton";
@@ -95,12 +95,16 @@ const EMPTY_FORM: FormState = {
 
 interface EquipmentFormProps {
   mode: "product" | "component";
+  /** Adonde vuelve al guardar o cancelar un alta (por defecto, el inventario) */
+  returnTo?: string;
 }
 
-// Con :id en la ruta edita el registro existente; sin :id da de alta uno nuevo
-export function EquipmentForm({ mode }: EquipmentFormProps) {
+// Con :id en la ruta edita el registro existente; sin :id da de alta uno nuevo.
+// `?machineId=` precarga el ID de un alta (el que se escaneo y no existia).
+export function EquipmentForm({ mode, returnTo }: EquipmentFormProps) {
   const { t } = useI18n();
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
 
   const { data, isLoading, error } = useAsync<{
     product?: Product | null;
@@ -113,7 +117,16 @@ export function EquipmentForm({ mode }: EquipmentFormProps) {
     [id, mode],
   );
 
-  if (!id) return <EquipmentFormFields mode={mode} initial={EMPTY_FORM} />;
+  if (!id) {
+    const machineId = (searchParams.get("machineId") ?? "").trim().toUpperCase();
+    return (
+      <EquipmentFormFields
+        mode={mode}
+        initial={mode === "product" ? { ...EMPTY_FORM, machineId } : EMPTY_FORM}
+        returnTo={returnTo}
+      />
+    );
+  }
 
   const record = mode === "product" ? data?.product : data?.component;
   if (isLoading && !data) return <TableSkeleton rows={4} cols={2} />;
@@ -129,16 +142,17 @@ export function EquipmentForm({ mode }: EquipmentFormProps) {
     ? { ...EMPTY_FORM, ...data.product, issues: data.product.issues ?? "" }
     : { ...EMPTY_FORM, ...data?.component };
 
-  return <EquipmentFormFields mode={mode} id={id} initial={initial} />;
+  return <EquipmentFormFields mode={mode} id={id} initial={initial} returnTo={returnTo} />;
 }
 
 interface EquipmentFormFieldsProps {
   mode: "product" | "component";
   id?: string;
   initial: FormState;
+  returnTo?: string;
 }
 
-function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
+function EquipmentFormFields({ mode, id, initial, returnTo }: EquipmentFormFieldsProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
@@ -165,7 +179,8 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
 
   const detailRoute =
     mode === "product" ? `${ROUTES.INVENTORY}/${id}` : `${ROUTES.INVENTORY}/componente/${id}`;
-  const backRoute = isEdit ? detailRoute : ROUTES.INVENTORY;
+  const listRoute = returnTo ?? ROUTES.INVENTORY;
+  const backRoute = isEdit ? detailRoute : listRoute;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -215,7 +230,7 @@ function EquipmentFormFields({ mode, id, initial }: EquipmentFormFieldsProps) {
           ? gql(UPDATE_COMPONENT_MUTATION, { id, input })
           : gql(CREATE_COMPONENT_MUTATION, { input }));
       }
-      navigate(isEdit ? detailRoute : ROUTES.INVENTORY);
+      navigate(isEdit ? detailRoute : listRoute);
     } catch (err) {
       setError(errorMessage(err, t("form.saveFailed")));
     } finally {

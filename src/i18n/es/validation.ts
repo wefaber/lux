@@ -57,5 +57,6 @@ export const validation = {
   "validation.student.existsOtherRole": "La persona ya existe con rol {role}",
   "validation.student.splitIdentity": "El documento y el email pertenecen a usuarios distintos",
   "validation.ticket.category": "Elegí una categoría",
+  "validation.ticket.priority": "Elegí una prioridad",
   "validation.service.type": "Elegí el tipo de solicitud",
 } as const;

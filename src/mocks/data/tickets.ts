@@ -1,8 +1,15 @@
 import type { Ticket } from "@/lib/types";
 import { mockUsers } from "./users";
 import { mockProducts } from "./equipment";
+import { mockLocations } from "./locations";
 
 const [, admin1, , tec1, tec2, , sol1, sol2, sol3, sol4] = mockUsers;
+
+// Ubicacion del ticket: la del equipo al que refiere; ninguna si no tiene equipo
+function locationFor(equipmentId: string | null) {
+  const locationId = mockProducts.find((p) => p.id === equipmentId)?.locationId ?? null;
+  return { locationId, location: mockLocations.find((l) => l.id === locationId) ?? null };
+}
 
 export const mockTickets: Ticket[] = [
   {
@@ -11,10 +18,13 @@ export const mockTickets: Ticket[] = [
     description:
       "El monitor del equipo HP ProDesk presenta una franja horizontal oscura en la esquina superior derecha que aparece intermitentemente al encender el equipo.",
     category: "hardware",
+    priority: "high",
     status: "in_progress",
     submittedBy: sol1,
     assignedTo: tec1,
     equipmentId: "prod-2",
+    ...locationFor("prod-2"),
+    templateId: null,
     equipment: mockProducts.find((p) => p.id === "prod-2") ?? null,
     diagnosis: "Posible falla en panel LCD. Se requiere reemplazo de monitor.",
     corrected: false,
@@ -32,10 +42,13 @@ export const mockTickets: Ticket[] = [
     description:
       "El equipo Lenovo IdeaCentre del laboratorio 3 no enciende. Al presionar el botón de encendido no responde. El LED de la fuente está apagado.",
     category: "hardware",
+    priority: "critical",
     status: "pending",
     submittedBy: sol2,
     assignedTo: null,
     equipmentId: "prod-5",
+    ...locationFor("prod-5"),
+    templateId: null,
     equipment: mockProducts.find((p) => p.id === "prod-5") ?? null,
     diagnosis: null,
     corrected: null,
@@ -53,10 +66,13 @@ export const mockTickets: Ticket[] = [
     description:
       'AutoCAD 2024 presenta error "Application failed to initialize correctly (0xc000007b)" al intentar abrirlo en todas las máquinas del laboratorio de diseño.',
     category: "software",
+    priority: "medium",
     status: "in_progress",
     submittedBy: sol3,
     assignedTo: tec2,
     equipmentId: null,
+    ...locationFor(null),
+    templateId: null,
     equipment: null,
     diagnosis: null,
     corrected: null,
@@ -75,10 +91,13 @@ export const mockTickets: Ticket[] = [
     description:
       "Los equipos del laboratorio 2 presentan desconexión de red cada 15-20 minutos aproximadamente. Se pierde acceso a internet y a recursos internos.",
     category: "network",
+    priority: "low",
     status: "resolved",
     submittedBy: sol4,
     assignedTo: tec1,
     equipmentId: null,
+    ...locationFor(null),
+    templateId: null,
     equipment: null,
     diagnosis: "Switch Cisco con firmware desactualizado causaba reinicios automáticos.",
     corrected: true,
@@ -97,10 +116,13 @@ export const mockTickets: Ticket[] = [
     description:
       "El proyector Epson del salón 1 enciende pero no muestra imagen. La pantalla permanece en negro aunque el indicador de fuente de luz está verde.",
     category: "hardware",
+    priority: "medium",
     status: "pending",
     submittedBy: sol1,
     assignedTo: null,
     equipmentId: "prod-6",
+    ...locationFor("prod-6"),
+    templateId: null,
     equipment: mockProducts.find((p) => p.id === "prod-6") ?? null,
     diagnosis: null,
     corrected: null,
@@ -118,10 +140,13 @@ export const mockTickets: Ticket[] = [
     description:
       "El equipo HP EliteBook recientemente adquirido requiere instalación limpia de Windows 11 Pro y configuración inicial con software institucional.",
     category: "software",
+    priority: "high",
     status: "resolved",
     submittedBy: admin1,
     assignedTo: tec2,
     equipmentId: "prod-4",
+    ...locationFor("prod-4"),
+    templateId: null,
     equipment: mockProducts.find((p) => p.id === "prod-4") ?? null,
     diagnosis: "Instalación requerida. Equipo llegó sin SO.",
     corrected: true,
@@ -140,10 +165,13 @@ export const mockTickets: Ticket[] = [
     description:
       "El teclado del equipo Dell AIO del laboratorio tiene varias teclas que se quedan presionadas. Se sospecha de derrame de líquido anterior.",
     category: "hardware",
+    priority: "low",
     status: "in_resolution",
     submittedBy: sol2,
     assignedTo: tec1,
     equipmentId: "prod-1",
+    ...locationFor("prod-1"),
+    templateId: null,
     equipment: mockProducts.find((p) => p.id === "prod-1") ?? null,
     diagnosis: "Residuos de líquido bajo las teclas. Requiere limpieza profunda o reemplazo.",
     corrected: null,
@@ -161,10 +189,13 @@ export const mockTickets: Ticket[] = [
     description:
       "El antivirus institucional en los laboratorios muestra alertas de base de datos desactualizada en 8 equipos. Requiere actualización masiva.",
     category: "software",
+    priority: "medium",
     status: "resolved",
     submittedBy: admin1,
     assignedTo: tec2,
     equipmentId: null,
+    ...locationFor(null),
+    templateId: null,
     equipment: null,
     diagnosis: "Servidor de actualizaciones del antivirus mal configurado.",
     corrected: true,
@@ -183,10 +214,13 @@ export const mockTickets: Ticket[] = [
     description:
       "La impresora HP LaserJet de administración no acepta trabajos de impresión desde la red. Solo funciona con conexión directa USB.",
     category: "network",
+    priority: "critical",
     status: "in_progress",
     submittedBy: sol3,
     assignedTo: tec1,
     equipmentId: "prod-8",
+    ...locationFor("prod-8"),
+    templateId: null,
     equipment: mockProducts.find((p) => p.id === "prod-8") ?? null,
     diagnosis: null,
     corrected: null,
@@ -205,10 +239,13 @@ export const mockTickets: Ticket[] = [
     description:
       "El equipo Lenovo ThinkCentre de administración tarda más de 5 minutos en cargar el escritorio desde que se actualiza Windows.",
     category: "software",
+    priority: "low",
     status: "resolved",
     submittedBy: sol4,
     assignedTo: tec2,
     equipmentId: "prod-3",
+    ...locationFor("prod-3"),
+    templateId: null,
     equipment: mockProducts.find((p) => p.id === "prod-3") ?? null,
     diagnosis: "Actualización de Windows dejó drivers de almacenamiento en estado inconsistente.",
     corrected: true,
@@ -227,10 +264,13 @@ export const mockTickets: Ticket[] = [
     description:
       "El UPS APC del laboratorio emite beeps continuos y el indicador de batería parpadea en rojo. Los equipos conectados muestran interrupciones de energía.",
     category: "hardware",
+    priority: "medium",
     status: "pending",
     submittedBy: sol2,
     assignedTo: null,
     equipmentId: "prod-10",
+    ...locationFor("prod-10"),
+    templateId: null,
     equipment: mockProducts.find((p) => p.id === "prod-10") ?? null,
     diagnosis: null,
     corrected: null,
@@ -248,10 +288,13 @@ export const mockTickets: Ticket[] = [
     description:
       'Desde los equipos del laboratorio de informática no es posible acceder al servidor de archivos compartidos. Error: "No se puede acceder a la ruta de red".',
     category: "network",
+    priority: "high",
     status: "in_resolution",
     submittedBy: sol1,
     assignedTo: tec2,
     equipmentId: null,
+    ...locationFor(null),
+    templateId: null,
     equipment: null,
     diagnosis: "Credenciales de acceso a dominio caducadas en los equipos afectados.",
     corrected: null,
@@ -269,10 +312,13 @@ export const mockTickets: Ticket[] = [
     description:
       "Se requiere instalar Cisco Packet Tracer 8.2 en los 12 equipos del laboratorio de redes para el inicio del nuevo módulo.",
     category: "software",
+    priority: "low",
     status: "resolved",
     submittedBy: sol3,
     assignedTo: tec1,
     equipmentId: null,
+    ...locationFor(null),
+    templateId: null,
     equipment: null,
     diagnosis: "Software no instalado. Licencias disponibles.",
     corrected: true,
@@ -291,10 +337,13 @@ export const mockTickets: Ticket[] = [
     description:
       "La laptop HP EliteBook de administración presenta BSOD con error MEMORY_MANAGEMENT aproximadamente 2 veces por día desde hace una semana.",
     category: "hardware",
+    priority: "medium",
     status: "in_progress",
     submittedBy: sol4,
     assignedTo: tec2,
     equipmentId: "prod-4",
+    ...locationFor("prod-4"),
+    templateId: null,
     equipment: mockProducts.find((p) => p.id === "prod-4") ?? null,
     diagnosis: null,
     corrected: null,
@@ -312,10 +361,13 @@ export const mockTickets: Ticket[] = [
     description:
       "Los dispositivos del salón B presenta total falta de conectividad a internet. La red local funciona correctamente pero no hay salida a internet.",
     category: "network",
+    priority: "medium",
     status: "resolved",
     submittedBy: sol1,
     assignedTo: tec1,
     equipmentId: null,
+    ...locationFor(null),
+    templateId: null,
     equipment: null,
     diagnosis: "DNS configurado incorrectamente después de mantenimiento de router.",
     corrected: true,

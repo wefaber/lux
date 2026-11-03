@@ -1,15 +1,18 @@
-import { and, desc, eq, gte, ilike, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { InterventionFields, LocationFields } from "@/lib/validation";
 import {
   locationCode,
   validateComment,
   validateComponent,
+  validateEquipmentNote,
+  validateIncidentTemplate,
   validateIntervention,
   validateLoan,
   validateLocation,
   validateNewPassword,
   validateProduct,
   validateReservation,
+  validateTicket,
 } from "@/lib/validation";
 import {
   filterUsers,
@@ -29,8 +32,10 @@ import type {
   Comment,
   CommentEntity,
   DashboardStats,
+  EquipmentNote,
   ErrorReport,
   ErrorReportStatus,
+  IncidentTemplate,
   Loan,
   LoanStatus,
   Location,
@@ -41,6 +46,8 @@ import type {
   Reservation,
   ReservationResource,
   ReservationStatus,
+  ScanEvent,
+  ScanResult,
   ServiceRequest,
   ServiceStatus,
   Ticket,
@@ -84,11 +91,14 @@ import * as t from "../db/schema";
 import {
   EQUIPMENT_STATUSES,
   ERROR_REPORT_STATUSES,
+  SCAN_CONTEXTS,
   SERVICE_STATUSES,
   SERVICE_TYPES,
+  TEMPLATE_STATUSES,
   TICKET_CATEGORIES,
+  TICKET_PRIORITIES,
 } from "../db/enums";
-import { toUser, type State } from "../state";
+import { toComponent, toProduct, toUser, type State } from "../state";
 import { withState, withTransaction, type AuditSpec, type Resolver } from "./wrap";
 
 export type { Ctx };
@@ -483,7 +493,11 @@ function withProductCount(state: State, location: Location): Location {
 }
 
 function normalizeName(name: string): string {
-  return name.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  return name
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
 }
 
 function duplicateLocationError(
@@ -524,6 +538,114 @@ const PERIOD_BUCKETS: Record<DashboardPeriod, { days: number; bucketDays: number
 };
 
 const nowIso = () => new Date().toISOString();
+
+// ── Mobile (#98): escaneo QR, notas privadas y plantillas de incidencia ─────
+// Estas filas no viven en la foto del estado (State): los resolvers las leen y
+// escriben directo en la base.
+
+// Id unico sin consultar la tabla (como el de la auditoria): recordScan y
+// upsertEquipmentNote corren fuera del lock global y no pueden depender de nextId.
+function newRowId(prefix: string): string {
+  return `${prefix}-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+const MAX_MACHINE_CODE = 64;
+const MAX_USER_AGENT = 300;
+const MAX_AUDIT_USER_AGENT = 120;
+
+async function usersByIds(ids: Array<string | null>): Promise<Map<string, User>> {
+  const unique = [...new Set(ids.filter((id): id is string => id !== null))];
+  if (unique.length === 0) return new Map();
+  const rows = await db.select().from(t.users).where(inArray(t.users.id, unique));
+  return new Map(rows.map((row) => [row.id, toUser(row)]));
+}
+
+async function toTemplates(rows: t.IncidentTemplateRow[]): Promise<IncidentTemplate[]> {
+  const users = await usersByIds(rows.flatMap((r) => [r.authorId, r.approvedById]));
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    category: row.category as IncidentTemplate["category"],
+    priority: row.priority as IncidentTemplate["priority"],
+    title: row.title,
+    description: row.description,
+    status: row.status as IncidentTemplate["status"],
+    author: users.get(row.authorId)!,
+    approvedBy: row.approvedById ? (users.get(row.approvedById) ?? null) : null,
+    approvedAt: row.approvedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }));
+}
+
+async function toTemplate(row: t.IncidentTemplateRow): Promise<IncidentTemplate> {
+  return (await toTemplates([row]))[0]!;
+}
+
+async function findTemplate(id: string): Promise<t.IncidentTemplateRow> {
+  const [row] = await db
+    .select()
+    .from(t.incidentTemplates)
+    .where(and(eq(t.incidentTemplates.id, id), isNull(t.incidentTemplates.deletedAt)))
+    .limit(1);
+  if (!row) throw notFound("Plantilla no encontrada");
+  return row;
+}
+
+// Un tecnico ve las aprobadas y las propias (cualquier estado); admin, todas.
+function canSeeTemplate(caller: User, row: t.IncidentTemplateRow): boolean {
+  return (
+    ELEVATED_ROLES.includes(caller.role) || row.status === "approved" || row.authorId === caller.id
+  );
+}
+
+// Quien puede crear un ticket con esta plantilla: aprobada para todo el staff; en
+// prueba, solo su autor y los administradores.
+function canUseTemplate(caller: User, row: t.IncidentTemplateRow): boolean {
+  if (row.status === "approved") return true;
+  return (
+    row.status === "testing" && (row.authorId === caller.id || ELEVATED_ROLES.includes(caller.role))
+  );
+}
+
+function toEquipmentNote(row: t.EquipmentNoteRow): EquipmentNote {
+  return {
+    id: row.id,
+    productId: row.productId,
+    body: row.body,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+async function toScanResult(row: t.ScanEventRow, user: User): Promise<ScanResult> {
+  let product: Product | null = null;
+  if (row.productId) {
+    const [productRow] = await db
+      .select()
+      .from(t.products)
+      .where(and(eq(t.products.id, row.productId), isNull(t.products.deletedAt)))
+      .limit(1);
+    if (productRow) {
+      product = toProduct(productRow);
+      const componentRows = await db
+        .select()
+        .from(t.components)
+        .where(and(eq(t.components.productId, productRow.id), isNull(t.components.deletedAt)));
+      product.components = componentRows.map(toComponent);
+    }
+  }
+  const scan: ScanEvent = {
+    id: row.id,
+    user,
+    machineId: row.machineId,
+    productId: row.productId,
+    context: row.context as ScanEvent["context"],
+    userAgent: row.userAgent,
+    createdAt: row.createdAt,
+  };
+  return { scan, product };
+}
 
 const loginGuard = new LoginGuard({
   maxAttempts: loginMaxAttempts(),
@@ -586,11 +708,19 @@ const Query = {
     // tiempo de respuesta no delate si el documento existe.
     const active = row?.isActive === true;
     const hash = active ? row.passwordHash : await placeholderHash();
-    const passwordOk = args.password.length <= MAX_PASSWORD_LENGTH && (await Bun.password.verify(args.password, hash));
+    const passwordOk =
+      args.password.length <= MAX_PASSWORD_LENGTH &&
+      (await Bun.password.verify(args.password, hash));
     if (!active || !passwordOk) {
       const { dniLocked, ipLocked } = loginGuard.recordFailure(args.dni, ctx.ip);
       const who = { userId: row?.id ?? "anonymous", userName: row?.name ?? "Anónimo" };
-      await writeAudit({ ...who, operation: "LOGIN_FAILED", entity: "Session", entityId: row?.id ?? "-", details: `IP ${ctx.ip}` });
+      await writeAudit({
+        ...who,
+        operation: "LOGIN_FAILED",
+        entity: "Session",
+        entityId: row?.id ?? "-",
+        details: `IP ${ctx.ip}`,
+      });
       if (dniLocked || ipLocked) {
         await writeAudit({
           ...who,
@@ -604,7 +734,14 @@ const Query = {
     }
     loginGuard.recordSuccess(args.dni);
     const user = toUser(row);
-    await writeAudit({ userId: user.id, userName: user.name, operation: "LOGIN", entity: "Session", entityId: user.id, details: `IP ${ctx.ip}` });
+    await writeAudit({
+      userId: user.id,
+      userName: user.name,
+      operation: "LOGIN",
+      entity: "Session",
+      entityId: user.id,
+      details: `IP ${ctx.ip}`,
+    });
     const token = await signToken({ sub: user.id, role: user.role, ver: row.tokenVersion });
     return { ...user, token };
   },
@@ -709,7 +846,9 @@ const Query = {
     if (args.equipmentId) tickets = tickets.filter((t) => t.equipmentId === args.equipmentId);
     // Rango por fecha de creacion; el cliente manda los extremos ya en su dia local
     if (args.startDate || args.endDate) {
-      tickets = tickets.filter((t) => withinInstantRange(t.createdAt, args.startDate, args.endDate));
+      tickets = tickets.filter((t) =>
+        withinInstantRange(t.createdAt, args.startDate, args.endDate),
+      );
     }
     return tickets;
   },
@@ -809,7 +948,8 @@ const Query = {
       ? state.services
       : state.services.filter((s) => s.requestedBy.id === caller.id);
     const equipment = state.products.filter(
-      (p) => p.deletedAt === null && (staff || (p.status === "available" && !hasOpenLoan(state, p.id))),
+      (p) =>
+        p.deletedAt === null && (staff || (p.status === "available" && !hasOpenLoan(state, p.id))),
     );
 
     const ticketStatuses: TicketStatus[] = ["pending", "in_progress", "in_resolution", "resolved"];
@@ -1044,7 +1184,10 @@ const Query = {
     ctx: Ctx,
   ) => {
     requireRole(ctx, ELEVATED_ROLES);
-    const limit = Math.min(Math.max(Number(args.limit ?? ERROR_REPORT_LIMIT), 1), ERROR_REPORT_LIMIT);
+    const limit = Math.min(
+      Math.max(Number(args.limit ?? ERROR_REPORT_LIMIT), 1),
+      ERROR_REPORT_LIMIT,
+    );
     const conditions = [];
     if (args.status) conditions.push(eq(t.errorReports.status, reportStatus(args.status)));
     const search = args.search?.trim();
@@ -1086,6 +1229,52 @@ const Query = {
     requireRole(ctx, ELEVATED_ROLES);
     const report = await findErrorReport(args.id);
     return tracker.localIssueDraft(report).body;
+  },
+
+  // Mobile (#98). Las notas son privadas: se filtra siempre por el autor, ni un
+  // administrador las lee.
+  myEquipmentNotes: async (_p: unknown, args: { productId: string }, ctx: Ctx) => {
+    const caller = requireRole(ctx, STAFF_ROLES);
+    const rows = await db
+      .select()
+      .from(t.equipmentNotes)
+      .where(
+        and(
+          eq(t.equipmentNotes.authorId, caller.id),
+          eq(t.equipmentNotes.productId, args.productId),
+          isNull(t.equipmentNotes.deletedAt),
+        ),
+      )
+      .orderBy(desc(t.equipmentNotes.updatedAt));
+    return rows.map(toEquipmentNote);
+  },
+
+  incidentTemplates: async (_p: unknown, args: { status?: string | null }, ctx: Ctx) => {
+    const caller = requireRole(ctx, STAFF_ROLES);
+    if (args.status) assertOneOf(args.status, TEMPLATE_STATUSES, "Estado de plantilla inválido");
+    const rows = await db
+      .select()
+      .from(t.incidentTemplates)
+      .where(
+        and(
+          isNull(t.incidentTemplates.deletedAt),
+          args.status ? eq(t.incidentTemplates.status, args.status) : undefined,
+        ),
+      )
+      .orderBy(desc(t.incidentTemplates.updatedAt));
+    return toTemplates(rows.filter((row) => canSeeTemplate(caller, row)));
+  },
+
+  incidentTemplate: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    const caller = requireRole(ctx, STAFF_ROLES);
+    const [row] = await db
+      .select()
+      .from(t.incidentTemplates)
+      .where(and(eq(t.incidentTemplates.id, args.id), isNull(t.incidentTemplates.deletedAt)))
+      .limit(1);
+    if (!row) return null;
+    if (!canSeeTemplate(caller, row)) throw forbidden();
+    return toTemplate(row);
   },
 };
 
@@ -1158,25 +1347,37 @@ const Mutation = {
     const { password, ...rest } = args.input;
     const role = typeof rest.role === "string" ? rest.role : user.role;
     const togglesActive = typeof rest.isActive === "boolean" && rest.isActive !== user.isActive;
-    const error = roleChangeError(caller, user, role) ?? (togglesActive ? activationError(caller, user) : null);
+    const error =
+      roleChangeError(caller, user, role) ?? (togglesActive ? activationError(caller, user) : null);
     if (error) throw forbidden(error);
-    if (typeof rest.dni === "string" && ctx.state.users.some((u) => u.dni === rest.dni && u.id !== user.id)) {
+    if (
+      typeof rest.dni === "string" &&
+      ctx.state.users.some((u) => u.dni === rest.dni && u.id !== user.id)
+    ) {
       throw conflict("Ya existe un usuario con ese documento");
     }
     // Sin campo en el input se conserva lo que habia; si el rol deja de ser
     // solicitante, normalizeStudent vacia la ficha (la base tambien lo exige).
     const rawStudent = {
-      studentGroup: rest.studentGroup !== undefined ? (rest.studentGroup as string | null) : user.studentGroup,
-      studentShift: rest.studentShift !== undefined ? (rest.studentShift as string | null) : user.studentShift,
-      studentSubjects: rest.studentSubjects !== undefined
-        ? ((rest.studentSubjects as string[] | null) ?? [])
-        : user.studentSubjects,
+      studentGroup:
+        rest.studentGroup !== undefined ? (rest.studentGroup as string | null) : user.studentGroup,
+      studentShift:
+        rest.studentShift !== undefined ? (rest.studentShift as string | null) : user.studentShift,
+      studentSubjects:
+        rest.studentSubjects !== undefined
+          ? ((rest.studentSubjects as string[] | null) ?? [])
+          : user.studentSubjects,
     };
     const studentError = role === "solicitante" ? firstError(validateStudent(rawStudent)) : null;
     if (studentError) throw invalid(studentError);
     const student = normalizeStudent(rawStudent, role as UserRole);
     // Los campos de estudiante se reemplazan por los normalizados, no se copian crudos
-    const { studentGroup: _group, studentShift: _shift, studentSubjects: _subjects, ...base } = rest;
+    const {
+      studentGroup: _group,
+      studentShift: _shift,
+      studentSubjects: _subjects,
+      ...base
+    } = rest;
     const next = { ...base, ...student, updatedAt: nowIso() };
     const passwordHash = password
       ? await Bun.password.hash(String(password), { algorithm: "argon2id" })
@@ -1215,7 +1416,12 @@ const Mutation = {
   // quien ya existe; no cambia rol, documento, email ni contraseña de nadie.
   importUsers: async (_p: unknown, args: { rows: ImportRowInput[] }, ctx: Ctx) => {
     requireRole(ctx, ELEVATED_ROLES);
-    const rows: Array<{ line: number; status: string; userId: string | null; error: string | null }> = [];
+    const rows: Array<{
+      line: number;
+      status: string;
+      userId: string | null;
+      error: string | null;
+    }> = [];
     const seenDni = new Map<string, number>();
     const seenEmail = new Map<string, number>();
     let created = 0;
@@ -1334,7 +1540,9 @@ const Mutation = {
       partNumber: input.partNumber.trim().toUpperCase(),
     };
     assertOneOf(input.status, EQUIPMENT_STATUSES, "Estado de equipo inválido");
-    assertRules(firstError(validateProduct(fields)), () => duplicateProductError(ctx.state, fields));
+    assertRules(firstError(validateProduct(fields)), () =>
+      duplicateProductError(ctx.state, fields),
+    );
     if (!location) throw invalid("Ubicación inválida");
     const product: Product = {
       id: nextId(ctx.state, "prod-", ctx.state.products),
@@ -1437,13 +1645,19 @@ const Mutation = {
     return product;
   },
 
-  softDeleteProduct: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+  softDeleteProduct: async (
+    _p: unknown,
+    args: { id: string; reason?: string | null },
+    ctx: Ctx,
+  ) => {
     requireRole(ctx, STAFF_ROLES);
     const { state } = ctx;
     const product = state.products.find((p) => p.id === args.id && p.deletedAt === null);
     if (!product) throw notFound("Producto no encontrado");
     await syncOverdueLoans(state);
-    if (state.loans.some((l) => l.equipment.id === args.id && IN_COURSE_LOAN_STATUSES.has(l.status))) {
+    if (
+      state.loans.some((l) => l.equipment.id === args.id && IN_COURSE_LOAN_STATUSES.has(l.status))
+    ) {
       throw conflict("No se puede dar de baja: el equipo tiene préstamos en curso");
     }
     if (state.tickets.some((t) => t.equipmentId === args.id && t.status !== "resolved")) {
@@ -1496,7 +1710,11 @@ const Mutation = {
     };
     const error = firstError(validateComponent(fields));
     if (error) throw invalid(error);
-    assertProductExists(ctx.state, fields.productId, "El equipo al que pertenece el componente no existe");
+    assertProductExists(
+      ctx.state,
+      fields.productId,
+      "El equipo al que pertenece el componente no existe",
+    );
     const component = {
       id: nextId(ctx.state, "comp-", ctx.state.components),
       type: "component" as const,
@@ -1515,7 +1733,9 @@ const Mutation = {
     await db.insert(t.components).values(component);
     ctx.state.components.push(component);
     ctx.state.componentsById.set(component.id, component);
-    const parent = component.productId ? ctx.state.productsById.get(component.productId) : undefined;
+    const parent = component.productId
+      ? ctx.state.productsById.get(component.productId)
+      : undefined;
     if (parent) parent.components = [...parent.components, component];
     return component;
   },
@@ -1593,27 +1813,86 @@ const Mutation = {
   createTicket: async (
     _p: unknown,
     args: {
-      input: { title: string; description: string; category: string; equipmentId?: string };
+      input: {
+        title: string;
+        description: string;
+        category: string;
+        priority?: string | null;
+        equipmentId?: string | null;
+        locationId?: string | null;
+        templateId?: string | null;
+        clientId?: string | null;
+      };
     },
     ctx: Ctx,
   ) => {
     const caller = requireAuth(ctx);
     const { input } = args;
-    assertOneOf(input.category, TICKET_CATEGORIES, "Categoría de incidencia inválida");
+    const staff = isStaff(caller);
+    const priority = input.priority || "medium";
+    assertRules(
+      firstError(
+        validateTicket({
+          title: input.title,
+          description: input.description,
+          category: input.category,
+          priority,
+        }),
+      ),
+    );
+    // Reintento del outbox offline: el mismo clientId del mismo autor devuelve el
+    // ticket que ya se creo en vez de duplicarlo.
+    const clientId = input.clientId?.trim() || null;
+    if (clientId) {
+      const [existing] = await db
+        .select({ id: t.tickets.id, submittedById: t.tickets.submittedById })
+        .from(t.tickets)
+        .where(eq(t.tickets.clientId, clientId))
+        .limit(1);
+      if (existing) {
+        if (existing.submittedById !== caller.id) throw conflict("El identificador ya está en uso");
+        const created = ctx.state.ticketsById.get(existing.id);
+        if (!created) throw conflict("El ticket ya fue dado de baja");
+        return created;
+      }
+    }
     assertProductExists(ctx.state, input.equipmentId, "El equipo no existe");
     const equipment = input.equipmentId
       ? (ctx.state.products.find((p) => p.id === input.equipmentId) ?? null)
       : null;
+    // La ubicacion sale del equipo; solo el staff puede indicar otra (un
+    // solicitante que mande locationId no cambia nada).
+    let locationId: string | null = equipment?.locationId ?? null;
+    if (staff && input.locationId) {
+      const target = ctx.state.locations.find(
+        (l) => l.id === input.locationId && l.deletedAt === null,
+      );
+      if (!target) throw invalid("La ubicación no existe");
+      locationId = target.id;
+    }
+    let templateId: string | null = null;
+    if (input.templateId) {
+      if (!staff) throw forbidden();
+      const template = await findTemplate(input.templateId);
+      if (!canUseTemplate(caller, template)) {
+        throw conflict("La plantilla no está disponible para crear incidencias");
+      }
+      templateId = template.id;
+    }
     const ticket: Ticket = {
       id: nextId(ctx.state, "tkt-", ctx.state.tickets, 3),
       title: input.title,
       description: input.description,
       category: input.category as Ticket["category"],
+      priority: priority as Ticket["priority"],
       status: "pending",
       submittedBy: caller,
       assignedTo: null,
       equipmentId: input.equipmentId || null,
       equipment,
+      locationId,
+      location: locationId ? (ctx.state.locationsById.get(locationId) ?? null) : null,
+      templateId,
       diagnosis: null,
       corrected: null,
       actionsTaken: null,
@@ -1629,10 +1908,14 @@ const Mutation = {
       title: ticket.title,
       description: ticket.description,
       category: ticket.category,
+      priority: ticket.priority,
       status: ticket.status,
       submittedById: ticket.submittedBy.id,
       assignedToId: null,
       equipmentId: ticket.equipmentId,
+      locationId,
+      templateId,
+      clientId,
       diagnosis: null,
       corrected: null,
       actionsTaken: null,
@@ -1661,18 +1944,36 @@ const Mutation = {
       title: string;
       description: string;
       category: string;
+      priority: string;
       equipmentId: string;
+      locationId: string;
     }>;
     if (input.category !== undefined) {
       assertOneOf(input.category, TICKET_CATEGORIES, "Categoría de incidencia inválida");
     }
+    if (input.priority !== undefined) {
+      assertOneOf(input.priority, TICKET_PRIORITIES, "Prioridad inválida");
+    }
     if (input.equipmentId) assertProductExists(ctx.state, input.equipmentId, "El equipo no existe");
+    if (
+      input.locationId &&
+      !ctx.state.locations.some((l) => l.id === input.locationId && l.deletedAt === null)
+    ) {
+      throw invalid("La ubicación no existe");
+    }
     if (input.title !== undefined) ticket.title = input.title;
     if (input.description !== undefined) ticket.description = input.description;
     if (input.category !== undefined) ticket.category = input.category as Ticket["category"];
+    if (input.priority !== undefined) ticket.priority = input.priority as Ticket["priority"];
     if (input.equipmentId !== undefined) {
       ticket.equipmentId = input.equipmentId || null;
       ticket.equipment = ctx.state.products.find((p) => p.id === input.equipmentId) ?? null;
+    }
+    if (input.locationId !== undefined) {
+      ticket.locationId = input.locationId || null;
+      ticket.location = input.locationId
+        ? (ctx.state.locationsById.get(input.locationId) ?? null)
+        : null;
     }
     ticket.updatedAt = nowIso();
     await db
@@ -1681,18 +1982,16 @@ const Mutation = {
         title: ticket.title,
         description: ticket.description,
         category: ticket.category,
+        priority: ticket.priority,
         equipmentId: ticket.equipmentId,
+        locationId: ticket.locationId,
         updatedAt: ticket.updatedAt,
       })
       .where(eq(t.tickets.id, ticket.id));
     return ticket;
   },
 
-  changeTicketStatus: async (
-    _p: unknown,
-    args: { id: string; status: TicketStatus },
-    ctx: Ctx,
-  ) => {
+  changeTicketStatus: async (_p: unknown, args: { id: string; status: TicketStatus }, ctx: Ctx) => {
     const caller = requireRole(ctx, STAFF_ROLES);
     const ticket = ctx.state.tickets.find((t) => t.id === args.id);
     if (!ticket) throw notFound("Ticket no encontrado");
@@ -1706,7 +2005,15 @@ const Mutation = {
       throw conflict(invalidTicketTransition(ticket, status));
     }
     if (status === "pending") {
-      await handOver(ctx.state, "ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, null, caller);
+      await handOver(
+        ctx.state,
+        "ticket",
+        ticket.id,
+        ticket.submittedBy,
+        ticket.assignedTo,
+        null,
+        caller,
+      );
       ticket.assignedTo = null;
     }
     if (ticket.status === "resolved") ticket.resolvedAt = null;
@@ -1795,7 +2102,15 @@ const Mutation = {
     const ticket = ctx.state.tickets.find((t) => t.id === args.id);
     if (!ticket) throw notFound("Ticket no encontrado");
     if (ticket.status !== "pending") throw conflict(invalidTicketTransition(ticket, "in_progress"));
-    await handOver(ctx.state, "ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, caller, caller);
+    await handOver(
+      ctx.state,
+      "ticket",
+      ticket.id,
+      ticket.submittedBy,
+      ticket.assignedTo,
+      caller,
+      caller,
+    );
     ticket.assignedTo = caller;
     ticket.status = "in_progress";
     // Primera vez que alguien lo toma: es lo que mide el tiempo de atencion
@@ -1821,7 +2136,15 @@ const Mutation = {
     assertCanWorkOn(caller, ticket.assignedTo, "El ticket");
     if (!isStaff(tech)) throw invalid("Solo se puede asignar a personal técnico");
     if (ticket.status === "resolved") throw conflict("No se puede reasignar un ticket resuelto");
-    await handOver(ctx.state, "ticket", ticket.id, ticket.submittedBy, ticket.assignedTo, tech, caller);
+    await handOver(
+      ctx.state,
+      "ticket",
+      ticket.id,
+      ticket.submittedBy,
+      ticket.assignedTo,
+      tech,
+      caller,
+    );
     ticket.assignedTo = tech;
     if (ticket.status === "pending") ticket.status = "in_progress";
     ticket.attendedAt ??= nowIso();
@@ -1854,7 +2177,9 @@ const Mutation = {
     const caller = requireAuth(ctx);
     const { input } = args;
     const loanUserId = isStaff(caller) ? (input.userId ?? caller.id) : caller.id;
-    const equipment = ctx.state.products.find((p) => p.id === input.equipmentId && p.deletedAt === null);
+    const equipment = ctx.state.products.find(
+      (p) => p.id === input.equipmentId && p.deletedAt === null,
+    );
     const loanUser = ctx.state.users.find((u) => u.id === loanUserId && u.isActive);
     if (!equipment || !loanUser) throw notFound("Equipo o usuario no encontrado");
     if (equipment.status !== "available" || hasOpenLoan(ctx.state, equipment.id)) {
@@ -2062,13 +2387,25 @@ const Mutation = {
     if (input.status) assertOneOf(input.status, SERVICE_STATUSES, "Estado de solicitud inválido");
     if (input.status) service.status = input.status as ServiceRequest["status"];
     if (!service.assignedTo && (input.status === "in_progress" || input.status === "completed")) {
-      await handOver(ctx.state, "service_request", service.id, service.requestedBy, null, caller, caller);
+      await handOver(
+        ctx.state,
+        "service_request",
+        service.id,
+        service.requestedBy,
+        null,
+        caller,
+        caller,
+      );
       service.assignedTo = caller;
     }
     if (input.resolutionText !== undefined) service.resolutionText = input.resolutionText;
     service.updatedAt = nowIso();
-    if (service.status !== previousStatus && Object.hasOwn(SERVICE_RESPONSE_NOTICES, service.status)) {
-      const kind = SERVICE_RESPONSE_NOTICES[service.status as keyof typeof SERVICE_RESPONSE_NOTICES];
+    if (
+      service.status !== previousStatus &&
+      Object.hasOwn(SERVICE_RESPONSE_NOTICES, service.status)
+    ) {
+      const kind =
+        SERVICE_RESPONSE_NOTICES[service.status as keyof typeof SERVICE_RESPONSE_NOTICES];
       await notify(ctx.state, service.requestedBy, "service_request", service.id, kind, caller);
     }
     await db
@@ -2089,7 +2426,15 @@ const Mutation = {
     if (!service) throw notFound("Solicitud no encontrada");
     if (CLOSED_SERVICE_STATUSES.has(service.status)) throw conflict("La solicitud ya está cerrada");
     if (service.assignedTo) throw conflict(`La solicitud ya la tomó ${service.assignedTo.name}`);
-    await handOver(ctx.state, "service_request", service.id, service.requestedBy, null, caller, caller);
+    await handOver(
+      ctx.state,
+      "service_request",
+      service.id,
+      service.requestedBy,
+      null,
+      caller,
+      caller,
+    );
     service.assignedTo = caller;
     service.updatedAt = nowIso();
     await db
@@ -2111,7 +2456,15 @@ const Mutation = {
     assertCanWorkOn(caller, service.assignedTo, "La solicitud");
     if (!isStaff(tech)) throw invalid("Solo se puede asignar a personal técnico");
     if (CLOSED_SERVICE_STATUSES.has(service.status)) throw conflict("La solicitud ya está cerrada");
-    await handOver(ctx.state, "service_request", service.id, service.requestedBy, service.assignedTo, tech, caller);
+    await handOver(
+      ctx.state,
+      "service_request",
+      service.id,
+      service.requestedBy,
+      service.assignedTo,
+      tech,
+      caller,
+    );
     service.assignedTo = tech;
     service.updatedAt = nowIso();
     await db
@@ -2147,13 +2500,12 @@ const Mutation = {
     if (!loan) throw notFound("Préstamo no encontrado");
     if (!canRetire(caller, loan.user.id, loan.status === "pending")) throw forbidden();
     if (loan.status === "active" || loan.status === "overdue") {
-      throw conflict("No se puede dar de baja un préstamo en curso: registrá la devolución primero");
+      throw conflict(
+        "No se puede dar de baja un préstamo en curso: registrá la devolución primero",
+      );
     }
     const now = nowIso();
-    await db
-      .update(t.loans)
-      .set({ deletedAt: now, updatedAt: now })
-      .where(eq(t.loans.id, loan.id));
+    await db.update(t.loans).set({ deletedAt: now, updatedAt: now }).where(eq(t.loans.id, loan.id));
     await dropNoticesOf(state, "loan", loan.id);
     state.loans = removeFrom(state.loans, state.loansById, loan.id);
     state.deletedIds.add(loan.id);
@@ -2204,10 +2556,7 @@ const Mutation = {
     if (!comment) throw notFound("Comentario no encontrado");
     assertCommentAccess(state, caller, comment.entityType, comment.entityId);
     if (!canRetire(caller, comment.author.id, true)) throw forbidden();
-    await db
-      .update(t.comments)
-      .set({ deletedAt: nowIso() })
-      .where(eq(t.comments.id, comment.id));
+    await db.update(t.comments).set({ deletedAt: nowIso() }).where(eq(t.comments.id, comment.id));
     state.comments = removeFrom(state.comments, state.commentsById, comment.id);
     state.deletedIds.add(comment.id);
     return true;
@@ -2345,7 +2694,9 @@ const Mutation = {
     }
     const count = productsIn(ctx.state, args.id).length;
     if (count > 0) {
-      throw conflict(`No se puede eliminar: tiene ${count} equipo(s). Movelos a otra ubicación primero`);
+      throw conflict(
+        `No se puede eliminar: tiene ${count} equipo(s). Movelos a otra ubicación primero`,
+      );
     }
     location.deletedAt = nowIso();
     await db
@@ -2428,8 +2779,7 @@ const Mutation = {
           : intervention.partsReplaced,
       performedAt: input.performedAt ?? intervention.performedAt,
     };
-    const ticketId =
-      input.ticketId !== undefined ? input.ticketId || null : intervention.ticketId;
+    const ticketId = input.ticketId !== undefined ? input.ticketId || null : intervention.ticketId;
     const error =
       firstError(validateIntervention(fields)) ??
       interventionTicketError(ctx.state, ticketId, intervention.equipmentId);
@@ -2511,10 +2861,13 @@ const Mutation = {
     let equipment: Product | null = null;
     let location: Location | null = null;
     if (input.resourceType === "equipment") {
-      equipment = ctx.state.products.find((p) => p.id === input.equipmentId && !p.deletedAt) ?? null;
+      equipment =
+        ctx.state.products.find((p) => p.id === input.equipmentId && !p.deletedAt) ?? null;
       if (!equipment) throw notFound("Equipo no encontrado");
-      if (equipment.status === "in_repair") throw conflict("El equipo está en reparación: no se puede reservar");
-      if (equipment.status === "retired") throw conflict("El equipo está dado de baja: no se puede reservar");
+      if (equipment.status === "in_repair")
+        throw conflict("El equipo está en reparación: no se puede reservar");
+      if (equipment.status === "retired")
+        throw conflict("El equipo está dado de baja: no se puede reservar");
     } else if (input.resourceType === "location") {
       location = activeLocation(ctx.state, input.locationId) ?? null;
       if (!location) throw notFound("Ubicación no encontrada");
@@ -2524,7 +2877,13 @@ const Mutation = {
     const fields = { startsAt: input.startsAt, endsAt: input.endsAt, purpose: input.purpose };
     const resourceId = (equipment ?? location)!.id;
     assertRules(firstError(validateReservation(fields)), () =>
-      reservationOverlapError(ctx.state, input.resourceType, resourceId, fields.startsAt, fields.endsAt),
+      reservationOverlapError(
+        ctx.state,
+        input.resourceType,
+        resourceId,
+        fields.startsAt,
+        fields.endsAt,
+      ),
     );
     const now = nowIso();
     const reservation: Reservation = {
@@ -2591,16 +2950,16 @@ const Mutation = {
     await notify(ctx.state, reservation.user, "reservation", reservation.id, "approved", caller);
     await db
       .update(t.reservations)
-      .set({ status: reservation.status, reviewedById: caller.id, updatedAt: reservation.updatedAt })
+      .set({
+        status: reservation.status,
+        reviewedById: caller.id,
+        updatedAt: reservation.updatedAt,
+      })
       .where(eq(t.reservations.id, reservation.id));
     return reservation;
   },
 
-  rejectReservation: async (
-    _p: unknown,
-    args: { id: string; reason: string },
-    ctx: Ctx,
-  ) => {
+  rejectReservation: async (_p: unknown, args: { id: string; reason: string }, ctx: Ctx) => {
     const caller = requireRole(ctx, STAFF_ROLES);
     await syncReservations(ctx.state);
     const reservation = ctx.state.reservations.find((r) => r.id === args.id);
@@ -2688,7 +3047,14 @@ const Mutation = {
     reservation.status = "cancelled";
     reservation.cancelledBy = caller;
     reservation.updatedAt = nowIso();
-    await notify(ctx.state, reservation.reviewedBy, "reservation", reservation.id, "cancelled", caller);
+    await notify(
+      ctx.state,
+      reservation.reviewedBy,
+      "reservation",
+      reservation.id,
+      "cancelled",
+      caller,
+    );
     await db
       .update(t.reservations)
       .set({ status: "cancelled", cancelledById: caller.id, updatedAt: reservation.updatedAt })
@@ -2746,7 +3112,16 @@ const Mutation = {
     const id = `err-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
     const [row] = await db
       .insert(t.errorReports)
-      .values({ id, ...input, firstSeen: now, lastSeen: now, occurrences: 1, status: "new", createdAt: now, updatedAt: now })
+      .values({
+        id,
+        ...input,
+        firstSeen: now,
+        lastSeen: now,
+        occurrences: 1,
+        status: "new",
+        createdAt: now,
+        updatedAt: now,
+      })
       .onConflictDoUpdate({
         target: t.errorReports.fingerprint,
         set: {
@@ -2764,11 +3139,7 @@ const Mutation = {
     return toErrorReport(row);
   },
 
-  updateErrorReportStatus: async (
-    _p: unknown,
-    args: { id: string; status: string },
-    ctx: Ctx,
-  ) => {
+  updateErrorReportStatus: async (_p: unknown, args: { id: string; status: string }, ctx: Ctx) => {
     const caller = requireRole(ctx, ELEVATED_ROLES);
     const status = reportStatus(args.status);
     const now = nowIso();
@@ -2819,12 +3190,321 @@ const Mutation = {
     });
     return { url: created.url, usedLlm: draft.usedLlm, alreadyExisted: false };
   },
+
+  // ── Mobile (#98) ───────────────────────────────────────────────────────────
+
+  // Corre fuera de la transaccion (alta frecuencia, solo inserta) y deja su propia
+  // auditoria. Idempotente por clientId: el outbox offline reintenta sin duplicar.
+  recordScan: async (
+    _p: unknown,
+    args: {
+      input: {
+        machineId: string;
+        context: string;
+        userAgent?: string | null;
+        clientId?: string | null;
+      };
+    },
+    ctx: Ctx,
+  ) => {
+    const caller = requireAuth(ctx);
+    const { input } = args;
+    assertOneOf(input.context, SCAN_CONTEXTS, "Contexto de escaneo inválido");
+    // Un solicitante solo escanea para pedir un prestamo
+    if (!isStaff(caller) && input.context !== "loan") throw forbidden();
+    const machineId = input.machineId.trim().toUpperCase();
+    if (!machineId) throw invalid("El código escaneado está vacío");
+    if (machineId.length > MAX_MACHINE_CODE)
+      throw invalid("El código escaneado es demasiado largo");
+
+    const clientId = input.clientId?.trim() || null;
+    const findByClientId = async () => {
+      if (!clientId) return null;
+      const [row] = await db
+        .select()
+        .from(t.scanEvents)
+        .where(eq(t.scanEvents.clientId, clientId))
+        .limit(1);
+      if (row && row.userId !== caller.id) throw conflict("El identificador ya está en uso");
+      return row ?? null;
+    };
+    const replay = await findByClientId();
+    if (replay) return toScanResult(replay, caller);
+
+    const [product] = await db
+      .select({ id: t.products.id })
+      .from(t.products)
+      .where(and(eq(t.products.machineId, machineId), isNull(t.products.deletedAt)))
+      .limit(1);
+    const userAgent = input.userAgent?.trim().slice(0, MAX_USER_AGENT) || null;
+    const [inserted] = await db
+      .insert(t.scanEvents)
+      .values({
+        id: newRowId("scan"),
+        userId: caller.id,
+        productId: product?.id ?? null,
+        machineId,
+        context: input.context,
+        userAgent,
+        clientId,
+        createdAt: nowIso(),
+      })
+      .onConflictDoNothing({ target: t.scanEvents.clientId })
+      .returning();
+    // Dos reintentos en simultaneo: el segundo no inserta y devuelve la fila del primero
+    if (!inserted) {
+      const raced = await findByClientId();
+      if (!raced) throw conflict("No se pudo registrar el escaneo");
+      return toScanResult(raced, caller);
+    }
+    const agent = userAgent ? `; UA: ${userAgent.slice(0, MAX_AUDIT_USER_AGENT)}` : "";
+    await writeAudit({
+      userId: caller.id,
+      userName: caller.name,
+      operation: "SCAN_EQUIPMENT",
+      entity: "Product",
+      entityId: product?.id ?? machineId,
+      details: `Contexto: ${input.context}; Código: ${machineId}${agent}`,
+    });
+    return toScanResult(inserted, caller);
+  },
+
+  // Stateless como recordScan. Sin id crea (idempotente por clientId); con id edita
+  // solo si el caller es el autor. La auditoria nunca lleva el cuerpo de la nota.
+  upsertEquipmentNote: async (
+    _p: unknown,
+    args: {
+      input: { id?: string | null; productId: string; body: string; clientId?: string | null };
+    },
+    ctx: Ctx,
+  ) => {
+    const caller = requireRole(ctx, STAFF_ROLES);
+    const { input } = args;
+    const noteError = validateEquipmentNote(input.body);
+    if (noteError) throw invalid(noteError);
+    const body = input.body.trim();
+    const now = nowIso();
+    let row: t.EquipmentNoteRow;
+    if (input.id) {
+      const [updated] = await db
+        .update(t.equipmentNotes)
+        .set({ body, updatedAt: now })
+        .where(
+          and(
+            eq(t.equipmentNotes.id, input.id),
+            eq(t.equipmentNotes.authorId, caller.id),
+            isNull(t.equipmentNotes.deletedAt),
+          ),
+        )
+        .returning();
+      // Ajena o borrada: mismo 404, la nota de otro tecnico no se deja ni confirmar
+      if (!updated) throw notFound("Nota no encontrada");
+      row = updated;
+    } else {
+      const [product] = await db
+        .select({ id: t.products.id })
+        .from(t.products)
+        .where(and(eq(t.products.id, input.productId), isNull(t.products.deletedAt)))
+        .limit(1);
+      if (!product) throw notFound("Producto no encontrado");
+      const clientId = input.clientId?.trim() || null;
+      const [inserted] = await db
+        .insert(t.equipmentNotes)
+        .values({
+          id: newRowId("note"),
+          authorId: caller.id,
+          productId: product.id,
+          body,
+          clientId,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoNothing({ target: t.equipmentNotes.clientId })
+        .returning();
+      if (!inserted) {
+        const [existing] = clientId
+          ? await db
+              .select()
+              .from(t.equipmentNotes)
+              .where(eq(t.equipmentNotes.clientId, clientId))
+              .limit(1)
+          : [];
+        if (!existing) throw conflict("No se pudo guardar la nota");
+        if (existing.authorId !== caller.id) throw conflict("El identificador ya está en uso");
+        return toEquipmentNote(existing);
+      }
+      row = inserted;
+    }
+    await writeAudit({
+      userId: caller.id,
+      userName: caller.name,
+      operation: "UPSERT_EQUIPMENT_NOTE",
+      entity: "EquipmentNote",
+      entityId: row.id,
+      details: `Equipo ${row.productId}`,
+    });
+    return toEquipmentNote(row);
+  },
+
+  deleteEquipmentNote: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    const caller = requireRole(ctx, STAFF_ROLES);
+    const [row] = await db
+      .update(t.equipmentNotes)
+      .set({ deletedAt: nowIso() })
+      .where(
+        and(
+          eq(t.equipmentNotes.id, args.id),
+          eq(t.equipmentNotes.authorId, caller.id),
+          isNull(t.equipmentNotes.deletedAt),
+        ),
+      )
+      .returning({ id: t.equipmentNotes.id });
+    if (!row) throw notFound("Nota no encontrada");
+    return true;
+  },
+
+  createIncidentTemplate: async (
+    _p: unknown,
+    args: {
+      input: {
+        name: string;
+        category: string;
+        priority: string;
+        title: string;
+        description: string;
+      };
+    },
+    ctx: Ctx,
+  ) => {
+    const caller = requireRole(ctx, STAFF_ROLES);
+    const { input } = args;
+    assertRules(firstError(validateIncidentTemplate(input)));
+    const now = nowIso();
+    const [row] = await db
+      .insert(t.incidentTemplates)
+      .values({
+        id: newRowId("tpl"),
+        name: input.name.trim(),
+        category: input.category,
+        priority: input.priority,
+        title: input.title.trim(),
+        description: input.description.trim(),
+        status: "draft",
+        authorId: caller.id,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    return toTemplate(row!);
+  },
+
+  // El autor edita mientras la plantilla es borrador o esta en prueba; un
+  // administrador, siempre salvo que este retirada.
+  updateIncidentTemplate: async (
+    _p: unknown,
+    args: {
+      id: string;
+      input: {
+        name: string;
+        category: string;
+        priority: string;
+        title: string;
+        description: string;
+      };
+    },
+    ctx: Ctx,
+  ) => {
+    const caller = requireRole(ctx, STAFF_ROLES);
+    const row = await findTemplate(args.id);
+    const admin = ELEVATED_ROLES.includes(caller.role);
+    if (!admin && row.authorId !== caller.id) throw forbidden();
+    if (row.status === "retired") throw conflict("La plantilla está retirada");
+    if (!admin && row.status === "approved") {
+      throw conflict("Una plantilla aprobada solo la edita un administrador");
+    }
+    const { input } = args;
+    assertRules(firstError(validateIncidentTemplate(input)));
+    const [updated] = await db
+      .update(t.incidentTemplates)
+      .set({
+        name: input.name.trim(),
+        category: input.category,
+        priority: input.priority,
+        title: input.title.trim(),
+        description: input.description.trim(),
+        updatedAt: nowIso(),
+      })
+      .where(eq(t.incidentTemplates.id, row.id))
+      .returning();
+    return toTemplate(updated!);
+  },
+
+  submitIncidentTemplate: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    const caller = requireRole(ctx, STAFF_ROLES);
+    const row = await findTemplate(args.id);
+    if (!ELEVATED_ROLES.includes(caller.role) && row.authorId !== caller.id) throw forbidden();
+    if (row.status !== "draft") {
+      throw conflict(`No se puede enviar a prueba una plantilla en estado "${row.status}"`);
+    }
+    const [updated] = await db
+      .update(t.incidentTemplates)
+      .set({ status: "testing", updatedAt: nowIso() })
+      .where(eq(t.incidentTemplates.id, row.id))
+      .returning();
+    return toTemplate(updated!);
+  },
+
+  approveIncidentTemplate: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    const caller = requireRole(ctx, ELEVATED_ROLES);
+    const row = await findTemplate(args.id);
+    if (row.status !== "testing") {
+      throw conflict(`No se puede aprobar una plantilla en estado "${row.status}"`);
+    }
+    const now = nowIso();
+    const [updated] = await db
+      .update(t.incidentTemplates)
+      .set({ status: "approved", approvedById: caller.id, approvedAt: now, updatedAt: now })
+      .where(eq(t.incidentTemplates.id, row.id))
+      .returning();
+    return toTemplate(updated!);
+  },
+
+  rejectIncidentTemplate: async (_p: unknown, args: { id: string; reason: string }, ctx: Ctx) => {
+    requireRole(ctx, ELEVATED_ROLES);
+    const row = await findTemplate(args.id);
+    if (row.status !== "testing") {
+      throw conflict(`No se puede rechazar una plantilla en estado "${row.status}"`);
+    }
+    if (!args.reason?.trim()) throw invalid("Indicá el motivo del rechazo");
+    const [updated] = await db
+      .update(t.incidentTemplates)
+      .set({ status: "draft", updatedAt: nowIso() })
+      .where(eq(t.incidentTemplates.id, row.id))
+      .returning();
+    return toTemplate(updated!);
+  },
+
+  // El autor retira la suya mientras no este aprobada; un administrador, cualquiera.
+  retireIncidentTemplate: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    const caller = requireRole(ctx, STAFF_ROLES);
+    const row = await findTemplate(args.id);
+    const admin = ELEVATED_ROLES.includes(caller.role);
+    if (!admin && (row.authorId !== caller.id || row.status === "approved")) throw forbidden();
+    if (row.status === "retired") throw conflict("La plantilla ya está retirada");
+    const [updated] = await db
+      .update(t.incidentTemplates)
+      .set({ status: "retired", updatedAt: nowIso() })
+      .where(eq(t.incidentTemplates.id, row.id))
+      .returning();
+    return toTemplate(updated!);
+  },
 };
 
 // Que entidad y que dato deja cada mutacion en `activity_logs`. Al estar tipado
 // por `keyof typeof Mutation`, agregar una mutacion sin su fila de auditoria no
 // compila.
-const reason = (args: { reason?: string }) => (args.reason ? `Motivo: ${args.reason.trim()}` : null);
+const reason = (args: { reason?: string }) =>
+  args.reason ? `Motivo: ${args.reason.trim()}` : null;
 
 const AUDIT: Record<keyof typeof Mutation, AuditSpec> = {
   createUser: { entity: "User" },
@@ -2838,7 +3518,13 @@ const AUDIT: Record<keyof typeof Mutation, AuditSpec> = {
   },
   createProduct: { entity: "Product" },
   updateProduct: { entity: "Product" },
-  softDeleteProduct: { entity: "Product", details: () => "Baja lógica (deleted_at)" },
+  softDeleteProduct: {
+    entity: "Product",
+    details: (a) => {
+      const motivo = typeof a.reason === "string" ? a.reason.trim() : "";
+      return motivo ? `Baja lógica (deleted_at). Motivo: ${motivo}` : "Baja lógica (deleted_at)";
+    },
+  },
   createComponent: { entity: "Component" },
   updateComponent: { entity: "Component" },
   softDeleteComponent: { entity: "Component", details: () => "Baja lógica (deleted_at)" },
@@ -2846,31 +3532,47 @@ const AUDIT: Record<keyof typeof Mutation, AuditSpec> = {
   updateTicket: { entity: "Ticket" },
   assignTicket: { entity: "Ticket", details: (a) => `Asignado a ${a.technicianId}` },
   claimTicket: { entity: "Ticket" },
-  completeTicket: { entity: "Ticket", details: (a) => `Corregido: ${a.input.corrected ? "sí" : "no"}` },
+  completeTicket: {
+    entity: "Ticket",
+    details: (a) => `Corregido: ${a.input.corrected ? "sí" : "no"}`,
+  },
   changeTicketStatus: { entity: "Ticket", details: (a) => `Estado: ${a.status}` },
   rateTicket: { entity: "Ticket", details: (a) => `Valoración: ${a.rating}` },
   createLoan: { entity: "Loan", details: (a) => `Equipo ${a.input.equipmentId}` },
   approveLoan: { entity: "Loan" },
   rejectLoan: { entity: "Loan", details: reason },
   deliverLoan: { entity: "Loan" },
-  returnLoan: { entity: "Loan", details: (a) => (a.damaged ? "Devuelto con daños" : "Devuelto sin daños") },
+  returnLoan: {
+    entity: "Loan",
+    details: (a) => (a.damaged ? "Devuelto con daños" : "Devuelto sin daños"),
+  },
   createServiceRequest: { entity: "ServiceRequest" },
   updateServiceRequest: { entity: "ServiceRequest" },
   claimServiceRequest: { entity: "ServiceRequest" },
-  assignServiceRequest: { entity: "ServiceRequest", details: (a) => `Asignado a ${a.technicianId}` },
+  assignServiceRequest: {
+    entity: "ServiceRequest",
+    details: (a) => `Asignado a ${a.technicianId}`,
+  },
   softDeleteTicket: { entity: "Ticket", details: () => "Baja lógica (deleted_at)" },
   softDeleteLoan: { entity: "Loan", details: () => "Baja lógica (deleted_at)" },
   softDeleteServiceRequest: { entity: "ServiceRequest", details: () => "Baja lógica (deleted_at)" },
   softDeleteIntervention: { entity: "Intervention", details: () => "Baja lógica (deleted_at)" },
   softDeleteComment: { entity: "Comment", details: () => "Baja lógica (deleted_at)" },
   logout: { entity: "Session", id: (_a, _r, ctx) => ctx.caller?.id ?? "-", details: () => null },
-  changePassword: { entity: "User", id: (_a, _r, ctx) => ctx.caller?.id ?? "-", details: () => null },
+  changePassword: {
+    entity: "User",
+    id: (_a, _r, ctx) => ctx.caller?.id ?? "-",
+    details: () => null,
+  },
   createLocation: { entity: "Location" },
   updateLocation: { entity: "Location" },
   softDeleteLocation: { entity: "Location", details: () => "Baja lógica (deleted_at)" },
   createIntervention: { entity: "Intervention" },
   updateIntervention: { entity: "Intervention" },
-  createComment: { entity: "Comment", details: (a) => `En ${a.input.entityType} ${a.input.entityId}` },
+  createComment: {
+    entity: "Comment",
+    details: (a) => `En ${a.input.entityType} ${a.input.entityId}`,
+  },
   createReservation: { entity: "Reservation" },
   approveReservation: { entity: "Reservation" },
   rejectReservation: { entity: "Reservation", details: reason },
@@ -2883,6 +3585,20 @@ const AUDIT: Record<keyof typeof Mutation, AuditSpec> = {
   reportError: { entity: "ErrorReport" },
   updateErrorReportStatus: { entity: "ErrorReport", details: (a) => `Estado: ${a.status}` },
   createGithubIssue: { entity: "ErrorReport" },
+  // Mobile (#98). recordScan (SCAN_EQUIPMENT) y upsertEquipmentNote
+  // (UPSERT_EQUIPMENT_NOTE) escriben la suya a mano, fuera de la transaccion.
+  recordScan: { entity: "Product" },
+  upsertEquipmentNote: { entity: "EquipmentNote" },
+  deleteEquipmentNote: { entity: "EquipmentNote", details: () => null },
+  createIncidentTemplate: {
+    entity: "IncidentTemplate",
+    details: (a) => `Nombre: ${a.input.name.trim()}`,
+  },
+  updateIncidentTemplate: { entity: "IncidentTemplate" },
+  submitIncidentTemplate: { entity: "IncidentTemplate" },
+  approveIncidentTemplate: { entity: "IncidentTemplate" },
+  rejectIncidentTemplate: { entity: "IncidentTemplate", details: reason },
+  retireIncidentTemplate: { entity: "IncidentTemplate" },
 };
 
 // `login` y `me` no necesitan la foto de la base; `activityLogs` consulta la
@@ -2895,6 +3611,9 @@ const STATELESS_QUERIES = new Set<keyof typeof Query>([
   "errorReport",
   "errorReportSettings",
   "githubIssueDraft",
+  "myEquipmentNotes",
+  "incidentTemplates",
+  "incidentTemplate",
 ]);
 
 // Estas mutaciones no tocan el estado del dominio: evitan cargar la foto y el
@@ -2904,6 +3623,8 @@ const STATELESS_MUTATIONS = new Set<keyof typeof Mutation>([
   "reportError",
   "updateErrorReportStatus",
   "createGithubIssue",
+  "recordScan",
+  "upsertEquipmentNote",
 ]);
 
 function entries<T extends object>(source: T): Array<[keyof T & string, Resolver]> {
@@ -2913,10 +3634,7 @@ function entries<T extends object>(source: T): Array<[keyof T & string, Resolver
 export const resolvers = {
   User: userFieldResolvers,
   Query: Object.fromEntries(
-    entries(Query).map(([name, fn]) => [
-      name,
-      STATELESS_QUERIES.has(name) ? fn : withState(fn),
-    ]),
+    entries(Query).map(([name, fn]) => [name, STATELESS_QUERIES.has(name) ? fn : withState(fn)]),
   ),
   Mutation: Object.fromEntries(
     entries(Mutation).map(([name, fn]) => [

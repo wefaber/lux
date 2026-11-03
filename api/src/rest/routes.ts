@@ -23,13 +23,42 @@ function crud(
 export const ROUTES: RouteSpec[] = [
   // Autenticacion
   { method: "POST", path: "/auth/login", operation: "login", message: "Sesión iniciada" },
-  { method: "POST", path: "/auth/logout", operation: "logout", message: "Sesión cerrada", flagData: () => ({ loggedOut: true }) },
+  {
+    method: "POST",
+    path: "/auth/logout",
+    operation: "logout",
+    message: "Sesión cerrada",
+    flagData: () => ({ loggedOut: true }),
+  },
   { method: "GET", path: "/auth/me", operation: "me", nullAs: "UNAUTHENTICATED" },
-  { method: "PUT", path: "/auth/password", operation: "changePassword", flagData: () => ({ updated: true }) },
+  {
+    method: "PUT",
+    path: "/auth/password",
+    operation: "changePassword",
+    flagData: () => ({ updated: true }),
+  },
 
-  ...crud("users", { list: "users", one: "user", create: "createUser", update: "updateUser", remove: "deleteUser" }),
-  { method: "POST", path: "/users/import", operation: "importUsers", created: true, message: "Importación realizada" },
-  ...crud("locations", { list: "locations", one: "location", create: "createLocation", update: "updateLocation", remove: "softDeleteLocation" }),
+  ...crud("users", {
+    list: "users",
+    one: "user",
+    create: "createUser",
+    update: "updateUser",
+    remove: "deleteUser",
+  }),
+  {
+    method: "POST",
+    path: "/users/import",
+    operation: "importUsers",
+    created: true,
+    message: "Importación realizada",
+  },
+  ...crud("locations", {
+    list: "locations",
+    one: "location",
+    create: "createLocation",
+    update: "updateLocation",
+    remove: "softDeleteLocation",
+  }),
 
   { method: "GET", path: "/products", operation: "products" },
   { method: "GET", path: "/products/by-machine-id/:machineId", operation: "productByMachineId" },
@@ -38,7 +67,13 @@ export const ROUTES: RouteSpec[] = [
   { method: "PUT", path: "/products/:id", operation: "updateProduct" },
   { method: "DELETE", path: "/products/:id", operation: "softDeleteProduct", flagData: deleted },
 
-  ...crud("components", { list: "components", one: "component", create: "createComponent", update: "updateComponent", remove: "softDeleteComponent" }),
+  ...crud("components", {
+    list: "components",
+    one: "component",
+    create: "createComponent",
+    update: "updateComponent",
+    remove: "softDeleteComponent",
+  }),
 
   { method: "GET", path: "/tickets", operation: "tickets" },
   { method: "GET", path: "/tickets/unassigned", operation: "oolTickets" },
@@ -67,13 +102,23 @@ export const ROUTES: RouteSpec[] = [
   { method: "PUT", path: "/service-requests/:id", operation: "updateServiceRequest" },
   { method: "PUT", path: "/service-requests/:id/claim", operation: "claimServiceRequest" },
   { method: "PUT", path: "/service-requests/:id/assign", operation: "assignServiceRequest" },
-  { method: "DELETE", path: "/service-requests/:id", operation: "softDeleteServiceRequest", flagData: deleted },
+  {
+    method: "DELETE",
+    path: "/service-requests/:id",
+    operation: "softDeleteServiceRequest",
+    flagData: deleted,
+  },
 
   { method: "GET", path: "/interventions", operation: "interventions" },
   { method: "GET", path: "/interventions/:id", operation: "intervention" },
   { method: "POST", path: "/interventions", operation: "createIntervention", created: true },
   { method: "PUT", path: "/interventions/:id", operation: "updateIntervention" },
-  { method: "DELETE", path: "/interventions/:id", operation: "softDeleteIntervention", flagData: deleted },
+  {
+    method: "DELETE",
+    path: "/interventions/:id",
+    operation: "softDeleteIntervention",
+    flagData: deleted,
+  },
 
   { method: "GET", path: "/comments", operation: "comments" },
   { method: "GET", path: "/comments/:id", operation: "comment" },
@@ -86,12 +131,22 @@ export const ROUTES: RouteSpec[] = [
   { method: "PUT", path: "/reservations/:id", operation: "updateReservation" },
   { method: "PUT", path: "/reservations/:id/approve", operation: "approveReservation" },
   { method: "PUT", path: "/reservations/:id/reject", operation: "rejectReservation" },
-  { method: "DELETE", path: "/reservations/:id", operation: "cancelReservation", message: "Cancelada" },
+  {
+    method: "DELETE",
+    path: "/reservations/:id",
+    operation: "cancelReservation",
+    message: "Cancelada",
+  },
 
   { method: "GET", path: "/notices", operation: "notices" },
   { method: "DELETE", path: "/notices/:id", operation: "acknowledgeNotice", flagData: deleted },
   { method: "GET", path: "/pending-news", operation: "pendingNews" },
-  { method: "PUT", path: "/pending-news/:section", operation: "markPendingSeen", flagData: (p) => ({ section: p.section, seen: true }) },
+  {
+    method: "PUT",
+    path: "/pending-news/:section",
+    operation: "markPendingSeen",
+    flagData: (p) => ({ section: p.section, seen: true }),
+  },
 
   { method: "GET", path: "/activity-logs", operation: "activityLogs" },
   { method: "GET", path: "/dashboard/stats", operation: "dashboardStats" },
@@ -99,11 +154,49 @@ export const ROUTES: RouteSpec[] = [
 
   // Issue tracker. POST /errors es publico (lo usa el navegador sin sesion) y
   // acepta el cuerpo como `input`; el resto es de administradores.
-  { method: "POST", path: "/errors", operation: "reportError", created: true, message: "Error registrado" },
+  {
+    method: "POST",
+    path: "/errors",
+    operation: "reportError",
+    created: true,
+    message: "Error registrado",
+  },
   { method: "GET", path: "/error-reports", operation: "errorReports" },
   { method: "GET", path: "/error-reports/:id", operation: "errorReport" },
   { method: "GET", path: "/error-reports/:id/draft", operation: "githubIssueDraft" },
   { method: "PUT", path: "/error-reports/:id/status", operation: "updateErrorReportStatus" },
-  { method: "POST", path: "/error-reports/:id/github-issue", operation: "createGithubIssue", created: true, message: "Issue creado" },
+  {
+    method: "POST",
+    path: "/error-reports/:id/github-issue",
+    operation: "createGithubIssue",
+    created: true,
+    message: "Issue creado",
+  },
   { method: "GET", path: "/error-report-settings", operation: "errorReportSettings" },
+
+  // Mobile (#98). El escaneo y las notas aceptan el cuerpo como `input`; las notas
+  // son privadas de quien las escribe.
+  { method: "POST", path: "/scans", operation: "recordScan", created: true },
+  { method: "GET", path: "/products/:productId/notes", operation: "myEquipmentNotes" },
+  { method: "POST", path: "/equipment-notes", operation: "upsertEquipmentNote", created: true },
+  {
+    method: "DELETE",
+    path: "/equipment-notes/:id",
+    operation: "deleteEquipmentNote",
+    flagData: deleted,
+  },
+
+  { method: "GET", path: "/incident-templates", operation: "incidentTemplates" },
+  { method: "GET", path: "/incident-templates/:id", operation: "incidentTemplate" },
+  {
+    method: "POST",
+    path: "/incident-templates",
+    operation: "createIncidentTemplate",
+    created: true,
+  },
+  { method: "PUT", path: "/incident-templates/:id", operation: "updateIncidentTemplate" },
+  { method: "PUT", path: "/incident-templates/:id/submit", operation: "submitIncidentTemplate" },
+  { method: "PUT", path: "/incident-templates/:id/approve", operation: "approveIncidentTemplate" },
+  { method: "PUT", path: "/incident-templates/:id/reject", operation: "rejectIncidentTemplate" },
+  { method: "PUT", path: "/incident-templates/:id/retire", operation: "retireIncidentTemplate" },
 ];

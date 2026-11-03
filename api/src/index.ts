@@ -40,6 +40,9 @@ const REQUIRED_TABLES = [
   "activity_logs",
   "revoked_tokens",
   "error_reports",
+  "scan_events",
+  "equipment_notes",
+  "incident_templates",
 ];
 
 async function readiness(): Promise<boolean> {
@@ -73,9 +76,7 @@ const app = new Elysia()
     return { status: ok ? "ready" : "not-ready", ok };
   })
   .use(restPlugin({ schema, createContext: (request, ip) => createContext(request, ip) }))
-  .all("/graphql", ({ request, server }) =>
-    yoga.fetch(request, { ip: clientIp(request, server) }),
-  );
+  .all("/graphql", ({ request, server }) => yoga.fetch(request, { ip: clientIp(request, server) }));
 
 app.listen({ hostname: serverHost(), port: serverPort(), maxRequestBodySize: maxBodyBytes() });
 

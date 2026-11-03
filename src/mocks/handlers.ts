@@ -10,14 +10,14 @@ import { mockLoans } from "./data/loans";
 import { mockServices } from "./data/services";
 import { mockNotices, mockPendingSeen } from "./data/notices";
 import { mockErrorReports } from "./data/errors";
+import { mockIncidentTemplates } from "./data/incident-templates";
+import { mockEquipmentNotes, type MockEquipmentNote } from "./data/equipment-notes";
+import { mockScanEvents } from "./data/scan-events";
+import { mockClientKeys } from "./data/client-keys";
 import { requesterOverview } from "./requester";
 import { mockActivityLogs } from "./generators";
 import { overlapsInstantRange, withinInstantRange } from "@/lib/date-range";
-import {
-  INVALID_CREDENTIALS_MESSAGE,
-  mockLoginGuard,
-  mockRequestOrigin,
-} from "./login-guard";
+import { INVALID_CREDENTIALS_MESSAGE, mockLoginGuard, mockRequestOrigin } from "./login-guard";
 import {
   MAX_FP_MESSAGE,
   MAX_FP_ROUTE,
@@ -35,6 +35,7 @@ import {
 import {
   spanishLabel,
   validateComment,
+  validateIncidentTemplate,
   validateComponent,
   validateImportRow,
   validateIntervention,
@@ -61,6 +62,7 @@ import {
   SERVICE_TRANSITIONS,
   TICKET_STATUS_CONFIG,
   TICKET_TRANSITIONS,
+  TEMPLATE_STATUS_CONFIG,
   type DashboardPeriod,
   UNRESERVABLE_EQUIPMENT_STATUSES,
   EQUIPMENT_STATUS_CONFIG,
@@ -71,6 +73,7 @@ import {
   STAFF_ROLES,
   canEditUser,
   canToggleUserActive,
+  isAdmin,
   isStaff,
 } from "@/lib/roles";
 import type {
@@ -102,6 +105,13 @@ import type {
   ErrorReport,
   ErrorReportStatus,
   StudentShift,
+  ScanContext,
+  ScanEvent,
+  ScanResult,
+  EquipmentNote,
+  IncidentTemplate,
+  TemplateStatus,
+  TicketPriority,
 } from "@/lib/types";
 
 function filterByStatus<T extends { status: string }>(items: T[], status?: string): T[] {
@@ -399,6 +409,73 @@ function invalidTicketTransition(ticket: Ticket, to: TicketStatus): string {
 // Equipo vigente por id: uno dado de baja no se vincula a tickets ni solicitudes nuevas
 function activeProduct(id: string | undefined): Product | undefined {
   return mockProducts.find((p) => p.id === id && p.deletedAt === null);
+}
+
+// Mobile (#98): clave de idempotencia de un reintento: mismo autor + mismo clientId = mismo registro
+function clientKey(collection: string, authorId: string, clientId: string): string {
+  return `${collection}:${authorId}:${clientId}`;
+}
+
+// El QR trae el machineId tal cual se imprimio: se compara sin espacios ni minusculas
+function activeProductByMachineId(machineId: string): Product | undefined {
+  const code = machineId.trim().toUpperCase();
+  return mockProducts.find((p) => p.deletedAt === null && p.machineId === code);
+}
+
+function scanResult(scan: ScanEvent): ScanResult {
+  const product = mockProducts.find((p) => p.id === scan.productId && p.deletedAt === null);
+  return { scan, product: product ?? null };
+}
+
+// La nota sale sin el autor ni la baja logica: el cliente solo ve sus propias notas
+function publicNote(note: MockEquipmentNote): EquipmentNote {
+  const { id, productId, body, createdAt, updatedAt } = note;
+  return { id, productId, body, createdAt, updatedAt };
+}
+
+interface TemplateInput {
+  name: string;
+  category: string;
+  priority: string;
+  title: string;
+  description: string;
+}
+
+function templateFields(input: TemplateInput) {
+  return {
+    name: input.name.trim(),
+    category: input.category as TicketCategory,
+    priority: input.priority as TicketPriority,
+    title: input.title.trim(),
+    description: input.description.trim(),
+  };
+}
+
+function findTemplate(id: string): IncidentTemplate | undefined {
+  return mockIncidentTemplates.find((t) => t.id === id);
+}
+
+// Admin ve todas; el personal, las aprobadas y las propias
+function canSeeTemplate(caller: User, template: IncidentTemplate): boolean {
+  if (isAdmin(caller.role)) return true;
+  return template.status === "approved" || template.author.id === caller.id;
+}
+
+// Para crear un ticket: aprobada, o en prueba si el caller es su autor o admin
+function templateUsableBy(caller: User, template: IncidentTemplate): boolean {
+  if (template.status === "approved") return true;
+  return (
+    template.status === "testing" && (template.author.id === caller.id || isAdmin(caller.role))
+  );
+}
+
+function invalidTemplateTransition(template: IncidentTemplate, to: TemplateStatus): string {
+  return `No se puede pasar una plantilla de "${spanishLabel(TEMPLATE_STATUS_CONFIG[template.status])}" a "${spanishLabel(TEMPLATE_STATUS_CONFIG[to])}"`;
+}
+
+function setTemplateStatus(template: IncidentTemplate, status: TemplateStatus, at?: string): void {
+  template.status = status;
+  template.updatedAt = at ?? new Date().toISOString();
 }
 
 // machineId y n° de serie identifican al equipo: no se repiten entre los vigentes
@@ -744,15 +821,14 @@ export const handlers = [
   graphql.query("GetTickets", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
-    const { status, assignedToId, submittedById, equipmentId, startDate, endDate } =
-      variables as {
-        status?: TicketStatus;
-        assignedToId?: string;
-        submittedById?: string;
-        equipmentId?: string;
-        startDate?: string;
-        endDate?: string;
-      };
+    const { status, assignedToId, submittedById, equipmentId, startDate, endDate } = variables as {
+      status?: TicketStatus;
+      assignedToId?: string;
+      submittedById?: string;
+      equipmentId?: string;
+      startDate?: string;
+      endDate?: string;
+    };
     // El solicitante solo ve sus tickets, mande el filtro que mande
     const scopedSubmittedById = isStaff(caller.role) ? submittedById : caller.id;
     let tickets = [...mockTickets];
@@ -1007,28 +1083,290 @@ export const handlers = [
     return HttpResponse.json({ data: { activityLogs: logs } });
   }),
 
+  // Mobile (#98): plantillas de incidencia
+  graphql.query("IncidentTemplates", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { status } = variables as { status?: TemplateStatus };
+    let templates = mockIncidentTemplates.filter((t) => canSeeTemplate(caller, t));
+    if (status) templates = templates.filter((t) => t.status === status);
+    return HttpResponse.json({ data: { incidentTemplates: templates } });
+  }),
+
+  graphql.query("IncidentTemplate", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { id } = variables as { id: string };
+    const template = findTemplate(id) ?? null;
+    if (template && !canSeeTemplate(caller, template)) return HttpResponse.json(FORBIDDEN);
+    return HttpResponse.json({ data: { incidentTemplate: template } });
+  }),
+
+  graphql.mutation("CreateIncidentTemplate", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { input } = variables as { input: TemplateInput };
+    const error = firstError(validateIncidentTemplate(input));
+    if (error) return HttpResponse.json(errorBody(error));
+    const now = new Date().toISOString();
+    const template: IncidentTemplate = {
+      id: nextId("tpl-", mockIncidentTemplates, 3),
+      ...templateFields(input),
+      status: "draft",
+      author: caller,
+      approvedBy: null,
+      approvedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    mockIncidentTemplates.push(template);
+    return HttpResponse.json({ data: { createIncidentTemplate: template } });
+  }),
+
+  graphql.mutation("UpdateIncidentTemplate", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { id, input } = variables as { id: string; input: TemplateInput };
+    const template = findTemplate(id);
+    if (!template) return HttpResponse.json(errorBody("Plantilla no encontrada"));
+    // El autor edita mientras es borrador o esta en prueba; el admin, cualquiera salvo las retiradas
+    const editable = isAdmin(caller.role)
+      ? template.status !== "retired"
+      : template.author.id === caller.id &&
+        (template.status === "draft" || template.status === "testing");
+    if (!editable) return HttpResponse.json(FORBIDDEN);
+    const error = firstError(validateIncidentTemplate(input));
+    if (error) return HttpResponse.json(errorBody(error));
+    Object.assign(template, templateFields(input), { updatedAt: new Date().toISOString() });
+    return HttpResponse.json({ data: { updateIncidentTemplate: template } });
+  }),
+
+  // draft -> testing (autor o admin)
+  graphql.mutation("SubmitIncidentTemplate", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { id } = variables as { id: string };
+    const template = findTemplate(id);
+    if (!template) return HttpResponse.json(errorBody("Plantilla no encontrada"));
+    if (template.author.id !== caller.id && !isAdmin(caller.role)) {
+      return HttpResponse.json(FORBIDDEN);
+    }
+    if (template.status !== "draft") {
+      return HttpResponse.json(errorBody(invalidTemplateTransition(template, "testing")));
+    }
+    setTemplateStatus(template, "testing");
+    return HttpResponse.json({ data: { submitIncidentTemplate: template } });
+  }),
+
+  // testing -> approved (admin)
+  graphql.mutation("ApproveIncidentTemplate", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { id } = variables as { id: string };
+    const template = findTemplate(id);
+    if (!template) return HttpResponse.json(errorBody("Plantilla no encontrada"));
+    if (template.status !== "testing") {
+      return HttpResponse.json(errorBody(invalidTemplateTransition(template, "approved")));
+    }
+    const now = new Date().toISOString();
+    setTemplateStatus(template, "approved", now);
+    template.approvedBy = caller;
+    template.approvedAt = now;
+    return HttpResponse.json({ data: { approveIncidentTemplate: template } });
+  }),
+
+  // testing -> draft con motivo (admin). El motivo no se guarda: el tipo no lo tiene
+  graphql.mutation("RejectIncidentTemplate", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { id, reason } = variables as { id: string; reason: string };
+    const template = findTemplate(id);
+    if (!template) return HttpResponse.json(errorBody("Plantilla no encontrada"));
+    if (!reason?.trim()) return HttpResponse.json(errorBody("Indicá el motivo del rechazo"));
+    if (template.status !== "testing") {
+      return HttpResponse.json(errorBody(invalidTemplateTransition(template, "draft")));
+    }
+    setTemplateStatus(template, "draft");
+    return HttpResponse.json({ data: { rejectIncidentTemplate: template } });
+  }),
+
+  // cualquier estado -> retired (autor si no esta aprobada; admin siempre)
+  graphql.mutation("RetireIncidentTemplate", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { id } = variables as { id: string };
+    const template = findTemplate(id);
+    if (!template) return HttpResponse.json(errorBody("Plantilla no encontrada"));
+    const allowed =
+      isAdmin(caller.role) || (template.author.id === caller.id && template.status !== "approved");
+    if (!allowed) return HttpResponse.json(FORBIDDEN);
+    if (template.status === "retired") {
+      return HttpResponse.json(errorBody(invalidTemplateTransition(template, "retired")));
+    }
+    setTemplateStatus(template, "retired");
+    return HttpResponse.json({ data: { retireIncidentTemplate: template } });
+  }),
+
+  // Mobile (#98): escaneos QR
+  graphql.mutation("RecordScan", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    const { input } = variables as {
+      input: { machineId: string; context: string; userAgent?: string; clientId?: string };
+    };
+    const contexts: string[] = ["inventory", "incident", "loan"];
+    if (!contexts.includes(input.context))
+      return HttpResponse.json(errorBody("Contexto de escaneo inválido"));
+    // El solicitante solo escanea para pedir un prestamo
+    if (!isStaff(caller.role) && input.context !== "loan") return HttpResponse.json(FORBIDDEN);
+    const machineId = input.machineId.trim().toUpperCase();
+    if (!machineId) return HttpResponse.json(errorBody("Código QR vacío"));
+    const key = input.clientId ? clientKey("scan", caller.id, input.clientId) : null;
+    const replayedId = key ? mockClientKeys[key] : undefined;
+    const replayed = mockScanEvents.find((s) => s.id === replayedId);
+    if (replayed) return HttpResponse.json({ data: { recordScan: scanResult(replayed) } });
+    const product = activeProductByMachineId(machineId);
+    const scan: ScanEvent = {
+      id: nextId("scan-", mockScanEvents, 3),
+      user: caller,
+      machineId,
+      productId: product?.id ?? null,
+      context: input.context as ScanContext,
+      userAgent: input.userAgent?.trim() || null,
+      createdAt: new Date().toISOString(),
+    };
+    mockScanEvents.push(scan);
+    if (key) mockClientKeys[key] = scan.id;
+    return HttpResponse.json({ data: { recordScan: scanResult(scan) } });
+  }),
+
+  // Mobile (#98): notas privadas del tecnico. Nunca se devuelven notas de otro usuario, ni a admin
+  graphql.query("MyEquipmentNotes", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { productId } = variables as { productId: string };
+    const notes = mockEquipmentNotes
+      .filter((n) => n.productId === productId && n.deletedAt === null && n.author.id === caller.id)
+      .toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+      .map(publicNote);
+    return HttpResponse.json({ data: { myEquipmentNotes: notes } });
+  }),
+
+  graphql.mutation("UpsertEquipmentNote", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { input } = variables as {
+      input: { id?: string; productId: string; body: string; clientId?: string };
+    };
+    const body = (input.body ?? "").trim();
+    if (!body) return HttpResponse.json(errorBody("La nota no puede estar vacía"));
+    if (body.length > 2000)
+      return HttpResponse.json(errorBody("La nota supera los 2000 caracteres"));
+    const now = new Date().toISOString();
+    if (input.id) {
+      const note = mockEquipmentNotes.find((n) => n.id === input.id && n.deletedAt === null);
+      if (!note) return HttpResponse.json(errorBody("Nota no encontrada"));
+      if (note.author.id !== caller.id) return HttpResponse.json(FORBIDDEN);
+      note.body = body;
+      note.updatedAt = now;
+      return HttpResponse.json({ data: { upsertEquipmentNote: publicNote(note) } });
+    }
+    const key = input.clientId ? clientKey("note", caller.id, input.clientId) : null;
+    const replayedId = key ? mockClientKeys[key] : undefined;
+    const replayed = mockEquipmentNotes.find((n) => n.id === replayedId);
+    if (replayed) return HttpResponse.json({ data: { upsertEquipmentNote: publicNote(replayed) } });
+    const product = activeProduct(input.productId);
+    if (!product) return HttpResponse.json(errorBody("Equipo no encontrado"));
+    const note: MockEquipmentNote = {
+      id: nextId("note-", mockEquipmentNotes, 3),
+      productId: product.id,
+      body,
+      author: caller,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    };
+    mockEquipmentNotes.push(note);
+    if (key) mockClientKeys[key] = note.id;
+    return HttpResponse.json({ data: { upsertEquipmentNote: publicNote(note) } });
+  }),
+
+  // Baja logica, solo del autor
+  graphql.mutation("DeleteEquipmentNote", ({ request, variables }) => {
+    const caller = getCaller(request);
+    if (!hasRole(caller, STAFF_ROLES)) return HttpResponse.json(FORBIDDEN);
+    const { id } = variables as { id: string };
+    const note = mockEquipmentNotes.find((n) => n.id === id && n.deletedAt === null);
+    if (!note) return HttpResponse.json(errorBody("Nota no encontrada"));
+    if (note.author.id !== caller.id) return HttpResponse.json(FORBIDDEN);
+    note.deletedAt = new Date().toISOString();
+    return HttpResponse.json({ data: { deleteEquipmentNote: true } });
+  }),
+
   graphql.mutation("CreateTicket", ({ request, variables }) => {
     const user = getCaller(request);
     if (!user) return HttpResponse.json(UNAUTHENTICATED);
     const { input } = variables as {
-      input: { title: string; description: string; category: string; equipmentId?: string };
+      input: {
+        title: string;
+        description: string;
+        category: string;
+        priority?: string;
+        equipmentId?: string;
+        locationId?: string;
+        templateId?: string;
+        clientId?: string;
+      };
     };
-    const error = firstError(validateTicket(input));
+    // Reintento del outbox: el mismo cliente ya creo este ticket, se devuelve sin duplicar
+    const key = input.clientId ? clientKey("ticket", user.id, input.clientId) : null;
+    const replayed = mockTickets.find((t) => t.id === (key ? mockClientKeys[key] : undefined));
+    if (replayed) return HttpResponse.json({ data: { createTicket: replayed } });
+    const priority = input.priority ?? "medium";
+    const error = firstError(
+      validateTicket({
+        title: input.title,
+        description: input.description,
+        category: input.category,
+        priority,
+      }),
+    );
     if (error) return HttpResponse.json({ errors: [{ message: error }] });
     const equipment = input.equipmentId ? (activeProduct(input.equipmentId) ?? null) : null;
     if (input.equipmentId && !equipment) {
       return HttpResponse.json({ errors: [{ message: "Equipo no encontrado" }] });
+    }
+    // Por defecto la ubicacion del equipo; solo el personal puede pasar otra
+    const staffLocationId = isStaff(user.role) ? input.locationId : undefined;
+    if (staffLocationId && !activeLocation(staffLocationId)) {
+      return HttpResponse.json(errorBody("Ubicación no encontrada"));
+    }
+    const locationId = staffLocationId || (equipment?.locationId ?? null);
+    const location = mockLocations.find((l) => l.id === locationId) ?? null;
+    // Plantilla: solo el personal, y solo si esta aprobada (o en prueba y es suya o de un admin)
+    const template = input.templateId
+      ? mockIncidentTemplates.find((t) => t.id === input.templateId)
+      : undefined;
+    if (input.templateId) {
+      if (!isStaff(user.role)) return HttpResponse.json(FORBIDDEN);
+      if (!template || !templateUsableBy(user, template)) {
+        return HttpResponse.json(errorBody("Plantilla no disponible"));
+      }
     }
     const newTicket: Ticket = {
       id: nextId("tkt-", mockTickets, 3),
       title: input.title.trim(),
       description: input.description.trim(),
       category: input.category as Ticket["category"],
+      priority: priority as TicketPriority,
       status: "pending",
       submittedBy: user,
       assignedTo: null,
       equipmentId: input.equipmentId ?? null,
       equipment,
+      locationId,
+      location,
+      templateId: template?.id ?? null,
       diagnosis: null,
       corrected: null,
       actionsTaken: null,
@@ -1040,6 +1378,7 @@ export const handlers = [
       ratedAt: null,
     };
     mockTickets.push(newTicket);
+    if (key) mockClientKeys[key] = newTicket.id;
     return HttpResponse.json({ data: { createTicket: newTicket } });
   }),
 
@@ -1071,7 +1410,9 @@ export const handlers = [
     }
     const { id, input } = variables as {
       id: string;
-      input: Partial<Pick<Ticket, "title" | "description" | "category" | "equipmentId">>;
+      input: Partial<
+        Pick<Ticket, "title" | "description" | "category" | "priority" | "equipmentId">
+      > & { locationId?: string };
     };
     const ticket = mockTickets.find((t) => t.id === id);
     if (!ticket) return HttpResponse.json({ errors: [{ message: "Ticket no encontrado" }] });
@@ -1080,6 +1421,7 @@ export const handlers = [
       title: input.title ?? ticket.title,
       description: input.description ?? ticket.description,
       category: input.category ?? ticket.category,
+      priority: input.priority ?? ticket.priority,
     };
     const error = firstError(validateTicket(fields));
     if (error) return HttpResponse.json({ errors: [{ message: error }] });
@@ -1088,9 +1430,18 @@ export const handlers = [
     if (equipmentId && !equipment) {
       return HttpResponse.json({ errors: [{ message: "Equipo no encontrado" }] });
     }
+    // Vacio quita la ubicacion; si el equipo se movio de lugar, el tecnico la corrige aca
+    const { locationId } = input;
+    const location = locationId ? activeLocation(locationId) : undefined;
+    if (locationId && !location) return HttpResponse.json(errorBody("Ubicación no encontrada"));
     ticket.title = fields.title.trim();
     ticket.description = fields.description.trim();
     ticket.category = fields.category;
+    ticket.priority = fields.priority;
+    if (locationId !== undefined) {
+      ticket.locationId = location?.id ?? null;
+      ticket.location = location ?? null;
+    }
     if (equipmentId !== undefined) {
       ticket.equipmentId = equipmentId || null;
       ticket.equipment = equipment ?? null;
@@ -1799,7 +2150,8 @@ export const handlers = [
     if (!hasRole(getCaller(request), STAFF_ROLES)) {
       return HttpResponse.json(FORBIDDEN);
     }
-    const { id } = variables as { id: string };
+    // El motivo (reason) va a la auditoria del backend; el mock no registra auditoria
+    const { id } = variables as { id: string; reason?: string | null };
     const product = mockProducts.find((p) => p.id === id && p.deletedAt === null);
     if (!product) return HttpResponse.json({ errors: [{ message: "Producto no encontrado" }] });
     syncOverdueLoans();
@@ -2502,10 +2854,7 @@ export const handlers = [
     }
     const result = mockReportError(input, getCaller(request));
     if (result.error) {
-      return HttpResponse.json(
-        { status: 422, message: result.error, data: null },
-        { status: 422 },
-      );
+      return HttpResponse.json({ status: 422, message: result.error, data: null }, { status: 422 });
     }
     return HttpResponse.json(
       { status: 201, message: "Error registrado", data: result.report },
@@ -2539,7 +2888,8 @@ export const handlers = [
     if (!hasRole(getCaller(request), ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
     const { id } = variables as { id: string };
     const report = mockErrorReports.find((r) => r.id === id);
-    if (!report) return HttpResponse.json({ errors: [{ message: "Reporte de error no encontrado" }] });
+    if (!report)
+      return HttpResponse.json({ errors: [{ message: "Reporte de error no encontrado" }] });
     return HttpResponse.json({ data: { errorReport: report } });
   }),
 
@@ -2558,7 +2908,8 @@ export const handlers = [
     if (!hasRole(getCaller(request), ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
     const { id } = variables as { id: string };
     const report = mockErrorReports.find((r) => r.id === id);
-    if (!report) return HttpResponse.json({ errors: [{ message: "Reporte de error no encontrado" }] });
+    if (!report)
+      return HttpResponse.json({ errors: [{ message: "Reporte de error no encontrado" }] });
     return HttpResponse.json({ data: { githubIssueDraft: mockIssueDraft(report) } });
   }),
 
@@ -2576,7 +2927,8 @@ export const handlers = [
       return HttpResponse.json({ errors: [{ message: "Estado del reporte inválido" }] });
     }
     const report = mockErrorReports.find((r) => r.id === id);
-    if (!report) return HttpResponse.json({ errors: [{ message: "Reporte de error no encontrado" }] });
+    if (!report)
+      return HttpResponse.json({ errors: [{ message: "Reporte de error no encontrado" }] });
     report.status = status as ErrorReportStatus;
     report.updatedAt = new Date().toISOString();
     return HttpResponse.json({ data: { updateErrorReportStatus: report } });
@@ -2586,7 +2938,8 @@ export const handlers = [
     if (!hasRole(getCaller(request), ADMIN_ROLES)) return HttpResponse.json(FORBIDDEN);
     const { id } = variables as { id: string };
     const report = mockErrorReports.find((r) => r.id === id);
-    if (!report) return HttpResponse.json({ errors: [{ message: "Reporte de error no encontrado" }] });
+    if (!report)
+      return HttpResponse.json({ errors: [{ message: "Reporte de error no encontrado" }] });
     if (report.githubIssueUrl) {
       return HttpResponse.json({
         data: {

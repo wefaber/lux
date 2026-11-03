@@ -8,6 +8,7 @@ import {
   Wrench,
   CalendarClock,
   User,
+  ClipboardList,
 } from "lucide-react";
 import { ROUTES } from "@/lib/constants";
 import { isStaff } from "@/lib/roles";
@@ -57,6 +58,12 @@ const NAV_ITEMS: NavItem[] = [
     to: ROUTES.RESERVATIONS,
     inTabBar: true,
     notices: "reservation",
+  },
+  {
+    icon: ClipboardList,
+    labelKey: "nav.incidentTemplates",
+    to: ROUTES.INCIDENT_TEMPLATES,
+    staffOnly: true,
   },
   { icon: User, labelKey: "nav.profile", to: ROUTES.PROFILE, inTabBar: true },
 ];

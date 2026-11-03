@@ -8,11 +8,14 @@ import {
   Zap,
   BarChart3,
   Bug,
+  ClipboardList,
   HelpCircle,
   LogOut,
 } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import { ROUTES } from "@/lib/constants";
+import { MobileLayout } from "./MobileLayout";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useI18n } from "@/hooks/useI18n";
 import { FontSizeControl } from "@/components/accessibility/FontSizeControl";
 import { LanguageSwitcher } from "@/components/accessibility/LanguageSwitcher";
@@ -30,9 +33,19 @@ const adminNav: Array<{ icon: typeof Users; labelKey: MessageKey; to: string }> 
   { icon: ActivitySquare, labelKey: "admin.nav.logs", to: ROUTES.ADMIN_LOGS },
   { icon: BarChart3, labelKey: "admin.nav.reports", to: ROUTES.ADMIN_REPORTS },
   { icon: Bug, labelKey: "admin.nav.issues", to: ROUTES.ADMIN_ISSUES },
+  {
+    icon: ClipboardList,
+    labelKey: "nav.incidentTemplates",
+    to: ROUTES.ADMIN_INCIDENT_TEMPLATES,
+  },
 ];
 
+// En el telefono no hay panel de administracion: MobileLayout lo manda al inicio movil
 export function AdminLayout() {
+  return useIsMobile() ? <MobileLayout /> : <DesktopAdminLayout />;
+}
+
+function DesktopAdminLayout() {
   const { user, logout } = useAuth();
   const { t } = useI18n();
   const navigate = useNavigate();

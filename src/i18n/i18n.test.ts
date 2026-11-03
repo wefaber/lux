@@ -113,6 +113,11 @@ describe("diccionarios", () => {
     const SAME = new Set([
       "language.name.es",
       "language.name.en",
+      "ui.qr.manualPlaceholder",
+      "mobile.tab.tickets",
+      "mobile.home.tickets",
+      "mobile.tickets.title",
+      "mobile.tickets.back",
       "role.root_admin",
       "equipmentKind.AIO",
       "equipmentKind.Desktop",

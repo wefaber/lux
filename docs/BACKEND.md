@@ -89,7 +89,7 @@ Timestamps: se guardan como texto ISO-8601 UTC (el contrato GraphQL los expone
 como `String`; el frontend los ordena con `localeCompare` y los parsea con
 `new Date()`). El texto ISO es ordenable y evita conversiones de zona horaria.
 
-15 tablas:
+Tablas:
 
 | Tabla | Columnas principales |
 | --- | --- |
@@ -97,7 +97,7 @@ como `String`; el frontend los ordena con `localeCompare` y los parsea con
 | `locations` | id, kind, number, name, code, created_at, updated_at, deleted_at |
 | `products` | id, machine_id, kind, brand, model, serial_number, part_number, status, issues, location_id, location, deleted_at |
 | `components` | id, name, model, manufacturer, serial_number, part_number, is_factory, is_working, product_id, deleted_at |
-| `tickets` | id, title, description, category, status, submitted_by_id, assigned_to_id, equipment_id, diagnosis, corrected, actions_taken, resolved_at, deleted_at |
+| `tickets` | id, title, description, category, priority, status, submitted_by_id, assigned_to_id, equipment_id, location_id, template_id, client_id (unique, reintentos offline), diagnosis, corrected, actions_taken, resolved_at, deleted_at |
 | `loans` | id, equipment_id, user_id, status, approved_by_id, delivered_by_id, delivered_at, issue_date, return_date, actual_return_date, rejection_reason, deleted_at |
 | `loan_components` | loan_id, component_id (PK compuesta): componentes incluidos en un prestamo |
 | `service_requests` | id, type, status, requested_by_id, assigned_to_id, description, lab_number, software_name, equipment_id, resolution_text, deleted_at |
@@ -108,6 +108,9 @@ como `String`; el frontend los ordena con `localeCompare` y los parsea con
 | `pending_seen` | user_id, section, seen_at (PK compuesta) |
 | `activity_logs` | id, user_id, user_name, operation, entity, entity_id, timestamp, details: auditoria, solo se inserta |
 | `revoked_tokens` | jti (PK), user_id, expires_at, revoked_at: sesiones cerradas con `logout` |
+| `scan_events` | id, user_id, product_id (null si el codigo no existe), machine_id, context (`inventory`/`incident`/`loan`), user_agent, client_id (unique), created_at |
+| `equipment_notes` | id, author_id, product_id, body, client_id (unique), deleted_at: notas privadas por tecnico (toda lectura filtra por autor) |
+| `incident_templates` | id, name, category, priority, title, description, status (`draft`/`testing`/`approved`/`retired`), author_id, approved_by_id, approved_at, deleted_at |
 
 ### Migraciones
 
@@ -119,6 +122,7 @@ como `String`; el frontend los ordena con `localeCompare` y los parsea con
 | `0003_integrity_fk_check` | 26 claves foraneas y 16 CHECK |
 | `0004_token_version` | `users.token_version` (default 0), para invalidar sesiones al cambiar la contrasena |
 | `0005_student_info` | `users.student_group`, `student_shift` (CHECK `matutino`/`vespertino`/`nocturno`) y `student_subjects` (jsonb array, default `[]`); solo el rol `solicitante` puede tener datos |
+| `0009_mobile_scan` | `tickets.priority` (default `medium`), `location_id` (backfill desde el equipo), `template_id`, `client_id`; tablas `scan_events`, `equipment_notes`, `incident_templates` (#98) |
 
 Las migraciones se aplican en orden y no se reescriben. Antes de aplicar la 0003 a
 una base con datos viejos (dev, produccion) correr `scripts/preflight-integrity.ts`:
@@ -482,6 +486,8 @@ tiene exito quedan los dos. `operation` es el nombre de la mutation en mayuscula
 de los campos cambiados, nunca los valores ni contraseñas). Ademas:
 
 - `LOGIN`, `LOGIN_FAILED`, `ACCOUNT_LOCKED` (en el login, fuera de transaccion).
+- `SCAN_EQUIPMENT` y `UPSERT_EQUIPMENT_NOTE` (mobile, #98): mutations sin transaccion ni lock
+  global (alta frecuencia), escriben su fila a mano. La de notas nunca lleva el cuerpo.
 - `<OPERACION>_DENIED` cuando un usuario autenticado intenta una mutation sin permiso
   (queda registrada aunque la operacion haga rollback).
 - El mapa `AUDIT` de `api/src/graphql/resolvers.ts` esta tipado por

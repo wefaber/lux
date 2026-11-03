@@ -1,4 +1,10 @@
-import { INTERVENTION_TYPE_LABELS, KIND_MACHINE_CODE, LOCATION_KIND_LETTER } from "./constants";
+import { TICKET_PRIORITIES } from "../db/enums";
+import {
+  INTERVENTION_TYPE_LABELS,
+  KIND_MACHINE_CODE,
+  LOCATION_KIND_LETTER,
+  TICKET_CATEGORY_LABELS,
+} from "./constants";
 import type { LocationKind } from "./types";
 
 // Reglas de nomenclatura de equipos. Las usan el formulario (feedback por
@@ -337,6 +343,71 @@ export function validateComponent(c: ComponentFields): FieldErrors<keyof Compone
     ["serialNumber", validateCode(c.serialNumber, "N° de serie")],
     ["partNumber", validateCode(c.partNumber, "Part number")],
   ]);
+}
+
+// ── Tickets y plantillas de incidencia ───────────────────────────────────────
+
+export interface TicketFields {
+  title: string;
+  description: string;
+  category: string;
+  priority: string;
+}
+
+function textLength(value: string, label: string, min: number, max: number): string | null {
+  const text = value.trim();
+  if (text.length < min) return `${label}: mínimo ${min} caracteres`;
+  if (text.length > max) return `${label}: máximo ${max} caracteres`;
+  return null;
+}
+
+const categoryError = (category: string): string | null =>
+  category in TICKET_CATEGORY_LABELS ? null : "Elegí una categoría válida";
+
+const priorityError = (priority: string): string | null =>
+  TICKET_PRIORITIES.includes(priority as (typeof TICKET_PRIORITIES)[number])
+    ? null
+    : "Elegí una prioridad válida";
+
+export function validateTicket(tk: TicketFields): FieldErrors<keyof TicketFields> {
+  return collect<keyof TicketFields>([
+    ["title", textLength(tk.title, "Título", 3, 120)],
+    ["description", textLength(tk.description, "Descripción", 5, 2000)],
+    ["category", categoryError(tk.category)],
+    ["priority", priorityError(tk.priority)],
+  ]);
+}
+
+export interface IncidentTemplateFields {
+  name: string;
+  category: string;
+  priority: string;
+  title: string;
+  description: string;
+}
+
+export function validateIncidentTemplate(
+  tpl: IncidentTemplateFields,
+): FieldErrors<keyof IncidentTemplateFields> {
+  return collect<keyof IncidentTemplateFields>([
+    ["name", textLength(tpl.name, "Nombre", 3, 80)],
+    ["category", categoryError(tpl.category)],
+    ["priority", priorityError(tpl.priority)],
+    ["title", textLength(tpl.title, "Título", 3, 120)],
+    ["description", textLength(tpl.description, "Descripción", 5, 2000)],
+  ]);
+}
+
+// Nota rapida de un tecnico sobre un equipo
+export const NOTE_MAX_LENGTH = 2000;
+
+export function validateEquipmentNote(body: string): string | null {
+  const text = body.trim();
+  if (!text) return "La nota no puede estar vacía";
+  if (text.length > NOTE_MAX_LENGTH) {
+    return `La nota no puede superar los ${NOTE_MAX_LENGTH} caracteres`;
+  }
+  return null;
 }
 
 // ── Contrasenas ──────────────────────────────────────────────────────────────

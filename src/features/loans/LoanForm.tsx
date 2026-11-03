@@ -34,11 +34,13 @@ const ACTIVE_USERS_QUERY = `
 
 interface LoanFormProps {
   onSuccess: () => void;
+  /** Equipo ya elegido (por ejemplo, el que se escaneo desde el telefono) */
+  initialEquipmentId?: string;
 }
 
-export function LoanForm({ onSuccess }: LoanFormProps) {
+export function LoanForm({ onSuccess, initialEquipmentId }: LoanFormProps) {
   const { t } = useI18n();
-  const [equipmentId, setEquipmentId] = useState("");
+  const [equipmentId, setEquipmentId] = useState(initialEquipmentId ?? "");
   const [userId, setUserId] = useState("");
   // toDateTimeInput usa la fecha local: toISOString() a las 21:00 en Uruguay
   // ya devuelve el día siguiente

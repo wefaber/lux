@@ -6,6 +6,7 @@ import {
   ROLE_CONFIG,
   SERVICE_TYPE_LABELS,
   TICKET_CATEGORY_LABELS,
+  TICKET_PRIORITY_CONFIG,
   equipmentKindLabel,
 } from "./constants";
 import type { Location, LocationKind } from "./types";
@@ -436,6 +437,8 @@ export interface TicketFields {
   title: string;
   description: string;
   category: string;
+  /** Opcional: sin prioridad el ticket se crea como "media" */
+  priority?: string;
 }
 
 function textLength(value: string, label: string, min: number, max: number): string | null {
@@ -450,6 +453,32 @@ export function validateTicket(tk: TicketFields): FieldErrors<keyof TicketFields
     ["title", textLength(tk.title, t("field.title"), 3, 120)],
     ["description", textLength(tk.description, t("field.description"), 5, 2000)],
     ["category", tk.category in TICKET_CATEGORY_LABELS ? null : t("validation.ticket.category")],
+    [
+      "priority",
+      tk.priority === undefined || tk.priority in TICKET_PRIORITY_CONFIG
+        ? null
+        : t("validation.ticket.priority"),
+    ],
+  ]);
+}
+
+export interface IncidentTemplateFields {
+  name: string;
+  category: string;
+  priority: string;
+  title: string;
+  description: string;
+}
+
+export function validateIncidentTemplate(
+  tpl: IncidentTemplateFields,
+): FieldErrors<keyof IncidentTemplateFields> {
+  return collect<keyof IncidentTemplateFields>([
+    ["name", textLength(tpl.name, t("field.name"), 3, 80)],
+    ["category", tpl.category in TICKET_CATEGORY_LABELS ? null : t("validation.ticket.category")],
+    ["priority", tpl.priority in TICKET_PRIORITY_CONFIG ? null : t("validation.ticket.priority")],
+    ["title", textLength(tpl.title, t("field.title"), 3, 120)],
+    ["description", textLength(tpl.description, t("field.description"), 5, 2000)],
   ]);
 }
 

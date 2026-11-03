@@ -5,6 +5,8 @@ import {
   revokedTokens,
   comments,
   components,
+  equipmentNotes,
+  incidentTemplates,
   interventions,
   loanComponents,
   loans,
@@ -13,6 +15,7 @@ import {
   pendingSeen,
   products,
   reservations,
+  scanEvents,
   serviceRequests,
   tickets,
   users,
@@ -25,6 +28,7 @@ import { mockUsers, mockPasswords } from "./fixtures/data/users";
 import { mockProducts, mockComponents } from "./fixtures/data/equipment";
 import { mockLocations } from "./fixtures/data/locations";
 import { mockTickets } from "./fixtures/data/tickets";
+import { mockIncidentTemplates } from "./fixtures/data/incident-templates";
 import { mockLoans } from "./fixtures/data/loans";
 import { mockServices } from "./fixtures/data/services";
 import { mockInterventions } from "./fixtures/data/interventions";
@@ -61,6 +65,8 @@ async function seed(): Promise<void> {
 
   // Idempotente: se vacia todo antes de recargar. loan_components depende de loans
   // y components, por eso va primero en el truncado.
+  await db.delete(scanEvents);
+  await db.delete(equipmentNotes);
   await db.delete(loanComponents);
   await db.delete(notices);
   await db.delete(pendingSeen);
@@ -69,6 +75,7 @@ async function seed(): Promise<void> {
   await db.delete(reservations);
   await db.delete(loans);
   await db.delete(tickets);
+  await db.delete(incidentTemplates);
   await db.delete(serviceRequests);
   await db.delete(components);
   await db.delete(products);
@@ -128,16 +135,36 @@ async function seed(): Promise<void> {
     })),
   );
 
+  await db.insert(incidentTemplates).values(
+    mockIncidentTemplates.map((tpl) => ({
+      id: tpl.id,
+      name: tpl.name,
+      category: tpl.category,
+      priority: tpl.priority,
+      title: tpl.title,
+      description: tpl.description,
+      status: tpl.status,
+      authorId: tpl.author.id,
+      approvedById: tpl.approvedBy?.id ?? null,
+      approvedAt: tpl.approvedAt,
+      createdAt: tpl.createdAt,
+      updatedAt: tpl.updatedAt,
+    })),
+  );
+
   await db.insert(tickets).values(
     mockTickets.map((t) => ({
       id: t.id,
       title: t.title,
       description: t.description,
       category: t.category,
+      priority: t.priority,
       status: t.status,
       submittedById: t.submittedBy.id,
       assignedToId: t.assignedTo?.id ?? null,
       equipmentId: t.equipmentId,
+      locationId: t.locationId,
+      templateId: t.templateId,
       diagnosis: t.diagnosis,
       corrected: t.corrected,
       actionsTaken: t.actionsTaken,

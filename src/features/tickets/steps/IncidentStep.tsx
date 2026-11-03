@@ -1,6 +1,10 @@
 import type { Ticket } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { TICKET_STATUS_CONFIG, TICKET_CATEGORY_LABELS } from "@/lib/constants";
+import {
+  TICKET_STATUS_CONFIG,
+  TICKET_CATEGORY_LABELS,
+  TICKET_PRIORITY_CONFIG,
+} from "@/lib/constants";
 import { formatDateTime } from "@/lib/utils";
 import { DetailRow } from "@/components/ui/detail-row";
 import { useI18n } from "@/hooks/useI18n";
@@ -12,6 +16,7 @@ interface IncidentStepProps {
 export function IncidentStep({ ticket }: IncidentStepProps) {
   const { t } = useI18n();
   const statusConf = TICKET_STATUS_CONFIG[ticket.status];
+  const priorityConf = TICKET_PRIORITY_CONFIG[ticket.priority];
   return (
     <div className="space-y-6">
       <div>
@@ -28,6 +33,10 @@ export function IncidentStep({ ticket }: IncidentStepProps) {
             value={<Badge color={statusConf.color}>{statusConf.label}</Badge>}
           />
           <DetailRow label={t("label.category")} value={TICKET_CATEGORY_LABELS[ticket.category]} />
+          <DetailRow
+            label={t("label.priority")}
+            value={<Badge color={priorityConf.color}>{priorityConf.label}</Badge>}
+          />
           <DetailRow label={t("label.requester")} value={ticket.submittedBy.name} />
           <DetailRow
             label={t("label.assignedTo")}

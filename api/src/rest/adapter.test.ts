@@ -32,7 +32,8 @@ describe("tabla de rutas", () => {
       if (route.method === "POST" && route.operation !== "login" && route.operation !== "logout") {
         expect(route.created).toBe(true);
       }
-      if (route.method === "GET") expect(sdl.getMutationType()!.getFields()[route.operation]).toBeUndefined();
+      if (route.method === "GET")
+        expect(sdl.getMutationType()!.getFields()[route.operation]).toBeUndefined();
     }
   });
 
@@ -49,36 +50,89 @@ describe("tabla de rutas", () => {
 });
 
 describe("buildVariables", () => {
-  const field = (op: string) => sdl.getQueryType()!.getFields()[op] ?? sdl.getMutationType()!.getFields()[op]!;
+  const field = (op: string) =>
+    sdl.getQueryType()!.getFields()[op] ?? sdl.getMutationType()!.getFields()[op]!;
   const none = new URLSearchParams();
 
   test("el path gana sobre el cuerpo y la query string", () => {
-    const vars = buildVariables(field("ticket"), { params: { id: "tkt-1" }, query: new URLSearchParams("id=otro"), body: { id: "otro" } });
+    const vars = buildVariables(field("ticket"), {
+      params: { id: "tkt-1" },
+      query: new URLSearchParams("id=otro"),
+      body: { id: "otro" },
+    });
     expect(vars).toEqual({ id: "tkt-1" });
   });
 
   test("input es el cuerpo entero; los demas argumentos salen de un campo del cuerpo", () => {
-    expect(buildVariables(field("createTicket"), { params: {}, query: none, body: { title: "t" } })).toEqual({ input: { title: "t" } });
-    expect(buildVariables(field("rejectLoan"), { params: { id: "l1" }, query: none, body: { reason: "no hay stock" } })).toEqual({ id: "l1", reason: "no hay stock" });
+    expect(
+      buildVariables(field("createTicket"), { params: {}, query: none, body: { title: "t" } }),
+    ).toEqual({ input: { title: "t" } });
+    expect(
+      buildVariables(field("rejectLoan"), {
+        params: { id: "l1" },
+        query: none,
+        body: { reason: "no hay stock" },
+      }),
+    ).toEqual({ id: "l1", reason: "no hay stock" });
   });
 
   test("los filtros de lectura se toman de la query string y se tipan segun el esquema", () => {
-    const vars = buildVariables(field("users"), { params: {}, query: new URLSearchParams("role=tecnico&isActive=true"), body: undefined });
+    const vars = buildVariables(field("users"), {
+      params: {},
+      query: new URLSearchParams("role=tecnico&isActive=true"),
+      body: undefined,
+    });
     expect(vars).toEqual({ role: "tecnico", isActive: true });
   });
 
   test("un booleano o numero mal escrito es BAD_REQUEST", () => {
-    expect(() => buildVariables(field("users"), { params: {}, query: new URLSearchParams("isActive=quizas"), body: undefined })).toThrow("true o false");
-    expect(() => buildVariables(field("dashboardStats"), { params: {}, query: none, body: undefined })).not.toThrow();
+    expect(() =>
+      buildVariables(field("users"), {
+        params: {},
+        query: new URLSearchParams("isActive=quizas"),
+        body: undefined,
+      }),
+    ).toThrow("true o false");
+    expect(() =>
+      buildVariables(field("dashboardStats"), { params: {}, query: none, body: undefined }),
+    ).not.toThrow();
   });
 });
 
 describe("runRoute: envelope y status HTTP", () => {
-  const user = { id: "u1", name: "Ana", dni: "1", email: "a@x", role: "solicitante", isActive: true, studentGroup: "1°B", studentShift: "matutino", studentSubjects: ["Redes"], createdAt: "t", updatedAt: "t" };
+  const user = {
+    id: "u1",
+    name: "Ana",
+    dni: "1",
+    email: "a@x",
+    role: "solicitante",
+    isActive: true,
+    studentGroup: "1°B",
+    studentShift: "matutino",
+    studentSubjects: ["Redes"],
+    createdAt: "t",
+    updatedAt: "t",
+  };
   const ticket = {
-    id: "tkt-1", title: "t", description: "d", category: "other", status: "pending",
-    submittedBy: user, assignedTo: null, equipmentId: null, equipment: null,
-    diagnosis: null, corrected: null, actionsTaken: null, createdAt: "t", updatedAt: "t", resolvedAt: null,
+    id: "tkt-1",
+    title: "t",
+    description: "d",
+    category: "other",
+    priority: "medium",
+    status: "pending",
+    submittedBy: user,
+    assignedTo: null,
+    equipmentId: null,
+    equipment: null,
+    locationId: null,
+    location: null,
+    templateId: null,
+    diagnosis: null,
+    corrected: null,
+    actionsTaken: null,
+    createdAt: "t",
+    updatedAt: "t",
+    resolvedAt: null,
   };
   const schema = createSchema({
     typeDefs,
@@ -109,13 +163,28 @@ describe("runRoute: envelope y status HTTP", () => {
     },
   });
   const routes = compileRoutes(schema, ROUTES);
-  const run = (method: string, path: string, params: Record<string, string> = {}, body?: unknown, query = "") =>
-    runRoute(schema, routes.find((r) => r.spec.method === method && r.spec.path === path)!, { params, query: new URLSearchParams(query), body }, {});
+  const run = (
+    method: string,
+    path: string,
+    params: Record<string, string> = {},
+    body?: unknown,
+    query = "",
+  ) =>
+    runRoute(
+      schema,
+      routes.find((r) => r.spec.method === method && r.spec.path === path)!,
+      { params, query: new URLSearchParams(query), body },
+      {},
+    );
 
   test("lectura 200 con status, message y data", async () => {
     const r = await run("GET", "/tickets/:id", { id: "tkt-1" });
     expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({ status: 200, message: "OK", data: { id: "tkt-1", submittedBy: { id: "u1" } } });
+    expect(r.body).toMatchObject({
+      status: 200,
+      message: "OK",
+      data: { id: "tkt-1", submittedBy: { id: "u1" } },
+    });
     expect(r.body.code).toBeUndefined();
   });
 
@@ -126,7 +195,12 @@ describe("runRoute: envelope y status HTTP", () => {
   });
 
   test("alta 201", async () => {
-    const r = await run("POST", "/tickets", {}, { title: "t", description: "d", category: "other" });
+    const r = await run(
+      "POST",
+      "/tickets",
+      {},
+      { title: "t", description: "d", category: "other" },
+    );
     expect(r.status).toBe(201);
     expect(r.body.message).toBe("Creado");
   });
@@ -134,13 +208,22 @@ describe("runRoute: envelope y status HTTP", () => {
   test("baja devuelve el id y deleted", async () => {
     const r = await run("DELETE", "/tickets/:id", { id: "tkt-1" });
     expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({ status: 200, message: "Eliminado", data: { id: "tkt-1", deleted: true } });
+    expect(r.body).toMatchObject({
+      status: 200,
+      message: "Eliminado",
+      data: { id: "tkt-1", deleted: true },
+    });
   });
 
   test("null en una lectura por id es 404; me sin sesion es 401", async () => {
     const missing = await run("GET", "/tickets/:id", { id: "nada" });
     expect(missing.status).toBe(404);
-    expect(missing.body).toEqual({ status: 404, message: "No encontrado", data: null, code: "NOT_FOUND" });
+    expect(missing.body).toEqual({
+      status: 404,
+      message: "No encontrado",
+      data: null,
+      code: "NOT_FOUND",
+    });
     const me = await run("GET", "/auth/me");
     expect(me.status).toBe(401);
     expect(me.body.code).toBe("UNAUTHENTICATED");
@@ -150,7 +233,12 @@ describe("runRoute: envelope y status HTTP", () => {
     expect((await run("GET", "/users")).status).toBe(403);
     const conflicted = await run("PUT", "/loans/:id/approve", { id: "l1" });
     expect(conflicted.status).toBe(409);
-    expect(conflicted.body).toMatchObject({ status: 409, message: "ya aprobado", data: null, code: "CONFLICT" });
+    expect(conflicted.body).toMatchObject({
+      status: 409,
+      message: "ya aprobado",
+      data: null,
+      code: "CONFLICT",
+    });
     const locked = await run("POST", "/auth/login", {}, { dni: "1", password: "x" });
     expect(locked.status).toBe(429);
     expect(locked.headers?.["Retry-After"]).toBe("120");
