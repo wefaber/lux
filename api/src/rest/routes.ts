@@ -186,6 +186,19 @@ export const ROUTES: RouteSpec[] = [
     flagData: deleted,
   },
 
+  // Horarios de clase (#100). teacher-in-charge: docente a cargo del lugar en `?at=`
+  // (ISO; por defecto ahora).
+  { method: "GET", path: "/class-schedules", operation: "classSchedules" },
+  { method: "POST", path: "/class-schedules", operation: "createClassSchedule", created: true },
+  { method: "PUT", path: "/class-schedules/:id", operation: "updateClassSchedule" },
+  { method: "DELETE", path: "/class-schedules/:id", operation: "deleteClassSchedule", flagData: deleted },
+  {
+    method: "GET",
+    path: "/locations/:id/teacher-in-charge",
+    operation: "teacherInCharge",
+    paramAliases: { locationId: "id" },
+  },
+
   { method: "GET", path: "/incident-templates", operation: "incidentTemplates" },
   { method: "GET", path: "/incident-templates/:id", operation: "incidentTemplate" },
   {

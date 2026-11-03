@@ -33,7 +33,7 @@ import { ErrorAlert } from "@/components/ui/error-alert";
 const USERS_QUERY = `
   query GetUsers {
     users {
-      id name dni email role isActive
+      id name dni email role isActive isTeacher
       studentGroup studentShift studentSubjects
       createdAt updatedAt
     }
@@ -219,7 +219,10 @@ export function UserManagement() {
                       <StudentCell user={u} />
                     </td>
                     <td className="px-4 py-3">
-                      <Badge color={ROLE_CONFIG[u.role].color}>{ROLE_CONFIG[u.role].label}</Badge>
+                      <div className="flex flex-wrap gap-1.5">
+                        <Badge color={ROLE_CONFIG[u.role].color}>{ROLE_CONFIG[u.role].label}</Badge>
+                        {u.isTeacher && <Badge color="info">{t("admin.users.teacher")}</Badge>}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <Badge color={status.color} withDot={u.isActive}>

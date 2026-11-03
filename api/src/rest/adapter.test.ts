@@ -110,6 +110,7 @@ describe("runRoute: envelope y status HTTP", () => {
     email: "a@x",
     role: "solicitante",
     isActive: true,
+    isTeacher: false,
     studentGroup: "1°B",
     studentShift: "matutino",
     studentSubjects: ["Redes"],

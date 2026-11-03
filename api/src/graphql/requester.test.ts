@@ -12,6 +12,7 @@ const user = (id: string): User => ({
   email: `${id}@iti.edu.uy`,
   role: "solicitante",
   isActive: true,
+  isTeacher: false,
   studentGroup: null,
   studentShift: null,
   studentSubjects: [],

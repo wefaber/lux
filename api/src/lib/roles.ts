@@ -23,6 +23,11 @@ export function isAdmin(role: UserRole | undefined): boolean {
   return !!role && ADMIN_ROLES.includes(role);
 }
 
+/** Reservar salones, laboratorios y equipos: personal del area y docentes (solicitantes con el flag). */
+export function canReserve(user: Pick<User, "role" | "isTeacher"> | null | undefined): boolean {
+  return !!user && (isStaff(user.role) || (user.role === "solicitante" && user.isTeacher));
+}
+
 /** Solo el root_admin edita al root_admin; el resto de los usuarios, cualquier admin. */
 export function canEditUser(actor: Pick<User, "role"> | null, target: Pick<User, "role">): boolean {
   if (!actor || !isAdmin(actor.role)) return false;

@@ -60,6 +60,9 @@ export const users = pgTable(
     email: text("email").notNull(),
     role: text("role").notNull(),
     isActive: boolean("is_active").notNull().default(true),
+    // Docente: solicitante habilitado para reservar salones y laboratorios y para
+    // figurar en los horarios de clase (class_schedules). Solo role = 'solicitante'.
+    isTeacher: boolean("is_teacher").notNull().default(false),
     // Ficha de estudiante: solo para role = 'solicitante'. Grupo y turno null
     // significan "sin dato"; las materias viven en un jsonb (lista corta que se
     // muestra y se filtra, sin catalogo propio ni consultas por materia en SQL).
@@ -87,6 +90,7 @@ export const users = pgTable(
       "users_student_info_check",
       sql`${t.role} = 'solicitante' or (${t.studentGroup} is null and ${t.studentShift} is null and ${t.studentSubjects} = '[]'::jsonb)`,
     ),
+    check("users_teacher_role_check", sql`not ${t.isTeacher} or ${t.role} = 'solicitante'`),
     index("users_student_idx").on(t.studentGroup, t.studentShift),
   ],
 );
@@ -501,6 +505,36 @@ export const incidentTemplates = pgTable(
   ],
 );
 
+export const classSchedules = pgTable(
+  "class_schedules",
+  {
+    id: text("id").primaryKey(),
+    locationId: text("location_id")
+      .notNull()
+      .references(() => locations.id),
+    teacherId: text("teacher_id")
+      .notNull()
+      .references(() => users.id),
+    // Dia ISO (1 = lunes ... 7 = domingo) y franja en hora local de la institucion
+    weekday: integer("weekday").notNull(),
+    startTime: text("start_time").notNull(),
+    endTime: text("end_time").notNull(),
+    subject: text("subject"),
+    studentGroup: text("student_group"),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [
+    index("class_schedules_location_idx").on(t.locationId, t.weekday),
+    index("class_schedules_teacher_idx").on(t.teacherId),
+    check("class_schedules_weekday_check", sql`${t.weekday} between 1 and 7`),
+    check(
+      "class_schedules_time_check",
+      sql`${t.startTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' and ${t.endTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' and ${t.startTime} < ${t.endTime}`,
+    ),
+  ],
+);
+
 export const activityLogs = pgTable("activity_logs", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull(),
@@ -523,6 +557,7 @@ export type InterventionRow = typeof interventions.$inferSelect;
 export type CommentRow = typeof comments.$inferSelect;
 export type ReservationRow = typeof reservations.$inferSelect;
 export type NoticeRow = typeof notices.$inferSelect;
+export type ClassScheduleRow = typeof classSchedules.$inferSelect;
 export type ErrorReportRow = typeof errorReports.$inferSelect;
 export type ScanEventRow = typeof scanEvents.$inferSelect;
 export type EquipmentNoteRow = typeof equipmentNotes.$inferSelect;

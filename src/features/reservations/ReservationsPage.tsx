@@ -17,7 +17,7 @@ import { useI18n } from "@/hooks/useI18n";
 import { gql, formatDate, formatDateTime, cn, errorMessage } from "@/lib/utils";
 import { getLocale } from "@/i18n";
 import { RESERVATION_STATUS_CONFIG, CHANGEABLE_RESERVATION_STATUSES } from "@/lib/constants";
-import { isStaff } from "@/lib/roles";
+import { canReserve, isStaff } from "@/lib/roles";
 import type { Reservation, ReservationStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -177,10 +177,12 @@ export function ReservationsPage() {
             {staff ? t("reservations.subtitle.staff") : t("reservations.subtitle.own")}
           </p>
         </div>
-        <Button size="sm" className="shrink-0 whitespace-nowrap" onClick={() => setEditing("new")}>
-          <Plus className="h-3.5 w-3.5" />
-          {t("reservations.new")}
-        </Button>
+        {canReserve(user) && (
+          <Button size="sm" className="shrink-0 whitespace-nowrap" onClick={() => setEditing("new")}>
+            <Plus className="h-3.5 w-3.5" />
+            {t("reservations.new")}
+          </Button>
+        )}
       </div>
 
       <div className="space-y-2">

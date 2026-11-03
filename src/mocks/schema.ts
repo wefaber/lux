@@ -2,7 +2,7 @@ export const schema = `
   type Query {
     login(dni: String!, password: String!): AuthUser
     me: User
-    users(role: String, isActive: Boolean, studentGroup: String, studentShift: String, subject: String): [User!]!
+    users(role: String, isActive: Boolean, studentGroup: String, studentShift: String, subject: String, isTeacher: Boolean): [User!]!
     user(id: ID!): User
     products(status: String, locationId: ID, deletedAt: String, availableForLoan: Boolean): [Product!]!
     product(id: ID!): Product
@@ -159,6 +159,7 @@ export const schema = `
     email: String!
     role: String!
     isActive: Boolean!
+    isTeacher: Boolean!
     createdAt: String!
     updatedAt: String!
     token: String!
@@ -171,6 +172,8 @@ export const schema = `
     email: String!
     role: String!
     isActive: Boolean!
+    # Docente: solicitante que puede reservar salones y laboratorios
+    isTeacher: Boolean!
     # Solo para solicitantes; null / [] cuando no hay dato
     studentGroup: String
     studentShift: String
@@ -450,6 +453,7 @@ export const schema = `
     password: String
     role: String!
     isActive: Boolean
+    isTeacher: Boolean
     studentGroup: String
     studentShift: String
     studentSubjects: [String!]

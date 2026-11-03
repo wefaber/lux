@@ -45,6 +45,7 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
   const [dni, setDni] = useState(user?.dni ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [role, setRole] = useState<UserRole>(user?.role ?? "solicitante");
+  const [isTeacher, setIsTeacher] = useState(user?.isTeacher ?? false);
   const [password, setPassword] = useState("");
   const [group, setGroup] = useState(user?.studentGroup ?? "");
   const [shift, setShift] = useState<StudentShift | "">(user?.studentShift ?? "");
@@ -78,6 +79,8 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
         dni,
         email,
         role,
+        // Solo los solicitantes pueden ser docentes
+        isTeacher: role === "solicitante" && isTeacher,
         ...student,
         ...(password ? { password } : {}),
       };
@@ -141,6 +144,28 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
         />
         <FieldError message={fieldErrors.email} />
       </div>
+      {role === "solicitante" && (
+        <label
+          htmlFor="uf-teacher"
+          className="flex cursor-pointer items-start gap-3 rounded-xl border border-border/70 bg-muted/20 p-3"
+        >
+          <input
+            id="uf-teacher"
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 accent-primary"
+            checked={isTeacher}
+            onChange={(e) => setIsTeacher(e.target.checked)}
+          />
+          <span>
+            <span className="block text-sm font-medium text-foreground">
+              {t("admin.userForm.teacher")}
+            </span>
+            <span className="block text-xs text-muted-foreground">
+              {t("admin.userForm.teacherHelp")}
+            </span>
+          </span>
+        </label>
+      )}
       {role === "solicitante" && (
         <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-3">
           <div>

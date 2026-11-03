@@ -2,6 +2,7 @@ import { loadEnv } from "../env";
 import { pool, db } from "./client";
 import {
   activityLogs,
+  classSchedules,
   revokedTokens,
   comments,
   components,
@@ -27,6 +28,7 @@ import {
 import { mockUsers, mockPasswords } from "./fixtures/data/users";
 import { mockProducts, mockComponents } from "./fixtures/data/equipment";
 import { mockLocations } from "./fixtures/data/locations";
+import { mockClassSchedules } from "./fixtures/data/class-schedules";
 import { mockTickets } from "./fixtures/data/tickets";
 import { mockIncidentTemplates } from "./fixtures/data/incident-templates";
 import { mockLoans } from "./fixtures/data/loans";
@@ -49,6 +51,7 @@ async function hashUsers() {
       email: user.email,
       role: user.role,
       isActive: user.isActive,
+      isTeacher: user.isTeacher,
       studentGroup: user.studentGroup,
       studentShift: user.studentShift,
       studentSubjects: user.studentSubjects,
@@ -65,6 +68,7 @@ async function seed(): Promise<void> {
 
   // Idempotente: se vacia todo antes de recargar. loan_components depende de loans
   // y components, por eso va primero en el truncado.
+  await db.delete(classSchedules);
   await db.delete(scanEvents);
   await db.delete(equipmentNotes);
   await db.delete(loanComponents);
@@ -135,6 +139,7 @@ async function seed(): Promise<void> {
     })),
   );
 
+  await db.insert(classSchedules).values(mockClassSchedules);
   await db.insert(incidentTemplates).values(
     mockIncidentTemplates.map((tpl) => ({
       id: tpl.id,

@@ -259,4 +259,7 @@ export const admin = {
   "admin.issues.action.triage": "Marcar en triage",
   "admin.issues.action.resolve": "Resolver",
   "admin.issues.action.reopen": "Reabrir",
+  "admin.userForm.teacher": "Docente",
+  "admin.userForm.teacherHelp": "Puede reservar salones y laboratorios y figurar como responsable en los horarios de clase.",
+  "admin.users.teacher": "Docente",
 } as const;

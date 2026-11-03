@@ -19,6 +19,7 @@ const user = (overrides: Partial<User> = {}): User => ({
   dni: "67890123",
   email: "agarcia@iti.edu.uy",
   role: "solicitante",
+  isTeacher: false,
   isActive: true,
   studentGroup: "1°B",
   studentShift: "matutino",
