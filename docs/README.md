@@ -9,6 +9,7 @@
 | [FLUJO-NAVEGACION.md](FLUJO-NAVEGACION.md)               | Flujo de navegación por actor                         |
 | [UML-SECUENCIAS.md](UML-SECUENCIAS.md)                   | Diagramas de secuencia del happy path (CU-01 a CU-27) |
 | [I18N.md](I18N.md)                                       | Internacionalización (es / en)                        |
+| [MOBILE.md](MOBILE.md) | Vista mobile: escaneo QR, notas, incidencias por plantilla, offline |
 | [AYUDA.md](AYUDA.md)                                     | Centro de ayuda configurable                          |
 | [IMPORTACION-USUARIOS.md](IMPORTACION-USUARIOS.md)       | Importación de usuarios y estudiantes (CSV)           |
 | [ISSUE-TRACKER.md](ISSUE-TRACKER.md)                     | Issue tracker de errores de la app                    |

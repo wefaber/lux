@@ -27,6 +27,12 @@ import { RolesConfig } from "@/features/admin/RolesConfig";
 import { ActivityLog } from "@/features/admin/ActivityLog";
 import { ReportsPage } from "@/features/admin/ReportsPage";
 import { IssuesPage } from "@/features/admin/IssuesPage";
+import { IncidentTemplates } from "@/features/admin/IncidentTemplates";
+import { MobileHome } from "@/features/mobile/MobileHome";
+import { ScanPage } from "@/features/mobile/ScanPage";
+import { MobileTickets, MobileTicketDetail } from "@/features/mobile/MobileTickets";
+import { MobileLoan } from "@/features/mobile/MobileLoan";
+import { QuickIncident } from "@/features/mobile/QuickIncident";
 import { NotFoundPage } from "@/features/errors/NotFoundPage";
 import { ForbiddenPage } from "@/features/errors/ForbiddenPage";
 import { ServerErrorPage } from "@/features/errors/ServerErrorPage";
@@ -129,6 +135,39 @@ export const router = createBrowserRouter([
       { path: "service-requests/:id", element: <ServiceDetail /> },
       { path: "profile", element: <ProfilePage /> },
       { path: "help", element: <HelpPage /> },
+      {
+        // Plantillas de incidencia: el tecnico crea y prueba las suyas
+        path: "incident-templates",
+        element: (
+          <ProtectedRoute roles={STAFF_ROLES}>
+            <IncidentTemplates />
+          </ProtectedRoute>
+        ),
+      },
+
+      // Vista telefono (#98): MobileLayout reemplaza al panel en < 768px, y en
+      // esa vista cualquier ruta fuera de /dashboard/m vuelve al inicio movil
+      { path: "m", element: <MobileHome /> },
+      { path: "m/scan", element: <ScanPage /> },
+      { path: "m/tickets", element: <MobileTickets /> },
+      { path: "m/tickets/:id", element: <MobileTicketDetail /> },
+      { path: "m/loan", element: <MobileLoan /> },
+      {
+        path: "m/incident",
+        element: (
+          <ProtectedRoute roles={STAFF_ROLES}>
+            <QuickIncident />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "m/equipment/new",
+        element: (
+          <ProtectedRoute roles={STAFF_ROLES}>
+            <EquipmentForm mode="product" returnTo={`${ROUTES.MOBILE_SCAN}?context=inventory`} />
+          </ProtectedRoute>
+        ),
+      },
     ],
   },
 
@@ -146,6 +185,7 @@ export const router = createBrowserRouter([
       { path: "logs", element: <ActivityLog /> },
       { path: "reports", element: <ReportsPage /> },
       { path: "issues", element: <IssuesPage /> },
+      { path: "incident-templates", element: <IncidentTemplates /> },
     ],
   },
 

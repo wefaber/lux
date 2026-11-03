@@ -5,19 +5,42 @@ export const typeDefs = /* GraphQL */ `
   type Query {
     login(dni: String!, password: String!): AuthUser
     me: User
-    users(role: String, isActive: Boolean, studentGroup: String, studentShift: String, subject: String): [User!]!
+    users(
+      role: String
+      isActive: Boolean
+      studentGroup: String
+      studentShift: String
+      subject: String
+    ): [User!]!
     user(id: ID!): User
-    products(status: String, locationId: ID, deletedAt: String, availableForLoan: Boolean): [Product!]!
+    products(
+      status: String
+      locationId: ID
+      deletedAt: String
+      availableForLoan: Boolean
+    ): [Product!]!
     product(id: ID!): Product
     productByMachineId(machineId: String!): Product
     components(productId: ID, isWorking: Boolean): [Component!]!
     component(id: ID!): Component
-    tickets(status: String, assignedToId: ID, submittedById: ID, equipmentId: ID, startDate: String, endDate: String): [Ticket!]!
+    tickets(
+      status: String
+      assignedToId: ID
+      submittedById: ID
+      equipmentId: ID
+      startDate: String
+      endDate: String
+    ): [Ticket!]!
     ticket(id: ID!): Ticket
     oolTickets: [Ticket!]!
     loans(status: String, userId: ID, equipmentId: ID, startDate: String, endDate: String): [Loan!]!
     loan(id: ID!): Loan
-    serviceRequests(status: String, requestedById: ID, startDate: String, endDate: String): [ServiceRequest!]!
+    serviceRequests(
+      status: String
+      requestedById: ID
+      startDate: String
+      endDate: String
+    ): [ServiceRequest!]!
     serviceRequest(id: ID!): ServiceRequest
     dashboardStats(period: String): DashboardStats!
     reports: Reports!
@@ -38,6 +61,11 @@ export const typeDefs = /* GraphQL */ `
     errorReport(id: ID!): ErrorReport
     errorReportSettings: ErrorReportSettings!
     githubIssueDraft(id: ID!): String!
+    # Mobile (#98). Notas: solo las del tecnico que consulta. Plantillas: el staff
+    # ve las aprobadas y las propias; admin ve todas.
+    myEquipmentNotes(productId: ID!): [EquipmentNote!]!
+    incidentTemplates(status: String): [IncidentTemplate!]!
+    incidentTemplate(id: ID!): IncidentTemplate
   }
 
   type Mutation {
@@ -47,7 +75,8 @@ export const typeDefs = /* GraphQL */ `
     importUsers(rows: [UserImportRow!]!): UserImportResult!
     createProduct(input: ProductInput!): Product!
     updateProduct(id: ID!, input: ProductUpdateInput!): Product!
-    softDeleteProduct(id: ID!): Boolean!
+    # reason: motivo de la baja (queda en la auditoria)
+    softDeleteProduct(id: ID!, reason: String): Boolean!
     createComponent(input: ComponentInput!): Component!
     updateComponent(id: ID!, input: ComponentUpdateInput!): Component!
     softDeleteComponent(id: ID!): Boolean!
@@ -78,6 +107,22 @@ export const typeDefs = /* GraphQL */ `
     createLocation(input: LocationInput!): Location!
     updateLocation(id: ID!, input: LocationUpdateInput!): Location!
     softDeleteLocation(id: ID!): Boolean!
+    # Mobile (#98). recordScan y upsertEquipmentNote van fuera del lock global
+    # (alta frecuencia) y escriben su auditoria a mano. clientId hace idempotentes
+    # los reintentos del outbox offline.
+    recordScan(input: ScanInput!): ScanResult!
+    upsertEquipmentNote(input: EquipmentNoteInput!): EquipmentNote!
+    deleteEquipmentNote(id: ID!): Boolean!
+    createIncidentTemplate(input: IncidentTemplateInput!): IncidentTemplate!
+    updateIncidentTemplate(id: ID!, input: IncidentTemplateInput!): IncidentTemplate!
+    # draft -> testing (autor o admin)
+    submitIncidentTemplate(id: ID!): IncidentTemplate!
+    # testing -> approved (admin)
+    approveIncidentTemplate(id: ID!): IncidentTemplate!
+    # testing -> draft con motivo (admin)
+    rejectIncidentTemplate(id: ID!, reason: String!): IncidentTemplate!
+    # cualquier estado -> retired (autor si no esta aprobada; admin siempre)
+    retireIncidentTemplate(id: ID!): IncidentTemplate!
     createIntervention(input: InterventionInput!): Intervention!
     updateIntervention(id: ID!, input: InterventionUpdateInput!): Intervention!
     createComment(input: CommentInput!): Comment!
@@ -237,11 +282,15 @@ export const typeDefs = /* GraphQL */ `
     title: String!
     description: String!
     category: String!
+    priority: String!
     status: String!
     submittedBy: User!
     assignedTo: User
     equipmentId: ID
     equipment: Product
+    locationId: ID
+    location: Location
+    templateId: ID
     diagnosis: String
     corrected: Boolean
     actionsTaken: String
@@ -253,6 +302,44 @@ export const typeDefs = /* GraphQL */ `
     # Valoracion del solicitante sobre la resolucion (1-5)
     rating: Int
     ratedAt: String
+  }
+
+  type ScanEvent {
+    id: ID!
+    user: User!
+    machineId: String!
+    productId: ID
+    context: String!
+    userAgent: String
+    createdAt: String!
+  }
+
+  type ScanResult {
+    scan: ScanEvent!
+    product: Product
+  }
+
+  type EquipmentNote {
+    id: ID!
+    productId: ID!
+    body: String!
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type IncidentTemplate {
+    id: ID!
+    name: String!
+    category: String!
+    priority: String!
+    title: String!
+    description: String!
+    status: String!
+    author: User!
+    approvedBy: User
+    approvedAt: String
+    createdAt: String!
+    updatedAt: String!
   }
 
   type Loan {
@@ -570,14 +657,45 @@ export const typeDefs = /* GraphQL */ `
     title: String!
     description: String!
     category: String!
+    # default medium
+    priority: String
     equipmentId: ID
+    # default: la ubicacion del equipo. Solo staff puede pasar otra.
+    locationId: ID
+    templateId: ID
+    clientId: String
   }
 
   input TicketUpdateInput {
     title: String
     description: String
     category: String
+    priority: String
     equipmentId: ID
+    locationId: ID
+  }
+
+  input ScanInput {
+    machineId: String!
+    context: String!
+    userAgent: String
+    clientId: String
+  }
+
+  input EquipmentNoteInput {
+    # sin id crea; con id edita (solo el autor)
+    id: ID
+    productId: ID!
+    body: String!
+    clientId: String
+  }
+
+  input IncidentTemplateInput {
+    name: String!
+    category: String!
+    priority: String!
+    title: String!
+    description: String!
   }
 
   input TicketCompleteInput {

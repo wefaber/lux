@@ -1,16 +1,20 @@
 import type { Ticket } from "@/lib/types";
 import { mockUsers } from "./users";
 import { mockProducts } from "./equipment";
+import { mockLocations } from "./locations";
 
 const [, admin1, , tec1, tec2, , sol1, sol2, sol3, sol4] = mockUsers;
 
-export const mockTickets: Ticket[] = [
+type TicketSeed = Omit<Ticket, "locationId" | "location" | "templateId">;
+
+const ticketSeeds: TicketSeed[] = [
   {
     id: "tkt-001",
     title: "Monitor con falla de imagen parcial",
     description:
       "El monitor del equipo HP ProDesk presenta una franja horizontal oscura en la esquina superior derecha que aparece intermitentemente al encender el equipo.",
     category: "hardware",
+    priority: "medium",
     status: "in_progress",
     submittedBy: sol1,
     assignedTo: tec1,
@@ -32,6 +36,7 @@ export const mockTickets: Ticket[] = [
     description:
       "El equipo Lenovo IdeaCentre del laboratorio 3 no enciende. Al presionar el botón de encendido no responde. El LED de la fuente está apagado.",
     category: "hardware",
+    priority: "high",
     status: "pending",
     submittedBy: sol2,
     assignedTo: null,
@@ -53,6 +58,7 @@ export const mockTickets: Ticket[] = [
     description:
       'AutoCAD 2024 presenta error "Application failed to initialize correctly (0xc000007b)" al intentar abrirlo en todas las máquinas del laboratorio de diseño.',
     category: "software",
+    priority: "low",
     status: "in_progress",
     submittedBy: sol3,
     assignedTo: tec2,
@@ -75,6 +81,7 @@ export const mockTickets: Ticket[] = [
     description:
       "Los equipos del laboratorio 2 presentan desconexión de red cada 15-20 minutos aproximadamente. Se pierde acceso a internet y a recursos internos.",
     category: "network",
+    priority: "critical",
     status: "resolved",
     submittedBy: sol4,
     assignedTo: tec1,
@@ -97,6 +104,7 @@ export const mockTickets: Ticket[] = [
     description:
       "El proyector Epson del salón 1 enciende pero no muestra imagen. La pantalla permanece en negro aunque el indicador de fuente de luz está verde.",
     category: "hardware",
+    priority: "medium",
     status: "pending",
     submittedBy: sol1,
     assignedTo: null,
@@ -118,6 +126,7 @@ export const mockTickets: Ticket[] = [
     description:
       "El equipo HP EliteBook recientemente adquirido requiere instalación limpia de Windows 11 Pro y configuración inicial con software institucional.",
     category: "software",
+    priority: "low",
     status: "resolved",
     submittedBy: admin1,
     assignedTo: tec2,
@@ -140,6 +149,7 @@ export const mockTickets: Ticket[] = [
     description:
       "El teclado del equipo Dell AIO del laboratorio tiene varias teclas que se quedan presionadas. Se sospecha de derrame de líquido anterior.",
     category: "hardware",
+    priority: "high",
     status: "in_resolution",
     submittedBy: sol2,
     assignedTo: tec1,
@@ -161,6 +171,7 @@ export const mockTickets: Ticket[] = [
     description:
       "El antivirus institucional en los laboratorios muestra alertas de base de datos desactualizada en 8 equipos. Requiere actualización masiva.",
     category: "software",
+    priority: "medium",
     status: "resolved",
     submittedBy: admin1,
     assignedTo: tec2,
@@ -183,6 +194,7 @@ export const mockTickets: Ticket[] = [
     description:
       "La impresora HP LaserJet de administración no acepta trabajos de impresión desde la red. Solo funciona con conexión directa USB.",
     category: "network",
+    priority: "low",
     status: "in_progress",
     submittedBy: sol3,
     assignedTo: tec1,
@@ -205,6 +217,7 @@ export const mockTickets: Ticket[] = [
     description:
       "El equipo Lenovo ThinkCentre de administración tarda más de 5 minutos en cargar el escritorio desde que se actualiza Windows.",
     category: "software",
+    priority: "high",
     status: "resolved",
     submittedBy: sol4,
     assignedTo: tec2,
@@ -227,6 +240,7 @@ export const mockTickets: Ticket[] = [
     description:
       "El UPS APC del laboratorio emite beeps continuos y el indicador de batería parpadea en rojo. Los equipos conectados muestran interrupciones de energía.",
     category: "hardware",
+    priority: "medium",
     status: "pending",
     submittedBy: sol2,
     assignedTo: null,
@@ -248,6 +262,7 @@ export const mockTickets: Ticket[] = [
     description:
       'Desde los equipos del laboratorio de informática no es posible acceder al servidor de archivos compartidos. Error: "No se puede acceder a la ruta de red".',
     category: "network",
+    priority: "critical",
     status: "in_resolution",
     submittedBy: sol1,
     assignedTo: tec2,
@@ -269,6 +284,7 @@ export const mockTickets: Ticket[] = [
     description:
       "Se requiere instalar Cisco Packet Tracer 8.2 en los 12 equipos del laboratorio de redes para el inicio del nuevo módulo.",
     category: "software",
+    priority: "low",
     status: "resolved",
     submittedBy: sol3,
     assignedTo: tec1,
@@ -291,6 +307,7 @@ export const mockTickets: Ticket[] = [
     description:
       "La laptop HP EliteBook de administración presenta BSOD con error MEMORY_MANAGEMENT aproximadamente 2 veces por día desde hace una semana.",
     category: "hardware",
+    priority: "medium",
     status: "in_progress",
     submittedBy: sol4,
     assignedTo: tec2,
@@ -312,6 +329,7 @@ export const mockTickets: Ticket[] = [
     description:
       "Los dispositivos del salón B presenta total falta de conectividad a internet. La red local funciona correctamente pero no hay salida a internet.",
     category: "network",
+    priority: "high",
     status: "resolved",
     submittedBy: sol1,
     assignedTo: tec1,
@@ -328,3 +346,15 @@ export const mockTickets: Ticket[] = [
     ratedAt: "2026-05-01T12:00:00Z",
   },
 ];
+
+// La ubicacion de cada ticket es la de su equipo (como al crearlo); sin equipo
+// queda sin ubicacion. Ninguno nace de una plantilla.
+export const mockTickets: Ticket[] = ticketSeeds.map((ticket) => {
+  const locationId = ticket.equipment?.locationId ?? null;
+  return {
+    ...ticket,
+    locationId,
+    location: mockLocations.find((l) => l.id === locationId) ?? null,
+    templateId: null,
+  };
+});

@@ -16,6 +16,7 @@ import { profile } from "./profile";
 import { onboarding } from "./onboarding";
 import { help } from "./help";
 import { validation } from "./validation";
+import { mobile } from "./mobile";
 
 // Espanol: la fuente de las claves (ver ../index.ts). Un diccionario por
 // dominio, todos aplanados en un solo objeto con claves "dominio.seccion.texto"
@@ -38,6 +39,7 @@ export const es = {
   ...onboarding,
   ...help,
   ...validation,
+  ...mobile,
 } as const;
 
 // Los mismos diccionarios sin mezclar: el test de completitud detecta con esto
@@ -60,4 +62,5 @@ export const esParts = [
   reservations,
   locations,
   admin,
+  mobile,
 ] as const;

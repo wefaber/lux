@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { PASSWORD_MIN_LENGTH, SAME_PASSWORD_MESSAGE, validateNewPassword } from "./validation";
-import { localDateOnly, todayLocalDate, validateLoan } from "./validation";
+import {
+  localDateOnly,
+  todayLocalDate,
+  validateEquipmentNote,
+  validateIncidentTemplate,
+  validateLoan,
+  validateTicket,
+} from "./validation";
 
 // Cambiar la contrasena desde el perfil no necesita Postgres para probarse:
 // la regla (politica de largo + no repetir la actual) es pura. El resolver la
@@ -77,5 +84,91 @@ describe("validateLoan", () => {
     expect(localDateOnly("2026-10-21T23:30:00.000Z")).toBe("2026-10-21");
     expect(localDateOnly("sin fecha")).toBeNull();
     expect(todayLocalDate(new Date(2026, 9, 21, 23, 59))).toBe("2026-10-21");
+  });
+});
+
+describe("validateTicket", () => {
+  const ok = {
+    title: "Proyector sin imagen",
+    description: "No enciende desde ayer",
+    category: "hardware",
+    priority: "medium",
+  };
+
+  test("acepta un ticket completo", () => {
+    expect(validateTicket(ok)).toEqual({});
+  });
+
+  test("título de 3 a 120 y descripción de 5 a 2000 caracteres, sin contar espacios de los bordes", () => {
+    expect(validateTicket({ ...ok, title: "  ab  " }).title).toBe("Título: mínimo 3 caracteres");
+    expect(validateTicket({ ...ok, title: "a".repeat(121) }).title).toBe(
+      "Título: máximo 120 caracteres",
+    );
+    expect(validateTicket({ ...ok, description: "1234" }).description).toBe(
+      "Descripción: mínimo 5 caracteres",
+    );
+    expect(validateTicket({ ...ok, description: "a".repeat(2001) }).description).toBe(
+      "Descripción: máximo 2000 caracteres",
+    );
+    expect(
+      validateTicket({ ...ok, title: "a".repeat(120), description: "a".repeat(2000) }),
+    ).toEqual({});
+  });
+
+  test("categoría y prioridad tienen que ser de la lista", () => {
+    expect(validateTicket({ ...ok, category: "magia" }).category).toBe(
+      "Elegí una categoría válida",
+    );
+    expect(validateTicket({ ...ok, priority: "urgente" }).priority).toBe(
+      "Elegí una prioridad válida",
+    );
+    for (const priority of ["low", "medium", "high", "critical"]) {
+      expect(validateTicket({ ...ok, priority })).toEqual({});
+    }
+  });
+});
+
+describe("validateIncidentTemplate", () => {
+  const ok = {
+    name: "Sin red",
+    category: "network",
+    priority: "high",
+    title: "Equipo sin conexión",
+    description: "No obtiene IP por DHCP",
+  };
+
+  test("acepta una plantilla completa", () => {
+    expect(validateIncidentTemplate(ok)).toEqual({});
+  });
+
+  test("nombre de 3 a 80 caracteres", () => {
+    expect(validateIncidentTemplate({ ...ok, name: "ab" }).name).toBe(
+      "Nombre: mínimo 3 caracteres",
+    );
+    expect(validateIncidentTemplate({ ...ok, name: "a".repeat(81) }).name).toBe(
+      "Nombre: máximo 80 caracteres",
+    );
+  });
+
+  test("hereda las reglas de título, descripción, categoría y prioridad", () => {
+    const errors = validateIncidentTemplate({
+      name: "Sin red",
+      category: "x",
+      priority: "y",
+      title: "a",
+      description: "b",
+    });
+    expect(Object.keys(errors).sort()).toEqual(["category", "description", "priority", "title"]);
+  });
+});
+
+describe("validateEquipmentNote", () => {
+  test("ni vacía ni de más de 2000 caracteres", () => {
+    expect(validateEquipmentNote("   ")).toBe("La nota no puede estar vacía");
+    expect(validateEquipmentNote("a".repeat(2001))).toBe(
+      "La nota no puede superar los 2000 caracteres",
+    );
+    expect(validateEquipmentNote("a")).toBeNull();
+    expect(validateEquipmentNote("a".repeat(2000))).toBeNull();
   });
 });

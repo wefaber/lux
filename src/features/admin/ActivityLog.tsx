@@ -36,6 +36,15 @@ const OP_COLORS: Record<string, StatusColor> = {
   RETURN_LOAN: "success",
   CREATE_SERVICE: "info",
   UPDATE_SERVICE: "warning",
+  SCAN_EQUIPMENT: "muted",
+  UPSERT_EQUIPMENT_NOTE: "info",
+  DELETE_EQUIPMENT_NOTE: "warning",
+  CREATE_INCIDENT_TEMPLATE: "success",
+  UPDATE_INCIDENT_TEMPLATE: "info",
+  SUBMIT_INCIDENT_TEMPLATE: "info",
+  APPROVE_INCIDENT_TEMPLATE: "success",
+  REJECT_INCIDENT_TEMPLATE: "destructive",
+  RETIRE_INCIDENT_TEMPLATE: "warning",
   LOGIN: "muted",
 }; // Colores de logs
 
@@ -72,8 +81,12 @@ export function ActivityLog() {
   const [search, setSearch] = useState("");
   // La API ya acepta startDate/endDate: el rango se manda al servidor y queda
   // en la URL para poder recargar o compartir la consulta
-  const { range: dateRange, setRange: setDateRange, active: dateActive, bounds } =
-    useDateRangeParams();
+  const {
+    range: dateRange,
+    setRange: setDateRange,
+    active: dateActive,
+    bounds,
+  } = useDateRangeParams();
 
   const details = (text: string | null): string => {
     if (!text) return "—";

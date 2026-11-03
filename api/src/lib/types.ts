@@ -89,11 +89,17 @@ export interface Ticket {
   title: string;
   description: string;
   category: TicketCategory;
+  priority: TicketPriority;
   status: TicketStatus;
   submittedBy: User;
   assignedTo: User | null;
   equipmentId: string | null;
   equipment: Product | null;
+  /** Ubicacion del incidente: se copia del equipo al crear; el tecnico la cambia si el equipo se movio */
+  locationId: string | null;
+  location: Location | null;
+  /** Plantilla de incidencia usada al crearlo, si hubo */
+  templateId: string | null;
   diagnosis: string | null;
   corrected: boolean | null;
   actionsTaken: string | null;
@@ -106,6 +112,51 @@ export interface Ticket {
   rating: number | null;
   ratedAt: string | null;
 } // Interfaz de ticket
+
+export type TicketPriority = "low" | "medium" | "high" | "critical"; // Prioridad del ticket
+
+export type ScanContext = "inventory" | "incident" | "loan"; // Desde donde se abrio el escaneo
+
+export interface ScanEvent {
+  id: string;
+  user: User;
+  machineId: string;
+  /** null si el machineId no corresponde a ningun equipo vivo */
+  productId: string | null;
+  context: ScanContext;
+  userAgent: string | null;
+  createdAt: string;
+} // Registro de un escaneo QR
+
+export interface ScanResult {
+  scan: ScanEvent;
+  product: Product | null;
+} // Resultado de escanear: el registro y el equipo encontrado
+
+export interface EquipmentNote {
+  id: string;
+  productId: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+} // Nota privada de un tecnico sobre un equipo (solo la ve su autor)
+
+export type TemplateStatus = "draft" | "testing" | "approved" | "retired"; // Ciclo de vida de una plantilla
+
+export interface IncidentTemplate {
+  id: string;
+  name: string;
+  category: TicketCategory;
+  priority: TicketPriority;
+  title: string;
+  description: string;
+  status: TemplateStatus;
+  author: User;
+  approvedBy: User | null;
+  approvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+} // Plantilla de incidencia rapida
 
 export type LoanStatus = "pending" | "approved" | "rejected" | "active" | "overdue" | "returned"; // Estado del prestamo
 

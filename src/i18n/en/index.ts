@@ -17,6 +17,7 @@ import { profile } from "./profile";
 import { onboarding } from "./onboarding";
 import { help } from "./help";
 import { validation } from "./validation";
+import { mobile } from "./mobile";
 
 // Ingles: tiene que tener exactamente las claves del espanol
 export const en: Record<MessageKey, string> = {
@@ -38,4 +39,5 @@ export const en: Record<MessageKey, string> = {
   ...onboarding,
   ...help,
   ...validation,
+  ...mobile,
 };

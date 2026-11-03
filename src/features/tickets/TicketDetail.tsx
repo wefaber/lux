@@ -8,6 +8,7 @@ import { gql, formatDateTime, errorMessage, cn } from "@/lib/utils";
 import {
   ROUTES,
   TICKET_CATEGORY_LABELS,
+  TICKET_PRIORITY_CONFIG,
   TICKET_STATUS_CONFIG,
   TICKET_TRANSITIONS,
 } from "@/lib/constants";
@@ -25,7 +26,7 @@ import { ErrorAlert } from "@/components/ui/error-alert";
 const TICKET_QUERY = `
  query GetTicket($id: ID!) {
  ticket(id: $id) {
- id title description category status
+ id title description category priority status
  submittedBy { id name email role }
  assignedTo { id name }
  equipmentId
@@ -160,6 +161,11 @@ function TicketReadOnly({ ticket, onRated }: { ticket: Ticket; onRated: () => vo
       <CardContent className="space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label={t("label.category")}>{TICKET_CATEGORY_LABELS[ticket.category]}</Field>
+          <Field label={t("label.priority")}>
+            <Badge color={TICKET_PRIORITY_CONFIG[ticket.priority].color}>
+              {TICKET_PRIORITY_CONFIG[ticket.priority].label}
+            </Badge>
+          </Field>
           <Field label={t("label.created")}>{formatDateTime(ticket.createdAt)}</Field>
           <Field label={t("tickets.detail.assignedTech")}>
             {ticket.assignedTo?.name ?? t("tickets.detail.notAssignedYet")}

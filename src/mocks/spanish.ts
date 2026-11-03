@@ -32,6 +32,7 @@ export const validateProduct = inSpanish(validation.validateProduct);
 export const validateReservation = inSpanish(validation.validateReservation);
 export const validateServiceRequest = inSpanish(validation.validateServiceRequest);
 export const validateTicket = inSpanish(validation.validateTicket);
+export const validateIncidentTemplate = inSpanish(validation.validateIncidentTemplate);
 export const validateUser = inSpanish(validation.validateUser);
 export const validateStudent = inSpanish(validateStudentBase);
 export const validateImportRow = inSpanish(validateImportRowBase);

@@ -39,7 +39,7 @@ Leyenda: `[ ]` pendiente · `[~]` parcial · `[x]` hecho y verificado.
 
 ## UX
 
-- [ ] **Mobile, uso 1.** Escaneo QR con sesión, notas rápidas sobre el equipo, incidencia rápida por template (técnicos). #98
+- [x] **Mobile, uso 1.** Escaneo QR con sesión, notas rápidas sobre el equipo, incidencia rápida por template (técnicos). #98
 - [ ] **Mobile, uso 2.** Incidencias y preparación de salones con checklist por sala; verificar estado de laboratorios y salones. #99
 
 ## Usuarios

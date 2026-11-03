@@ -58,5 +58,6 @@ export const validation: Translation<typeof es> = {
   "validation.student.existsOtherRole": "The person already exists with the role {role}",
   "validation.student.splitIdentity": "The ID number and email belong to different users",
   "validation.ticket.category": "Choose a category",
+  "validation.ticket.priority": "Choose a priority",
   "validation.service.type": "Choose the request type",
 };

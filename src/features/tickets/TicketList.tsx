@@ -9,10 +9,12 @@ import { gql, formatDate, truncate, cn, errorMessage } from "@/lib/utils";
 import {
   TICKET_STATUS_CONFIG,
   TICKET_CATEGORY_LABELS,
+  TICKET_PRIORITIES,
+  TICKET_PRIORITY_CONFIG,
   ROUTES,
   equipmentKindLabel,
 } from "@/lib/constants";
-import type { Ticket, TicketStatus, Product } from "@/lib/types";
+import type { Ticket, TicketStatus, TicketPriority, Product } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,7 +53,7 @@ import { firstError, validateTicket } from "@/lib/validation";
 const TICKETS_QUERY = `
   query GetTickets($submittedById: ID, $startDate: String, $endDate: String) {
     tickets(submittedById: $submittedById, startDate: $startDate, endDate: $endDate) {
-      id title description category status
+      id title description category priority status
       submittedBy { id name }
       assignedTo { id name }
       equipmentId createdAt updatedAt
@@ -84,8 +86,12 @@ export function TicketList() {
   const [statusFilter, setStatusFilter] = useState<TicketStatus | "">("");
   const [page, setPage] = useState(0);
   // Rango por fecha de creacion, en la URL (?desde=&hasta=) para poder compartirlo
-  const { range: dateRange, setRange: setDateRange, active: dateActive, bounds } =
-    useDateRangeParams();
+  const {
+    range: dateRange,
+    setRange: setDateRange,
+    active: dateActive,
+    bounds,
+  } = useDateRangeParams();
   // ?nuevo=1 abre el formulario y ?equipo=<id> lo trae elegido (accesos del inicio)
   const [searchParams] = useSearchParams();
   const [createOpen, setCreateOpen] = useState(() => searchParams.get("nuevo") === "1");
@@ -94,8 +100,9 @@ export function TicketList() {
     title: "",
     description: "",
     category: "hardware",
+    priority: "medium" as TicketPriority,
     equipmentId: searchParams.get("equipo") ?? "",
-  })); // Settear formulario con variables: title, desc, category, equipmentId
+  })); // Settear formulario con variables: title, desc, category, priority, equipmentId
   const [saving, setSaving] = useState(false);
   const [createError, setCreateError] = useState("");
 
@@ -155,11 +162,18 @@ export function TicketList() {
           title: form.title,
           description: form.description,
           category: form.category,
+          priority: form.priority,
           equipmentId: form.equipmentId || undefined,
         },
       });
       setCreateOpen(false);
-      setForm({ title: "", description: "", category: "hardware", equipmentId: "" });
+      setForm({
+        title: "",
+        description: "",
+        category: "hardware",
+        priority: "medium",
+        equipmentId: "",
+      });
       refetch();
     } catch (err) {
       setCreateError(errorMessage(err, t("tickets.create.failed")));
@@ -188,12 +202,21 @@ export function TicketList() {
         </div>
         <div className="flex flex-wrap gap-2">
           {/* Cualquier rol puede reportar un incidente; OOL es una accion extra del staff */}
-          <Button size="sm" className="shrink-0 whitespace-nowrap" onClick={() => setCreateOpen(true)}>
+          <Button
+            size="sm"
+            className="shrink-0 whitespace-nowrap"
+            onClick={() => setCreateOpen(true)}
+          >
             <Plus className="h-3.5 w-3.5" />
             {t("tickets.new")}
           </Button>
           {hasRole(...STAFF_ROLES) && (
-            <Button variant="secondary" size="sm" asChild className="relative shrink-0 whitespace-nowrap">
+            <Button
+              variant="secondary"
+              size="sm"
+              asChild
+              className="relative shrink-0 whitespace-nowrap"
+            >
               <Link to={`${ROUTES.TICKETS}/ool`}>
                 <AlertCircle className="h-3.5 w-3.5" />
                 {t("tickets.ool")}
@@ -276,6 +299,7 @@ export function TicketList() {
                     "label.id",
                     "label.title",
                     "label.status",
+                    "label.priority",
                     "label.category",
                     "label.assignedTo",
                     "label.requester",
@@ -320,6 +344,11 @@ export function TicketList() {
                     <td className="px-4 py-2">
                       <Badge color={statusConf.color} withDot>
                         {statusConf.label}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-2">
+                      <Badge color={TICKET_PRIORITY_CONFIG[tk.priority].color}>
+                        {TICKET_PRIORITY_CONFIG[tk.priority].label}
                       </Badge>
                     </td>
                     <td className="px-4 py-2 text-sm text-muted-foreground font-medium">
@@ -388,6 +417,24 @@ export function TicketList() {
                       {Object.entries(TICKET_CATEGORY_LABELS).map(([value, label]) => (
                         <SelectItem key={value} value={value}>
                           {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>{t("label.priority")}</Label>
+                  <Select
+                    value={form.priority}
+                    onValueChange={(v) => setForm((f) => ({ ...f, priority: v as TicketPriority }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TICKET_PRIORITIES.map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {TICKET_PRIORITY_CONFIG[value].label}
                         </SelectItem>
                       ))}
                     </SelectContent>

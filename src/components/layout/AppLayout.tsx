@@ -1,15 +1,27 @@
 import { useRef } from "react";
-import { useLocation, useOutlet } from "react-router-dom";
+import { Navigate, useLocation, useOutlet } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { TabBar } from "./TabBar";
-import { PAGE_TRANSITION } from "@/lib/constants";
+import { MobileLayout } from "./MobileLayout";
+import { PAGE_TRANSITION, ROUTES, isMobilePath } from "@/lib/constants";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { useResponsiveTables } from "@/hooks/useResponsiveTables";
 import { NoticesProvider } from "@/hooks/useNotices";
 import { OnboardingRoot } from "@/components/onboarding/OnboardingRoot";
 
+// En el telefono (< 768px) el panel es otro: MobileLayout. Las rutas de la vista
+// movil no existen en escritorio y vuelven al inicio.
 export function AppLayout() {
+  const isMobile = useIsMobile();
+  const { pathname } = useLocation();
+  if (isMobile) return <MobileLayout />;
+  if (isMobilePath(pathname)) return <Navigate to={ROUTES.DASHBOARD} replace />;
+  return <DesktopLayout />;
+}
+
+function DesktopLayout() {
   const location = useLocation();
   // El elemento se captura por ruta: <Outlet /> lee la ruta vigente al
   // renderizar, asi que la pagina que sale (AnimatePresence) pasaba a mostrar la

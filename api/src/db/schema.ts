@@ -1,5 +1,15 @@
 import { sql, type SQL } from "drizzle-orm";
-import { boolean, check, index, integer, jsonb, pgTable, primaryKey, text, type AnyPgColumn } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  check,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  type AnyPgColumn,
+} from "drizzle-orm/pg-core";
 import {
   COMMENT_ENTITIES,
   EQUIPMENT_STATUSES,
@@ -11,10 +21,13 @@ import {
   NOTICE_KINDS,
   RESERVATION_RESOURCES,
   RESERVATION_STATUSES,
+  SCAN_CONTEXTS,
   SERVICE_STATUSES,
   SERVICE_TYPES,
   STUDENT_SHIFTS,
+  TEMPLATE_STATUSES,
   TICKET_CATEGORIES,
+  TICKET_PRIORITIES,
   TICKET_STATUSES,
   USER_ROLES,
 } from "./enums";
@@ -30,42 +43,53 @@ import {
 // valores se escriben literales; salen solo de las listas constantes de enums.ts
 // (nunca de entrada del usuario) y se rechaza cualquier comilla por las dudas.
 function oneOf(column: AnyPgColumn, values: readonly string[]): SQL {
-  if (values.some((v) => !/^[a-z_]+$/.test(v))) throw new Error("valor de enum invalido para un CHECK");
+  if (values.some((v) => !/^[a-z_]+$/.test(v)))
+    throw new Error("valor de enum invalido para un CHECK");
   return sql`${column} in (${sql.raw(values.map((v) => `'${v}'`).join(", "))})`;
 }
 
 const createdAt = text("created_at").notNull();
 const updatedAt = text("updated_at").notNull();
 
-export const users = pgTable("users", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  dni: text("dni").notNull().unique(),
-  email: text("email").notNull(),
-  role: text("role").notNull(),
-  isActive: boolean("is_active").notNull().default(true),
-  // Ficha de estudiante: solo para role = 'solicitante'. Grupo y turno null
-  // significan "sin dato"; las materias viven en un jsonb (lista corta que se
-  // muestra y se filtra, sin catalogo propio ni consultas por materia en SQL).
-  studentGroup: text("student_group"),
-  studentShift: text("student_shift"),
-  studentSubjects: jsonb("student_subjects").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
-  passwordHash: text("password_hash").notNull(),
-  // Sube cuando cambia la contrasena: los tokens firmados con otra version dejan de valer
-  tokenVersion: integer("token_version").notNull().default(0),
-  createdAt,
-  updatedAt,
-}, (t) => [
-  check("users_role_check", oneOf(t.role, USER_ROLES)),
-  check("users_student_shift_check", sql`${t.studentShift} is null or ${oneOf(t.studentShift, STUDENT_SHIFTS)}`),
-  check("users_student_subjects_check", sql`jsonb_typeof(${t.studentSubjects}) = 'array'`),
-  // La ficha existe solo para estudiantes: cambiar el rol obliga a vaciarla
-  check(
-    "users_student_info_check",
-    sql`${t.role} = 'solicitante' or (${t.studentGroup} is null and ${t.studentShift} is null and ${t.studentSubjects} = '[]'::jsonb)`,
-  ),
-  index("users_student_idx").on(t.studentGroup, t.studentShift),
-]);
+export const users = pgTable(
+  "users",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    dni: text("dni").notNull().unique(),
+    email: text("email").notNull(),
+    role: text("role").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    // Ficha de estudiante: solo para role = 'solicitante'. Grupo y turno null
+    // significan "sin dato"; las materias viven en un jsonb (lista corta que se
+    // muestra y se filtra, sin catalogo propio ni consultas por materia en SQL).
+    studentGroup: text("student_group"),
+    studentShift: text("student_shift"),
+    studentSubjects: jsonb("student_subjects")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    passwordHash: text("password_hash").notNull(),
+    // Sube cuando cambia la contrasena: los tokens firmados con otra version dejan de valer
+    tokenVersion: integer("token_version").notNull().default(0),
+    createdAt,
+    updatedAt,
+  },
+  (t) => [
+    check("users_role_check", oneOf(t.role, USER_ROLES)),
+    check(
+      "users_student_shift_check",
+      sql`${t.studentShift} is null or ${oneOf(t.studentShift, STUDENT_SHIFTS)}`,
+    ),
+    check("users_student_subjects_check", sql`jsonb_typeof(${t.studentSubjects}) = 'array'`),
+    // La ficha existe solo para estudiantes: cambiar el rol obliga a vaciarla
+    check(
+      "users_student_info_check",
+      sql`${t.role} = 'solicitante' or (${t.studentGroup} is null and ${t.studentShift} is null and ${t.studentSubjects} = '[]'::jsonb)`,
+    ),
+    index("users_student_idx").on(t.studentGroup, t.studentShift),
+  ],
+);
 
 export const locations = pgTable(
   "locations",
@@ -138,12 +162,21 @@ export const tickets = pgTable(
     title: text("title").notNull(),
     description: text("description").notNull(),
     category: text("category").notNull(),
+    priority: text("priority").notNull().default("medium"),
     status: text("status").notNull(),
     submittedById: text("submitted_by_id")
       .notNull()
       .references(() => users.id),
     assignedToId: text("assigned_to_id").references(() => users.id),
     equipmentId: text("equipment_id").references(() => products.id),
+    // Ubicacion del incidente: se copia del equipo al crear y el tecnico la
+    // corrige si el equipo se movio. Las incidencias por sala salen de aca.
+    locationId: text("location_id").references(() => locations.id),
+    // Plantilla usada al crear (incidencia rapida desde mobile)
+    templateId: text("template_id").references((): AnyPgColumn => incidentTemplates.id),
+    // Id generado por el cliente para reintentos offline: el mismo clientId
+    // devuelve el ticket ya creado en vez de duplicarlo
+    clientId: text("client_id").unique(),
     diagnosis: text("diagnosis"),
     corrected: boolean("corrected"),
     actionsTaken: text("actions_taken"),
@@ -163,6 +196,8 @@ export const tickets = pgTable(
     index("tickets_assigned_to_idx").on(t.assignedToId),
     check("tickets_status_check", oneOf(t.status, TICKET_STATUSES)),
     check("tickets_category_check", oneOf(t.category, TICKET_CATEGORIES)),
+    check("tickets_priority_check", oneOf(t.priority, TICKET_PRIORITIES)),
+    index("tickets_location_idx").on(t.locationId),
     check("tickets_rating_check", sql`${t.rating} is null or ${t.rating} between 1 and 5`),
   ],
 );
@@ -388,6 +423,84 @@ export const errorReports = pgTable(
   ],
 );
 
+// Escaneos QR (mobile). Una fila por lectura: quien, que equipo, desde donde y
+// con que dispositivo. `product_id` queda null si el codigo no corresponde a un
+// equipo vivo (el alta prellenada sale de ahi). Se escribe fuera del lock global
+// de mutaciones: es de alta frecuencia y solo inserta.
+export const scanEvents = pgTable(
+  "scan_events",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    productId: text("product_id").references(() => products.id),
+    machineId: text("machine_id").notNull(),
+    context: text("context").notNull(),
+    userAgent: text("user_agent"),
+    // Id del cliente para reintentos offline (outbox): no duplica el registro
+    clientId: text("client_id").unique(),
+    createdAt,
+  },
+  (t) => [
+    index("scan_events_product_idx").on(t.productId),
+    index("scan_events_user_idx").on(t.userId),
+    check("scan_events_context_check", oneOf(t.context, SCAN_CONTEXTS)),
+  ],
+);
+
+// Notas rapidas de un tecnico sobre un equipo. Privadas: cada consulta filtra
+// por el autor (ni admin las lee). Viven en la base para que el tecnico las vea
+// en todas sus sesiones. La auditoria registra la accion, nunca el cuerpo.
+export const equipmentNotes = pgTable(
+  "equipment_notes",
+  {
+    id: text("id").primaryKey(),
+    authorId: text("author_id")
+      .notNull()
+      .references(() => users.id),
+    productId: text("product_id")
+      .notNull()
+      .references(() => products.id),
+    body: text("body").notNull(),
+    clientId: text("client_id").unique(),
+    createdAt,
+    updatedAt,
+    deletedAt: text("deleted_at"),
+  },
+  (t) => [index("equipment_notes_author_product_idx").on(t.authorId, t.productId)],
+);
+
+// Plantillas de incidencia rapida. Las crea un tecnico (draft), las prueba
+// (testing: solo las usan su autor y admin), un admin las aprueba (approved:
+// las usa todo el staff) y se retiran (retired) sin borrarse.
+export const incidentTemplates = pgTable(
+  "incident_templates",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    category: text("category").notNull(),
+    priority: text("priority").notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    status: text("status").notNull().default("draft"),
+    authorId: text("author_id")
+      .notNull()
+      .references(() => users.id),
+    approvedById: text("approved_by_id").references(() => users.id),
+    approvedAt: text("approved_at"),
+    createdAt,
+    updatedAt,
+    deletedAt: text("deleted_at"),
+  },
+  (t) => [
+    index("incident_templates_status_idx").on(t.status),
+    check("incident_templates_category_check", oneOf(t.category, TICKET_CATEGORIES)),
+    check("incident_templates_priority_check", oneOf(t.priority, TICKET_PRIORITIES)),
+    check("incident_templates_status_check", oneOf(t.status, TEMPLATE_STATUSES)),
+  ],
+);
+
 export const activityLogs = pgTable("activity_logs", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull(),
@@ -411,4 +524,7 @@ export type CommentRow = typeof comments.$inferSelect;
 export type ReservationRow = typeof reservations.$inferSelect;
 export type NoticeRow = typeof notices.$inferSelect;
 export type ErrorReportRow = typeof errorReports.$inferSelect;
+export type ScanEventRow = typeof scanEvents.$inferSelect;
+export type EquipmentNoteRow = typeof equipmentNotes.$inferSelect;
+export type IncidentTemplateRow = typeof incidentTemplates.$inferSelect;
 export type ActivityLogRow = typeof activityLogs.$inferSelect;

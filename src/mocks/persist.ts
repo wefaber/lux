@@ -9,6 +9,10 @@ import { mockLoans } from "./data/loans";
 import { mockServices } from "./data/services";
 import { mockNotices, mockPendingSeen } from "./data/notices";
 import { mockErrorReports } from "./data/errors";
+import { mockIncidentTemplates } from "./data/incident-templates";
+import { mockEquipmentNotes } from "./data/equipment-notes";
+import { mockScanEvents } from "./data/scan-events";
+import { mockClientKeys } from "./data/client-keys";
 import { mockActivityLogs } from "./generators";
 
 // Los datos de prueba viven en memoria: sin esto, al recargar la pagina todo
@@ -18,7 +22,7 @@ import { mockActivityLogs } from "./generators";
 // Subir VERSION cuando cambien los datos de ejemplo o su forma: lo guardado con
 // otra version se descarta y se arranca de cero.
 const STORAGE_KEY = "lux_mock_data";
-const VERSION = 5;
+const VERSION = 6;
 
 const ARRAYS = {
   users: mockUsers,
@@ -35,11 +39,15 @@ const ARRAYS = {
   pendingSeen: mockPendingSeen,
   activityLogs: mockActivityLogs,
   errorReports: mockErrorReports,
+  scanEvents: mockScanEvents,
+  equipmentNotes: mockEquipmentNotes,
+  incidentTemplates: mockIncidentTemplates,
 } as const;
 
 type Store = { [K in keyof typeof ARRAYS]: unknown[] } & {
   passwords: Record<string, string>;
   tokenVersions: Record<string, number>;
+  clientKeys: Record<string, string>;
 };
 
 // Un prestamo apunta al MISMO objeto que el equipo de la lista de equipos (y
@@ -93,6 +101,7 @@ export function saveMockData(): void {
     ...ARRAYS,
     passwords: mockPasswords,
     tokenVersions: mockTokenVersions,
+    clientKeys: mockClientKeys,
   };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: VERSION, data: encode(store) }));
@@ -139,6 +148,10 @@ export function restoreMockData(): void {
   if (store.tokenVersions) {
     for (const key of Object.keys(mockTokenVersions)) delete mockTokenVersions[key];
     Object.assign(mockTokenVersions, store.tokenVersions);
+  }
+  if (store.clientKeys) {
+    for (const key of Object.keys(mockClientKeys)) delete mockClientKeys[key];
+    Object.assign(mockClientKeys, store.clientKeys);
   }
 }
 

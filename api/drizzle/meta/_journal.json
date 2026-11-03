@@ -64,6 +64,13 @@
       "when": 1793040226362,
       "tag": "0008_error_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793674785449,
+      "tag": "0009_mobile_scan",
+      "breakpoints": true
     }
   ]
 }
