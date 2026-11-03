@@ -5,7 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-bun dev          # start dev server (MSW mocking auto-enabled)
+bun dev          # dev server; proxies /graphql, /api, /health, /ready to LUX_API_URL (default 127.0.0.1:4111)
+bun run dev:api  # local API (api/, needs Postgres; see docs/BACKEND.md)
+bun run dev:mocks # dev server with MSW instead of the API (opt-in, VITE_ENABLE_MOCKS=true)
 bun run build    # tsc -b + vite build
 bun run typecheck
 bun run lint
@@ -16,11 +18,11 @@ bunx msw init public/ --save   # re-initialize MSW service worker
 
 ## Architecture
 
-**Lux** is a React 19 SPA for IT asset management (inventory, tickets, loans, service requests) built with Vite + TailwindCSS v4. There is no real backend — all data is mocked via MSW with GraphQL handlers.
+**Lux** is a React 19 SPA for IT asset management (inventory, tickets, loans, service requests) built with Vite + TailwindCSS v4. The backend is the real API in `api/` (Elysia + graphql-yoga + Postgres, see `docs/BACKEND.md`). Deploys (dev.eternum.lat, lux.eternum.lat) never use MSW; the prod deploy fails if the bundle ships mocks. MSW (`src/mocks/`) stays for unit tests and opt-in local work (`bun run dev:mocks`).
 
 ### Request layer
 
-All API calls go through `gql<T>()` in `src/lib/utils.ts`, which POSTs to `/graphql` (intercepted by MSW in dev). No GraphQL client library — queries are plain tagged template strings passed directly to `gql()`. MSW starts in `main.tsx` before React mounts.
+All API calls go through `gql<T>()` in `src/lib/utils.ts`, which POSTs to `/graphql` (proxied to the API by Vite in dev, by nginx in deploys; intercepted by MSW only with `VITE_ENABLE_MOCKS=true`). No GraphQL client library — queries are plain tagged template strings passed directly to `gql()`. When enabled, MSW starts in `main.tsx` before React mounts.
 
 ### Auth
 

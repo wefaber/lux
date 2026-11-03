@@ -1,5 +1,13 @@
 name: Deploy
 
+# Cada push a main actualiza https://lux.eternum.lat sin downtime, igual que el
+# preview de dev: /home/hermes/deploy/lux-prod.sh clona main en el slot idle,
+# buildea, corre migraciones, levanta la API de ese slot, espera /ready y recien
+# ahi mueve el symlink y el upstream. Si la verificacion publica falla vuelve
+# solo al slot anterior. El slot viejo sigue corriendo: rollback = switch.
+#
+# Produccion corre contra la API real y Postgres. Nunca contra MSW: este
+# workflow falla si el bundle publicado trae los mocks.
 on:
   push:
     branches: [main]
@@ -12,83 +20,68 @@ concurrency:
 jobs:
   deploy:
     runs-on: self-hosted
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       SITE: https://lux.eternum.lat
     steps:
-      - name: Marcar inicio
-        id: start
-        run: echo "epoch=$(date -u +%s)" >> "$GITHUB_OUTPUT"
+      - name: Estado antes del deploy
+        run: /home/hermes/deploy/lux-prod.sh --status || true
 
-      # generic.sh clona en /home/hermes/repos/<dominio-con-guiones>, hace
-      # reset --hard a origin/main, buildea y rsyncea a /var/www/<dominio>.
-      # La URL va por HTTPS como el resto de los repos del server: hermes no
-      # tiene ~/.ssh/config y este repo es publico.
-      - name: Deploy
-        run: |
-          bash /home/hermes/deploy/generic.sh \
-            "lux.eternum.lat" \
-            "https://github.com/wefaber/lux.git"
+      - name: Deploy blue/green
+        run: /home/hermes/deploy/lux-prod.sh
 
       - name: Verificar publicacion
         env:
-          START_EPOCH: ${{ steps.start.outputs.epoch }}
+          SHA: ${{ github.sha }}
         run: |
           set -uo pipefail
+          corto="${SHA:0:7}"
 
-          # El deploy puede tardar unos segundos en quedar visible: reintenta
-          # antes de dar el run por fallido.
-          published=""
+          # Lo que sirve produccion tiene que ser el commit de ESTE push.
+          publicado=""
           for attempt in 1 2 3 4 5 6; do
-            headers=$(curl -sS -m 35 -D - -o index.html "$SITE/" 2>/dev/null) || headers=""
-            code=$(printf '%s' "$headers" | head -1 | awk '{print $2}')
-            if [ "$code" = "200" ]; then
-              lastmod=$(printf '%s' "$headers" | grep -i '^last-modified:' | head -1 | cut -d' ' -f2- | tr -d '\r')
-              lastmod_epoch=$(date -d "$lastmod" +%s 2>/dev/null || echo 0)
-              if [ "$lastmod_epoch" -ge "$((START_EPOCH - 120))" ]; then
-                published="$lastmod"
-                break
-              fi
-              echo "intento $attempt: responde 200 pero index.html quedo viejo ($lastmod)"
-            else
-              echo "intento $attempt: el sitio respondio '${code:-sin respuesta}'"
-              if [ "$code" = "522" ]; then echo "  522: Cloudflare no llega al origen, el VPS esta caido"; fi
-            fi
+            publicado=$(curl -4 -s -m 30 "$SITE/BUILD_INFO" | awk '{print $1}')
+            [ "$publicado" = "$corto" ] && break
+            echo "intento $attempt: BUILD_INFO responde '${publicado:-nada}', esperado $corto"
             sleep 10
           done
-
-          if [ -z "$published" ]; then
-            echo "::error::El deploy no llego a produccion: $SITE no sirve el build de este run."
+          if [ "$publicado" != "$corto" ]; then
+            echo "::error::$SITE no sirve el commit $corto."
             exit 1
           fi
-          echo "index.html publicado: $published"
 
-          # index.html nuevo con assets faltantes es la falla clasica de una
-          # copia a medias, asi que el bundle se verifica aparte.
+          # API viva de punta a punta (nginx -> API -> Postgres con migraciones).
+          # Se mira el cuerpo y no solo el 200: el fallback del SPA responde
+          # index.html con 200 en cualquier ruta que nginx no proxee.
+          ready=$(curl -s -m 30 "$SITE/ready")
+          if ! printf '%s' "$ready" | grep -q '"ok":true'; then
+            echo "::error::$SITE/ready no responde la API (${ready:0:80}): la API o la base no estan listas."
+            exit 1
+          fi
+          gql=$(curl -s -o /dev/null -w '%{http_code}' -m 30 -X POST -H 'content-type: application/json' \
+            -d '{"query":"{ __typename }"}' "$SITE/graphql")
+          if [ "$gql" != "200" ]; then
+            echo "::error::POST $SITE/graphql responde $gql."
+            exit 1
+          fi
+
+          # Bundle completo y sin mocks.
+          curl -fsS -m 35 -o index.html "$SITE/"
           asset=$(grep -o '/assets/index-[^"]*\.js' index.html | head -1)
-          if [ -z "$asset" ]; then
-            echo "::error::index.html no referencia ningun bundle /assets/index-*.js"
+          if [ -z "$asset" ] || ! curl -fsS -m 35 -o bundle.js "$SITE$asset"; then
+            echo "::error::El bundle principal no se puede descargar desde produccion."
             exit 1
           fi
-          if ! curl -fsS -m 35 -o bundle.js "$SITE$asset"; then
-            echo "::error::El bundle $asset no se puede descargar desde produccion."
+          if grep -q "root2026" bundle.js; then
+            echo "::error::El bundle salio con los mocks de MSW (credenciales de prueba incluidas)."
             exit 1
           fi
-          echo "bundle vivo: $asset ($(wc -c < bundle.js) bytes)"
-
-          # Produccion corre sobre MSW (VITE_ENABLE_MOCKS en .env.production)
-          # porque todavia no hay backend. Un build sin los mocks levanta la UI
-          # igual, pero deja el login muerto contra un /graphql que responde 405,
-          # asi que se verifica que el worker y los datos esten publicados.
-          if ! grep -q "root2026" bundle.js; then
-            echo "::error::El bundle salio sin los mocks: el login va a quedar muerto en produccion."
+          worker=$(curl -s -o /dev/null -w '%{http_code}' -m 30 "$SITE/mockServiceWorker.js")
+          if [ "$worker" = "200" ] && ! grep -qi '<!doctype html' <(curl -s -m 30 "$SITE/mockServiceWorker.js"); then
+            echo "::error::Produccion publica /mockServiceWorker.js."
             exit 1
           fi
-          if ! curl -fsS -m 35 -o /dev/null "$SITE/mockServiceWorker.js"; then
-            echo "::error::Falta /mockServiceWorker.js en el docroot: MSW no puede arrancar."
-            exit 1
-          fi
-          echo "mocks publicados: worker y credenciales presentes"
+          echo "produccion: commit $corto, API lista, sin mocks"
 
       - name: Limpiar
         if: always()
