@@ -65,7 +65,8 @@ export function LoginPage() {
       // delatar si la cuenta existe; el bloqueo se distingue por el código y el tiempo
       // de espera. Acá se muestra una cuenta regresiva y se deshabilita el formulario.
       if (err instanceof ApiError && err.code === "TOO_MANY_ATTEMPTS") {
-        const seconds = err.retryAfterSeconds && err.retryAfterSeconds > 0 ? err.retryAfterSeconds : 15 * 60;
+        const seconds =
+          err.retryAfterSeconds && err.retryAfterSeconds > 0 ? err.retryAfterSeconds : 15 * 60;
         setLockedUntil(Date.now() + seconds * 1000);
         return;
       }
@@ -235,7 +236,7 @@ export function LoginPage() {
 
       {/* Misma condicion que arranca MSW en main.tsx, inline por el mismo motivo:
           la burbuja existe donde existen los mocks */}
-      {(import.meta.env.DEV || import.meta.env.VITE_ENABLE_MOCKS === "true") && (
+      {import.meta.env.VITE_ENABLE_MOCKS === "true" && (
         <DevCredentials onFill={fillCredentials} onLogin={loginAs} />
       )}
     </div>

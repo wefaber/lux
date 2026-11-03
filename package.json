@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:mocks": "VITE_ENABLE_MOCKS=true vite",
+    "dev:api": "cd api && bun run dev",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",

@@ -69,7 +69,8 @@ bun install            # dependencias
 
 bun run db:generate    # genera SQL de migracion en api/drizzle/ (a partir del schema)
 bun run db:migrate     # aplica las migraciones a PostgreSQL
-bun run db:seed        # carga el dataset de ejemplo del branch dev (idempotente)
+bun run db:seed        # carga el dataset de ejemplo (solo dev: cuentas con claves conocidas)
+bun run db:create-admin  # produccion: crea el primer root_admin (LUX_ADMIN_DNI/NAME/EMAIL/PASSWORD por entorno)
 bun run scripts/preflight-integrity.ts   # antes de migrar una base con datos: filas que violarian FK/CHECK
 
 bun run start          # HOST/PORT del entorno; default 127.0.0.1:4111
@@ -647,5 +648,9 @@ tests/
   escucha en `127.0.0.1:$PORT` y el deploy blue/green usa `/ready` antes de mover
   el trafico. Para exponer REST hay que proxear tambien `/api/v1`.
 - Con `NODE_ENV=production` GraphiQL queda deshabilitado.
-- Esta _branch_ de backend reemplaza a los mocks; para usarla se sirve la API real
-  en lugar de MSW. No modifica `src/`.
+- Ningun deploy usa MSW. `dev.eternum.lat` (`lux-dev.sh`) y `lux.eternum.lat`
+  (`lux-prod.sh`, workflow `deploy.yml`) sirven la API real con blue/green; el
+  workflow de produccion falla si el bundle trae los mocks o `/ready` no responde.
+- Produccion no corre `db:seed`: arranca con migraciones y `db:create-admin`.
+- Local: `bun dev` proxea `/graphql` a `LUX_API_URL`; MSW solo con
+  `bun run dev:mocks` (`VITE_ENABLE_MOCKS=true`).

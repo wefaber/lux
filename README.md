@@ -110,11 +110,14 @@ cd lux
 # Install dependencies
 bun install
 
-# Start the development server
+# Start the API (needs Postgres, see docs/BACKEND.md) and the frontend
+bun run dev:api
 bun dev
 ```
 
-The server runs at `http://localhost:5173`. MSW activates automatically in development mode, simulating the GraphQL backend with test data. Run `bun run setup` to regenerate the MSW service worker in `public/`.
+The server runs at `http://localhost:5173` and proxies `/graphql` to the API (`LUX_API_URL`, default `http://127.0.0.1:4111`). Without a backend, `bun run dev:mocks` runs the frontend on MSW with test data (opt-in; no deploy uses mocks). Run `bun run setup` to regenerate the MSW service worker in `public/`.
+
+The test credentials below exist only in the mocks and in the dev dataset (`db:seed`), never in production.
 
 ### Test credentials
 
