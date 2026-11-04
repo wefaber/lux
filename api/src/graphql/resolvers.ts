@@ -26,12 +26,10 @@ import {
   RESERVATION_STATUS_CONFIG,
   TICKET_STATUS_CONFIG,
   TICKET_TRANSITIONS,
-  type DashboardPeriod,
 } from "@/lib/constants";
 import type {
   Comment,
   CommentEntity,
-  DashboardStats,
   EquipmentNote,
   ErrorReport,
   ErrorReportStatus,
@@ -58,12 +56,7 @@ import type {
   UserRole,
 } from "@/lib/types";
 import { ASSIGNABLE_ROLES, canEditUser, canReserve, canToggleUserActive } from "@/lib/roles";
-import {
-  localMoment,
-  scheduleCovers,
-  schedulesOverlap,
-  validateSchedule,
-} from "@/lib/schedule";
+import { localMoment, scheduleCovers, schedulesOverlap, validateSchedule } from "@/lib/schedule";
 import { signToken } from "../auth";
 import type { Ctx } from "../context";
 import {
@@ -91,7 +84,7 @@ import {
 import * as tracker from "../issue-tracker";
 import { LoginGuard } from "../login-guard";
 import { userFieldResolvers } from "./privacy";
-import { requesterOverview } from "./requester";
+import { dashboardPeriod, periodSince, requesterDashboard, staffDashboard } from "./dashboard";
 import { exclusiveEnd, overlapsRange, withinInstantRange } from "./date-range";
 import { revokeToken } from "../sessions";
 import { db } from "../db/client";
@@ -112,8 +105,8 @@ import {
   listProducts,
   listTickets,
   OPEN_LOAN_STATUS_LIST,
+  requesterData,
   staffCounts,
-  type StaffCounts,
 } from "../queries";
 import { withState, withTransaction, type AuditSpec, type Resolver } from "./wrap";
 
@@ -547,70 +540,6 @@ function averageResolutionHours(tickets: Ticket[]): number | null {
   return Math.round((total / resolved.length / 3_600_000) * 10) / 10;
 }
 
-const PERIOD_BUCKETS: Record<DashboardPeriod, { days: number; bucketDays: number }> = {
-  "7d": { days: 7, bucketDays: 1 },
-  "30d": { days: 30, bucketDays: 1 },
-  "90d": { days: 91, bucketDays: 7 },
-};
-
-const DASHBOARD_TICKET_STATUSES: TicketStatus[] = [
-  "pending",
-  "in_progress",
-  "in_resolution",
-  "resolved",
-];
-
-// Cantidad de solicitudes por tramo del periodo, hasta el fin del dia (UTC) de hoy.
-function servicesByPeriod(
-  createdAt: string[],
-  { days, bucketDays }: { days: number; bucketDays: number },
-) {
-  const todayEnd = new Date();
-  todayEnd.setUTCHours(24, 0, 0, 0);
-  const bucketCount = Math.ceil(days / bucketDays);
-  return Array.from({ length: bucketCount }, (_, i) => {
-    const end = new Date(todayEnd);
-    end.setUTCDate(end.getUTCDate() - (bucketCount - 1 - i) * bucketDays);
-    const start = new Date(end);
-    start.setUTCDate(start.getUTCDate() - bucketDays);
-    const count = createdAt.filter((value) => {
-      const created = new Date(value);
-      return created >= start && created < end;
-    }).length;
-    return { date: start.toISOString().slice(0, 10), count };
-  });
-}
-
-const sumStatuses = (by: Record<string, number>, statuses: readonly string[]) =>
-  statuses.reduce((total, status) => total + (by[status] ?? 0), 0);
-
-// Tablero del staff a partir de los conteos de la base.
-function staffDashboard(
-  counts: StaffCounts,
-  period: { days: number; bucketDays: number },
-): DashboardStats {
-  const { ticketsByStatus, loansByStatus, servicesByStatus, equipmentByStatus } = counts;
-  return {
-    totalEquipment: sumStatuses(equipmentByStatus, Object.keys(equipmentByStatus)),
-    openTickets: sumStatuses(ticketsByStatus, ["pending", "in_progress", "in_resolution"]),
-    activeLoans: sumStatuses(loansByStatus, OPEN_LOAN_STATUS_LIST),
-    pendingServices: servicesByStatus.pending ?? 0,
-    ticketsByStatus: DASHBOARD_TICKET_STATUSES.map((status) => ({
-      status,
-      count: ticketsByStatus[status] ?? 0,
-    })),
-    servicesByPeriod: servicesByPeriod(counts.serviceCreatedAt, period),
-    workQueue: {
-      unassignedTickets: counts.unassignedTickets,
-      ticketsInProgress: sumStatuses(ticketsByStatus, ["in_progress", "in_resolution"]),
-      pendingServices: servicesByStatus.pending ?? 0,
-      overdueLoans: loansByStatus.overdue ?? 0,
-      equipmentInRepair: equipmentByStatus.in_repair ?? 0,
-    },
-    requesterOverview: null,
-  };
-}
-
 const nowIso = () => new Date().toISOString();
 
 // ── Mobile (#98): escaneo QR, notas privadas y plantillas de incidencia ─────
@@ -679,7 +608,10 @@ async function checkSchedule(ctx: Ctx, input: ClassScheduleInput, exceptId?: str
     .select()
     .from(t.classSchedules)
     .where(
-      and(eq(t.classSchedules.locationId, input.locationId), eq(t.classSchedules.weekday, input.weekday)),
+      and(
+        eq(t.classSchedules.locationId, input.locationId),
+        eq(t.classSchedules.weekday, input.weekday),
+      ),
     );
   const clash = sameDay.find((row) => row.id !== exceptId && schedulesOverlap(row, input));
   if (clash) {
@@ -1057,55 +989,19 @@ const Query = {
     return service;
   },
 
-  // El staff sale de conteos en la base (issue #115). El solicitante sigue sobre
-  // la foto completa: sus promedios (`ticketEstimates`) usan los tickets de toda el area.
+  // El tablero sale de conteos en la base (issue #115): el staff y el solicitante leen
+  // solo lo que necesitan. La foto completa se carga unicamente si hay prestamos
+  // entregados por marcar como vencidos (la transicion avisa a las personas involucradas).
   dashboardStats: async (_p: unknown, args: { period?: string }, ctx: Ctx) => {
     const caller = requireAuth(ctx);
-    const period = PERIOD_BUCKETS[args.period as DashboardPeriod] ?? PERIOD_BUCKETS["7d"];
-
-    if (isStaff(caller)) {
-      // Casi nunca hay vencidos por marcar: solo entonces se carga la foto
-      if (await hasOverdueToSync()) {
-        ctx.state = await loadState();
-        await syncOverdueLoans(ctx.state);
-      }
-      return staffDashboard(await staffCounts(), period);
+    const period = dashboardPeriod(args.period);
+    if (await hasOverdueToSync()) {
+      ctx.state = await loadState();
+      await syncOverdueLoans(ctx.state);
     }
-
-    ctx.state = await loadState();
-    await syncOverdueLoans(ctx.state);
-    const { state } = ctx;
-    const tickets = state.tickets.filter((t) => t.submittedBy.id === caller.id);
-    const loans = state.loans.filter((l) => l.user.id === caller.id);
-    const services = state.services.filter((s) => s.requestedBy.id === caller.id);
-    const equipment = state.products.filter(
-      (p) => p.deletedAt === null && p.status === "available" && !hasOpenLoan(state, p.id),
-    );
-    const stats: DashboardStats = {
-      totalEquipment: equipment.length,
-      openTickets: tickets.filter((t) => t.status !== "resolved").length,
-      activeLoans: loans.filter((l) => OPEN_LOAN_STATUSES.has(l.status)).length,
-      pendingServices: services.filter((s) => s.status === "pending").length,
-      ticketsByStatus: DASHBOARD_TICKET_STATUSES.map((status) => ({
-        status,
-        count: tickets.filter((t) => t.status === status).length,
-      })),
-      servicesByPeriod: servicesByPeriod(
-        services.map((s) => s.createdAt),
-        period,
-      ),
-      workQueue: null,
-      // Lo del solicitante tampoco viaja al staff: cada rol ve su tablero
-      requesterOverview: requesterOverview(
-        caller.id,
-        state.tickets,
-        state.loans,
-        state.reservations,
-        state.locations,
-        state.products,
-      ),
-    };
-    return stats;
+    const since = periodSince(period);
+    if (isStaff(caller)) return staffDashboard(await staffCounts(since), period);
+    return requesterDashboard(caller, await requesterData(caller, since), period);
   },
 
   reports: async (_p: unknown, _a: unknown, ctx: Ctx) => {
@@ -1529,7 +1425,8 @@ const Mutation = {
         .from(t.classSchedules)
         .where(eq(t.classSchedules.teacherId, user.id))
         .limit(1);
-      if (assigned) throw conflict("El docente tiene horarios de clase asignados: reasignalos antes");
+      if (assigned)
+        throw conflict("El docente tiene horarios de clase asignados: reasignalos antes");
     }
     // Los campos de estudiante se reemplazan por los normalizados, no se copian crudos
     const {

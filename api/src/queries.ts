@@ -1,6 +1,7 @@
-import { and, count, eq, inArray, isNull, notExists, sql } from "drizzle-orm";
-import type { Component, LoanStatus, Product, Ticket, User } from "@/lib/types";
+import { and, count, eq, inArray, isNotNull, isNull, notExists, sql } from "drizzle-orm";
+import type { Component, Location, Product, Ticket, User } from "@/lib/types";
 import { db, readAll } from "./db/client";
+import { OPEN_LOAN_STATUS_LIST } from "./db/enums";
 import * as t from "./db/schema";
 import { withinInstantRange } from "./graphql/date-range";
 import { toComponent, toLocation, toProduct, toTicket, toUser } from "./state";
@@ -10,8 +11,8 @@ import { toComponent, toLocation, toProduct, toTicket, toUser } from "./state";
 // Los objetos salen de los mismos mapeadores de state.ts, asi que el resultado
 // es el mismo que el de filtrar la foto en memoria (ver issue #115).
 
-/** Estados de un prestamo que ocupan el equipo. */
-export const OPEN_LOAN_STATUS_LIST: LoanStatus[] = ["approved", "active", "overdue"];
+// La lista vive en db/enums.ts (sin dependencias de la base) para poder probar el tablero sin DATABASE_URL.
+export { OPEN_LOAN_STATUS_LIST };
 
 /** `inArray` sin ids genera SQL invalido segun la version: se evita la consulta. */
 function nonEmpty(ids: Iterable<string>): string[] | null {
@@ -146,11 +147,22 @@ export interface StaffCounts {
   equipmentByStatus: Record<string, number>;
 }
 
+// Texto ISO UTC: la comparacion de texto ordena igual que las fechas. El corte es solo una
+// poda; el reparto en tramos vuelve a comparar instantes, asi que un borde de mas no cambia nada.
+function createdSince(since?: string) {
+  return since ? sql`${t.serviceRequests.createdAt} >= ${since}` : undefined;
+}
+
 function tally(rows: Array<{ status: string; n: number }>): Record<string, number> {
   return Object.fromEntries(rows.map((row) => [row.status, row.n]));
 }
 
-export async function staffCounts(): Promise<StaffCounts> {
+/**
+ * `since` (ISO UTC): solo las solicitudes creadas desde ahi entran en `serviceCreatedAt`.
+ * El tablero muestra un periodo acotado; sin el corte se leia la fecha de todas las
+ * solicitudes en cada request y el costo crecia con el historial.
+ */
+export async function staffCounts(since?: string): Promise<StaffCounts> {
   const [tickets, unassigned, loans, services, serviceDates, equipment] = await readAll([
     () =>
       db
@@ -186,7 +198,7 @@ export async function staffCounts(): Promise<StaffCounts> {
       db
         .select({ createdAt: t.serviceRequests.createdAt })
         .from(t.serviceRequests)
-        .where(isNull(t.serviceRequests.deletedAt)),
+        .where(and(isNull(t.serviceRequests.deletedAt), createdSince(since))),
     () =>
       db
         .select({ status: t.products.status, n: count() })
@@ -211,4 +223,192 @@ export async function hasOverdueToSync(now: Date = new Date()): Promise<boolean>
     .from(t.loans)
     .where(and(eq(t.loans.status, "active"), isNull(t.loans.deletedAt)));
   return active.some((loan) => new Date(loan.returnDate) < now);
+}
+
+// ── Tablero del solicitante ──────────────────────────────────────────────────
+
+/** Lo que el tablero del solicitante necesita, leido sin la foto completa. */
+export interface RequesterData {
+  /** Sus tickets, completos (con equipo y lugar): "en curso", valoracion y areas. */
+  ownTickets: Ticket[];
+  /** Todos los tickets resueltos del area, solo con lo que usa el promedio. */
+  resolvedForEstimates: Array<
+    Pick<Ticket, "category" | "status" | "createdAt" | "attendedAt" | "resolvedAt">
+  >;
+  ownLoans: Array<{
+    status: string;
+    user: Pick<User, "id">;
+    equipment: Pick<Product, "locationId">;
+  }>;
+  ownReservations: Array<{
+    user: Pick<User, "id">;
+    location: Pick<Location, "id"> | null;
+    equipment: Pick<Product, "locationId"> | null;
+  }>;
+  servicesByStatus: Record<string, number>;
+  serviceCreatedAt: string[];
+  /** Equipos disponibles y sin prestamo abierto: lo que puede pedir. */
+  availableEquipment: number;
+  /** Lugares que uso (ticket, prestamo o reserva), sin los dados de baja. */
+  locations: Location[];
+  /** Equipos de esos lugares, para el estado de cada area. */
+  areaProducts: Array<Pick<Product, "deletedAt" | "locationId" | "status">>;
+}
+
+export async function requesterData(
+  caller: Pick<User, "id">,
+  since?: string,
+): Promise<RequesterData> {
+  const userId = caller.id;
+  const [ownTickets, resolved, loanRows, services, serviceDates, reservationRows, available] =
+    await Promise.all([
+      listTickets({ submittedById: userId }),
+      db
+        .select({
+          category: t.tickets.category,
+          status: t.tickets.status,
+          createdAt: t.tickets.createdAt,
+          attendedAt: t.tickets.attendedAt,
+          resolvedAt: t.tickets.resolvedAt,
+        })
+        .from(t.tickets)
+        .where(
+          and(
+            isNull(t.tickets.deletedAt),
+            eq(t.tickets.status, "resolved"),
+            isNotNull(t.tickets.resolvedAt),
+          ),
+        ),
+      db
+        .select({ status: t.loans.status, locationId: t.products.locationId })
+        .from(t.loans)
+        .innerJoin(t.products, eq(t.products.id, t.loans.equipmentId))
+        .where(and(isNull(t.loans.deletedAt), eq(t.loans.userId, userId))),
+      db
+        .select({ status: t.serviceRequests.status, n: count() })
+        .from(t.serviceRequests)
+        .where(
+          and(isNull(t.serviceRequests.deletedAt), eq(t.serviceRequests.requestedById, userId)),
+        )
+        .groupBy(t.serviceRequests.status),
+      db
+        .select({ createdAt: t.serviceRequests.createdAt })
+        .from(t.serviceRequests)
+        .where(
+          and(
+            isNull(t.serviceRequests.deletedAt),
+            eq(t.serviceRequests.requestedById, userId),
+            createdSince(since),
+          ),
+        ),
+      db
+        .select({
+          locationId: t.reservations.locationId,
+          equipmentLocationId: t.products.locationId,
+        })
+        .from(t.reservations)
+        .leftJoin(t.products, eq(t.products.id, t.reservations.equipmentId))
+        .where(eq(t.reservations.userId, userId)),
+      db
+        .select({ n: count() })
+        .from(t.products)
+        .where(
+          and(
+            isNull(t.products.deletedAt),
+            eq(t.products.status, "available"),
+            notExists(
+              db
+                .select({ one: sql`1` })
+                .from(t.loans)
+                .where(
+                  and(
+                    eq(t.loans.equipmentId, t.products.id),
+                    inArray(t.loans.status, OPEN_LOAN_STATUS_LIST),
+                    isNull(t.loans.deletedAt),
+                  ),
+                ),
+            ),
+          ),
+        ),
+    ]);
+
+  const ownLoans = loanRows.map((l) => ({
+    status: l.status,
+    user: { id: userId },
+    equipment: { locationId: l.locationId },
+  }));
+  const ownReservations = reservationRows.map((r) => ({
+    user: { id: userId },
+    location: r.locationId ? { id: r.locationId } : null,
+    equipment: r.equipmentLocationId ? { locationId: r.equipmentLocationId } : null,
+  }));
+
+  const usedLocationIds = nonEmpty([
+    ...ownTickets.flatMap((tk) => (tk.equipment ? [tk.equipment.locationId] : [])),
+    ...ownLoans.map((l) => l.equipment.locationId),
+    ...ownReservations.flatMap((r) => [
+      ...(r.location ? [r.location.id] : []),
+      ...(r.equipment ? [r.equipment.locationId] : []),
+    ]),
+  ]);
+  const [locationRows, areaRows] = usedLocationIds
+    ? await readAll([
+        () =>
+          db
+            .select()
+            .from(t.locations)
+            .where(and(inArray(t.locations.id, usedLocationIds), isNull(t.locations.deletedAt))),
+        () =>
+          db
+            .select({
+              status: t.products.status,
+              locationId: t.products.locationId,
+              deletedAt: t.products.deletedAt,
+            })
+            .from(t.products)
+            .where(
+              and(inArray(t.products.locationId, usedLocationIds), isNull(t.products.deletedAt)),
+            ),
+      ] as const)
+    : [[], []];
+
+  return {
+    ownTickets,
+    resolvedForEstimates: resolved as RequesterData["resolvedForEstimates"],
+    ownLoans,
+    ownReservations,
+    servicesByStatus: tally(services),
+    serviceCreatedAt: serviceDates.map((row) => row.createdAt),
+    availableEquipment: available[0]?.n ?? 0,
+    locations: locationRows.map(toLocation),
+    areaProducts: areaRows as RequesterData["areaProducts"],
+  };
+}
+
+// ── Datos de contacto del tecnico (graphql/privacy.ts) ───────────────────────
+
+/** Ids de las personas con las que trabaja un tecnico: misma regla que `relatedUserIds`, sin la foto. */
+export async function relatedUserIdsFromDb(technicianId: string): Promise<Set<string>> {
+  const [fromTickets, fromLoans, fromServices] = await Promise.all([
+    db
+      .select({ id: t.tickets.submittedById })
+      .from(t.tickets)
+      .where(and(isNull(t.tickets.deletedAt), eq(t.tickets.assignedToId, technicianId))),
+    db
+      .select({ id: t.loans.userId })
+      .from(t.loans)
+      .where(
+        and(
+          isNull(t.loans.deletedAt),
+          sql`(${t.loans.deliveredById} = ${technicianId} or ${t.loans.approvedById} = ${technicianId})`,
+        ),
+      ),
+    db
+      .select({ id: t.serviceRequests.requestedById })
+      .from(t.serviceRequests)
+      .where(
+        and(isNull(t.serviceRequests.deletedAt), eq(t.serviceRequests.assignedToId, technicianId)),
+      ),
+  ]);
+  return new Set([...fromTickets, ...fromLoans, ...fromServices].map((r) => r.id));
 }
