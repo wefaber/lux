@@ -1,3 +1,4 @@
+import { DEFAULT_INSTITUTION_TIME_ZONE } from "./lib/schedule";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -181,4 +182,10 @@ export function graphqlMaxDepth(): number {
 export function graphqlMaxRootFields(): number {
   loadEnv();
   return positiveInt("GRAPHQL_MAX_ROOT_FIELDS", 12);
+}
+
+/** Zona horaria de la institucion para resolver el docente a cargo (`INSTITUTION_TZ`, default Montevideo). */
+export function institutionTimeZone(): string {
+  loadEnv();
+  return process.env.INSTITUTION_TZ || DEFAULT_INSTITUTION_TIME_ZONE;
 }

@@ -11,6 +11,7 @@ export const typeDefs = /* GraphQL */ `
       studentGroup: String
       studentShift: String
       subject: String
+      isTeacher: Boolean
     ): [User!]!
     user(id: ID!): User
     products(
@@ -66,6 +67,10 @@ export const typeDefs = /* GraphQL */ `
     myEquipmentNotes(productId: ID!): [EquipmentNote!]!
     incidentTemplates(status: String): [IncidentTemplate!]!
     incidentTemplate(id: ID!): IncidentTemplate
+    # Horarios de clase (staff). teacherInCharge: docente a cargo del lugar en un
+    # instante (ISO; por defecto ahora), en la zona horaria de la institucion.
+    classSchedules(locationId: ID, teacherId: ID): [ClassSchedule!]!
+    teacherInCharge(locationId: ID!, at: String): ClassSchedule
   }
 
   type Mutation {
@@ -113,6 +118,9 @@ export const typeDefs = /* GraphQL */ `
     recordScan(input: ScanInput!): ScanResult!
     upsertEquipmentNote(input: EquipmentNoteInput!): EquipmentNote!
     deleteEquipmentNote(id: ID!): Boolean!
+    createClassSchedule(input: ClassScheduleInput!): ClassSchedule!
+    updateClassSchedule(id: ID!, input: ClassScheduleInput!): ClassSchedule!
+    deleteClassSchedule(id: ID!): Boolean!
     createIncidentTemplate(input: IncidentTemplateInput!): IncidentTemplate!
     updateIncidentTemplate(id: ID!, input: IncidentTemplateInput!): IncidentTemplate!
     # draft -> testing (autor o admin)
@@ -206,6 +214,7 @@ export const typeDefs = /* GraphQL */ `
     email: String!
     role: String!
     isActive: Boolean!
+    isTeacher: Boolean!
     createdAt: String!
     updatedAt: String!
     token: String!
@@ -219,6 +228,8 @@ export const typeDefs = /* GraphQL */ `
     email: String
     role: String!
     isActive: Boolean!
+    # Docente: solicitante que puede reservar salones y laboratorios
+    isTeacher: Boolean!
     # Solo para solicitantes; null / [] cuando no hay dato
     studentGroup: String
     studentShift: String
@@ -323,6 +334,21 @@ export const typeDefs = /* GraphQL */ `
     id: ID!
     productId: ID!
     body: String!
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type ClassSchedule {
+    id: ID!
+    location: Location!
+    teacher: User!
+    # 1 = lunes ... 7 = domingo
+    weekday: Int!
+    # HH:MM, hora local de la institucion
+    startTime: String!
+    endTime: String!
+    subject: String
+    studentGroup: String
     createdAt: String!
     updatedAt: String!
   }
@@ -541,6 +567,7 @@ export const typeDefs = /* GraphQL */ `
     password: String
     role: String!
     isActive: Boolean
+    isTeacher: Boolean
     studentGroup: String
     studentShift: String
     studentSubjects: [String!]
@@ -688,6 +715,16 @@ export const typeDefs = /* GraphQL */ `
     productId: ID!
     body: String!
     clientId: String
+  }
+
+  input ClassScheduleInput {
+    locationId: ID!
+    teacherId: ID!
+    weekday: Int!
+    startTime: String!
+    endTime: String!
+    subject: String
+    studentGroup: String
   }
 
   input IncidentTemplateInput {

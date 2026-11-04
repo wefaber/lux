@@ -20,13 +20,13 @@ const AuthContext = createContext<AuthContextType | null>(null); // Creacion de 
 const LOGIN_QUERY = `
   query Login($dni: String!, $password: String!) {
     login(dni: $dni, password: $password) {
-      id name dni email role isActive createdAt updatedAt token
+      id name dni email role isActive isTeacher createdAt updatedAt token
     }
   }
 `; // Login query para comprobacion de datos
 
 const ME_QUERY = `
-  query GetMe { me { id name dni email role isActive createdAt updatedAt } }
+  query GetMe { me { id name dni email role isActive isTeacher createdAt updatedAt } }
 `; // Datos vigentes del usuario de la sesion
 
 const LOGOUT_MUTATION = `

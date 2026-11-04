@@ -63,6 +63,7 @@ export function toUser(row: t.UserRow): User {
     email: row.email,
     role: row.role as UserRole,
     isActive: row.isActive,
+    isTeacher: row.isTeacher,
     studentGroup: row.studentGroup,
     studentShift: row.studentShift as User["studentShift"],
     studentSubjects: row.studentSubjects,

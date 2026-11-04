@@ -13,6 +13,11 @@ export interface User {
   email: string;
   role: UserRole;
   isActive: boolean;
+  /**
+   * Docente: solicitante habilitado para reservar salones y laboratorios y para
+   * figurar como responsable de un horario de clase. Solo aplica al rol solicitante.
+   */
+  isTeacher: boolean;
   /** Grupo o clase: "1°B", "2°A"... */
   studentGroup: string | null;
   studentShift: StudentShift | null;
@@ -455,3 +460,22 @@ export interface GraphQLResponse<T> {
 } // GraphQL Interface con respuest
 
 export type Result<T, E = Error> = { ok: true; value: T } | { ok: false; error: E };
+
+/**
+ * Horario de clase: quien esta a cargo de un salon o laboratorio en una franja
+ * semanal. Permite responder "quien era el docente en el salon X a la hora Y".
+ */
+export interface ClassSchedule {
+  id: string;
+  location: Location;
+  teacher: User;
+  /** Dia de la semana ISO: 1 = lunes ... 7 = domingo */
+  weekday: number;
+  /** "HH:MM", hora local de la institucion */
+  startTime: string;
+  endTime: string;
+  subject: string | null;
+  studentGroup: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

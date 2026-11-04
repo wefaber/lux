@@ -72,6 +72,7 @@ import {
   ASSIGNABLE_ROLES,
   STAFF_ROLES,
   canEditUser,
+  canReserve,
   canToggleUserActive,
   isAdmin,
   isStaff,
@@ -1835,6 +1836,7 @@ export const handlers = [
         password?: string;
         role: string;
         isActive?: boolean;
+        isTeacher?: boolean;
         studentGroup?: string | null;
         studentShift?: string | null;
         studentSubjects?: string[] | null;
@@ -1864,6 +1866,8 @@ export const handlers = [
       email: fields.email,
       role: fields.role as UserRole,
       isActive: input.isActive ?? true,
+      // El flag docente solo existe en solicitantes
+      isTeacher: fields.role === "solicitante" && input.isTeacher === true,
       ...normalizeStudent(rawStudent, fields.role as UserRole),
       createdAt: now,
       updatedAt: now,
@@ -1889,6 +1893,7 @@ export const handlers = [
           | "studentGroup"
           | "studentShift"
           | "studentSubjects"
+          | "isTeacher"
         >
       > & {
         password?: string;
@@ -1934,6 +1939,8 @@ export const handlers = [
       email: fields.email,
       role: fields.role as UserRole,
       isActive: input.isActive ?? user.isActive,
+      isTeacher:
+        fields.role === "solicitante" ? (input.isTeacher ?? user.isTeacher) : false,
       ...normalizeStudent(rawStudent, fields.role as UserRole),
       updatedAt: new Date().toISOString(),
     });
@@ -2036,6 +2043,7 @@ export const handlers = [
         email: row.email,
         role: row.role,
         isActive: row.isActive,
+        isTeacher: false,
         studentGroup: row.studentGroup,
         studentShift: row.studentShift as User["studentShift"],
         studentSubjects: row.studentSubjects,
@@ -2379,6 +2387,11 @@ export const handlers = [
   graphql.mutation("CreateReservation", ({ request, variables }) => {
     const caller = getCaller(request);
     if (!caller) return HttpResponse.json(UNAUTHENTICATED);
+    if (!canReserve(caller)) {
+      return HttpResponse.json(
+        errorBody("Solo los docentes y el personal del área pueden hacer reservas"),
+      );
+    }
     syncReservations();
     const { input } = variables as {
       input: {

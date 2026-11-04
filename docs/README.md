@@ -4,6 +4,7 @@
 | -------------------------------------------------------- | ----------------------------------------------------- |
 | [ARQUITECTURA.md](ARQUITECTURA.md)                       | Arquitectura, instalación y uso                       |
 | [BACKEND.md](BACKEND.md)                                 | Backend PostgreSQL de SGRSI / Lux                     |
+| [RBAC-Roles.md](RBAC-Roles.md)                           | Roles, permisos y perfil docente (#100)               |
 | [RENDIMIENTO-API.md](RENDIMIENTO-API.md)                 | Lecturas acotadas de la API y mediciones (#115)       |
 | [sql/](sql/)                                             | Esquema (`proyecto.sql`) y consultas (`queries.sql`)  |
 | [EVALUACION-CONTENEDORES.md](EVALUACION-CONTENEDORES.md) | Evaluación del despliegue en contenedores             |

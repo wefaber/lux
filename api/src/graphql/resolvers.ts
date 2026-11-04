@@ -35,6 +35,7 @@ import type {
   EquipmentNote,
   ErrorReport,
   ErrorReportStatus,
+  ClassSchedule,
   IncidentTemplate,
   Loan,
   LoanStatus,
@@ -56,7 +57,13 @@ import type {
   User,
   UserRole,
 } from "@/lib/types";
-import { ASSIGNABLE_ROLES, canEditUser, canToggleUserActive } from "@/lib/roles";
+import { ASSIGNABLE_ROLES, canEditUser, canReserve, canToggleUserActive } from "@/lib/roles";
+import {
+  localMoment,
+  scheduleCovers,
+  schedulesOverlap,
+  validateSchedule,
+} from "@/lib/schedule";
 import { signToken } from "../auth";
 import type { Ctx } from "../context";
 import {
@@ -79,6 +86,7 @@ import {
   loginLockMaxMinutes,
   loginLockMinutes,
   loginMaxAttempts,
+  institutionTimeZone,
 } from "../env";
 import * as tracker from "../issue-tracker";
 import { LoginGuard } from "../login-guard";
@@ -98,7 +106,7 @@ import {
   TICKET_CATEGORIES,
   TICKET_PRIORITIES,
 } from "../db/enums";
-import { loadState, toComponent, toProduct, toUser, type State } from "../state";
+import { loadState, toComponent, toLocation, toProduct, toUser, type State } from "../state";
 import {
   hasOverdueToSync,
   listProducts,
@@ -626,6 +634,68 @@ async function usersByIds(ids: Array<string | null>): Promise<Map<string, User>>
   return new Map(rows.map((row) => [row.id, toUser(row)]));
 }
 
+async function toSchedules(rows: t.ClassScheduleRow[]): Promise<ClassSchedule[]> {
+  const teachers = await usersByIds(rows.map((r) => r.teacherId));
+  const locationIds = [...new Set(rows.map((r) => r.locationId))];
+  const locationRows =
+    locationIds.length > 0
+      ? await db.select().from(t.locations).where(inArray(t.locations.id, locationIds))
+      : [];
+  const locations = new Map(locationRows.map((row) => [row.id, toLocation(row)]));
+  return rows.map((row) => ({
+    id: row.id,
+    location: locations.get(row.locationId)!,
+    teacher: teachers.get(row.teacherId)!,
+    weekday: row.weekday,
+    startTime: row.startTime,
+    endTime: row.endTime,
+    subject: row.subject,
+    studentGroup: row.studentGroup,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }));
+}
+
+interface ClassScheduleInput {
+  locationId: string;
+  teacherId: string;
+  weekday: number;
+  startTime: string;
+  endTime: string;
+  subject?: string | null;
+  studentGroup?: string | null;
+}
+
+// Valida un horario (forma, lugar, docente y que no se pise con otro del mismo
+// lugar) y devuelve los campos listos para guardar.
+async function checkSchedule(ctx: Ctx, input: ClassScheduleInput, exceptId?: string) {
+  assertRules(validateSchedule(input));
+  if (!activeLocation(ctx.state, input.locationId)) throw notFound("Ubicación no encontrada");
+  const teacher = ctx.state.users.find((u) => u.id === input.teacherId);
+  if (!teacher || !teacher.isActive || !teacher.isTeacher) {
+    throw invalid("El responsable tiene que ser un docente activo");
+  }
+  const sameDay = await db
+    .select()
+    .from(t.classSchedules)
+    .where(
+      and(eq(t.classSchedules.locationId, input.locationId), eq(t.classSchedules.weekday, input.weekday)),
+    );
+  const clash = sameDay.find((row) => row.id !== exceptId && schedulesOverlap(row, input));
+  if (clash) {
+    throw conflict(`Ya hay una clase en ese horario (${clash.startTime} a ${clash.endTime})`);
+  }
+  return {
+    locationId: input.locationId,
+    teacherId: input.teacherId,
+    weekday: input.weekday,
+    startTime: input.startTime,
+    endTime: input.endTime,
+    subject: input.subject?.trim() || null,
+    studentGroup: input.studentGroup?.trim() || null,
+  };
+}
+
 async function toTemplates(rows: t.IncidentTemplateRow[]): Promise<IncidentTemplate[]> {
   const users = await usersByIds(rows.flatMap((r) => [r.authorId, r.approvedById]));
   return rows.map((row) => ({
@@ -822,11 +892,15 @@ const Query = {
       studentGroup?: string;
       studentShift?: string;
       subject?: string;
+      isTeacher?: boolean;
     },
     ctx: Ctx,
   ) => {
     requireRole(ctx, STAFF_ROLES);
     let users = [...ctx.state.users];
+    if (args.isTeacher !== undefined && args.isTeacher !== null) {
+      users = users.filter((u) => u.isTeacher === args.isTeacher);
+    }
     if (args.isActive !== undefined && args.isActive !== null) {
       users = users.filter((u) => u.isActive === args.isActive);
     }
@@ -1290,6 +1364,48 @@ const Query = {
     return toTemplates(rows.filter((row) => canSeeTemplate(caller, row)));
   },
 
+  classSchedules: async (
+    _p: unknown,
+    args: { locationId?: string | null; teacherId?: string | null },
+    ctx: Ctx,
+  ) => {
+    requireRole(ctx, STAFF_ROLES);
+    const rows = await db
+      .select()
+      .from(t.classSchedules)
+      .where(
+        and(
+          args.locationId ? eq(t.classSchedules.locationId, args.locationId) : undefined,
+          args.teacherId ? eq(t.classSchedules.teacherId, args.teacherId) : undefined,
+        ),
+      )
+      .orderBy(t.classSchedules.weekday, t.classSchedules.startTime);
+    return toSchedules(rows);
+  },
+
+  // Docente a cargo de un lugar en un instante: el horario cuyo dia y franja
+  // (en hora local de la institucion) cubren `at`, o null si no hay clase.
+  teacherInCharge: async (
+    _p: unknown,
+    args: { locationId: string; at?: string | null },
+    ctx: Ctx,
+  ) => {
+    requireRole(ctx, STAFF_ROLES);
+    const moment = localMoment(args.at ?? new Date(), institutionTimeZone());
+    if (!moment) throw invalid("Fecha y hora inválidas");
+    const rows = await db
+      .select()
+      .from(t.classSchedules)
+      .where(
+        and(
+          eq(t.classSchedules.locationId, args.locationId),
+          eq(t.classSchedules.weekday, moment.weekday),
+        ),
+      );
+    const hit = rows.find((row) => scheduleCovers(row, moment));
+    return hit ? (await toSchedules([hit]))[0]! : null;
+  },
+
   incidentTemplate: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
     const caller = requireRole(ctx, STAFF_ROLES);
     const [row] = await db
@@ -1316,6 +1432,7 @@ const Mutation = {
         password?: string;
         role: string;
         isActive?: boolean;
+        isTeacher?: boolean;
         studentGroup?: string | null;
         studentShift?: string | null;
         studentSubjects?: string[] | null;
@@ -1347,6 +1464,8 @@ const Mutation = {
       email: input.email,
       role,
       isActive: input.isActive ?? true,
+      // El flag docente solo existe en solicitantes
+      isTeacher: role === "solicitante" && input.isTeacher === true,
       ...student,
       createdAt: nowIso(),
       updatedAt: nowIso(),
@@ -1396,6 +1515,22 @@ const Mutation = {
     const studentError = role === "solicitante" ? firstError(validateStudent(rawStudent)) : null;
     if (studentError) throw invalid(studentError);
     const student = normalizeStudent(rawStudent, role as UserRole);
+    // Docente: solo solicitantes; sin campo en el input se conserva. No se le quita
+    // mientras figure en algun horario de clase.
+    const isTeacher =
+      role === "solicitante"
+        ? typeof rest.isTeacher === "boolean"
+          ? rest.isTeacher
+          : user.isTeacher
+        : false;
+    if (user.isTeacher && !isTeacher) {
+      const [assigned] = await db
+        .select({ id: t.classSchedules.id })
+        .from(t.classSchedules)
+        .where(eq(t.classSchedules.teacherId, user.id))
+        .limit(1);
+      if (assigned) throw conflict("El docente tiene horarios de clase asignados: reasignalos antes");
+    }
     // Los campos de estudiante se reemplazan por los normalizados, no se copian crudos
     const {
       studentGroup: _group,
@@ -1403,7 +1538,7 @@ const Mutation = {
       studentSubjects: _subjects,
       ...base
     } = rest;
-    const next = { ...base, ...student, updatedAt: nowIso() };
+    const next = { ...base, ...student, isTeacher, updatedAt: nowIso() };
     const passwordHash = password
       ? await Bun.password.hash(String(password), { algorithm: "argon2id" })
       : undefined;
@@ -1415,7 +1550,7 @@ const Mutation = {
         ...(passwordHash ? { passwordHash, tokenVersion: sql`${t.users.tokenVersion} + 1` } : {}),
       })
       .where(eq(t.users.id, user.id));
-    Object.assign(user, base, student, { updatedAt: next.updatedAt });
+    Object.assign(user, base, student, { isTeacher, updatedAt: next.updatedAt });
     return user;
   },
 
@@ -1519,6 +1654,7 @@ const Mutation = {
         email,
         role,
         isActive,
+        isTeacher: false,
         ...student,
         createdAt: now,
         updatedAt: now,
@@ -2881,6 +3017,9 @@ const Mutation = {
     ctx: Ctx,
   ) => {
     const caller = requireAuth(ctx);
+    if (!canReserve(caller)) {
+      throw forbidden("Solo los docentes y el personal del área pueden hacer reservas");
+    }
     await syncReservations(ctx.state);
     const { input } = args;
     let equipment: Product | null = null;
@@ -3388,6 +3527,48 @@ const Mutation = {
     return true;
   },
 
+  createClassSchedule: async (_p: unknown, args: { input: ClassScheduleInput }, ctx: Ctx) => {
+    requireRole(ctx, ELEVATED_ROLES);
+    const fields = await checkSchedule(ctx, args.input);
+    const now = nowIso();
+    const [row] = await db
+      .insert(t.classSchedules)
+      .values({ id: newRowId("cls"), ...fields, createdAt: now, updatedAt: now })
+      .returning();
+    return (await toSchedules([row!]))[0]!;
+  },
+
+  updateClassSchedule: async (
+    _p: unknown,
+    args: { id: string; input: ClassScheduleInput },
+    ctx: Ctx,
+  ) => {
+    requireRole(ctx, ELEVATED_ROLES);
+    const [current] = await db
+      .select()
+      .from(t.classSchedules)
+      .where(eq(t.classSchedules.id, args.id))
+      .limit(1);
+    if (!current) throw notFound("Horario no encontrado");
+    const fields = await checkSchedule(ctx, args.input, current.id);
+    const [row] = await db
+      .update(t.classSchedules)
+      .set({ ...fields, updatedAt: nowIso() })
+      .where(eq(t.classSchedules.id, current.id))
+      .returning();
+    return (await toSchedules([row!]))[0]!;
+  },
+
+  deleteClassSchedule: async (_p: unknown, args: { id: string }, ctx: Ctx) => {
+    requireRole(ctx, ELEVATED_ROLES);
+    const removed = await db
+      .delete(t.classSchedules)
+      .where(eq(t.classSchedules.id, args.id))
+      .returning({ id: t.classSchedules.id });
+    if (removed.length === 0) throw notFound("Horario no encontrado");
+    return true;
+  },
+
   createIncidentTemplate: async (
     _p: unknown,
     args: {
@@ -3615,6 +3796,12 @@ const AUDIT: Record<keyof typeof Mutation, AuditSpec> = {
   recordScan: { entity: "Product" },
   upsertEquipmentNote: { entity: "EquipmentNote" },
   deleteEquipmentNote: { entity: "EquipmentNote", details: () => null },
+  createClassSchedule: {
+    entity: "ClassSchedule",
+    details: (a) => `Lugar ${a.input.locationId}, día ${a.input.weekday}`,
+  },
+  updateClassSchedule: { entity: "ClassSchedule" },
+  deleteClassSchedule: { entity: "ClassSchedule", details: () => null },
   createIncidentTemplate: {
     entity: "IncidentTemplate",
     details: (a) => `Nombre: ${a.input.name.trim()}`,
@@ -3639,6 +3826,8 @@ const STATELESS_QUERIES = new Set<keyof typeof Query>([
   "myEquipmentNotes",
   "incidentTemplates",
   "incidentTemplate",
+  "classSchedules",
+  "teacherInCharge",
   // Leen de la base lo que necesitan (queries.ts, issue #115)
   "products",
   "tickets",

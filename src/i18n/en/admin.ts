@@ -262,4 +262,7 @@ export const admin: Translation<typeof es> = {
   "admin.issues.action.triage": "Mark as triaged",
   "admin.issues.action.resolve": "Resolve",
   "admin.issues.action.reopen": "Reopen",
+  "admin.userForm.teacher": "Teacher",
+  "admin.userForm.teacherHelp": "Can reserve classrooms and labs and be listed as in charge in class schedules.",
+  "admin.users.teacher": "Teacher",
 };

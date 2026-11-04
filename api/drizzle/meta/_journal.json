@@ -71,6 +71,13 @@
       "when": 1793674785449,
       "tag": "0009_mobile_scan",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793741654212,
+      "tag": "0010_docente",
+      "breakpoints": true
     }
   ]
 }
