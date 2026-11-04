@@ -98,7 +98,15 @@ import {
   TICKET_CATEGORIES,
   TICKET_PRIORITIES,
 } from "../db/enums";
-import { toComponent, toProduct, toUser, type State } from "../state";
+import { loadState, toComponent, toProduct, toUser, type State } from "../state";
+import {
+  hasOverdueToSync,
+  listProducts,
+  listTickets,
+  OPEN_LOAN_STATUS_LIST,
+  staffCounts,
+  type StaffCounts,
+} from "../queries";
 import { withState, withTransaction, type AuditSpec, type Resolver } from "./wrap";
 
 export type { Ctx };
@@ -178,7 +186,7 @@ const USER_ID_PREFIX: Record<UserRole, string> = {
   solicitante: "u-sol-",
 };
 
-const OPEN_LOAN_STATUSES = new Set<LoanStatus>(["approved", "active", "overdue"]);
+const OPEN_LOAN_STATUSES = new Set<LoanStatus>(OPEN_LOAN_STATUS_LIST);
 const IN_COURSE_LOAN_STATUSES = new Set<LoanStatus>(["pending", ...OPEN_LOAN_STATUSES]);
 
 function hasOpenLoan(state: State, equipmentId: string, exceptLoanId?: string): boolean {
@@ -537,6 +545,64 @@ const PERIOD_BUCKETS: Record<DashboardPeriod, { days: number; bucketDays: number
   "90d": { days: 91, bucketDays: 7 },
 };
 
+const DASHBOARD_TICKET_STATUSES: TicketStatus[] = [
+  "pending",
+  "in_progress",
+  "in_resolution",
+  "resolved",
+];
+
+// Cantidad de solicitudes por tramo del periodo, hasta el fin del dia (UTC) de hoy.
+function servicesByPeriod(
+  createdAt: string[],
+  { days, bucketDays }: { days: number; bucketDays: number },
+) {
+  const todayEnd = new Date();
+  todayEnd.setUTCHours(24, 0, 0, 0);
+  const bucketCount = Math.ceil(days / bucketDays);
+  return Array.from({ length: bucketCount }, (_, i) => {
+    const end = new Date(todayEnd);
+    end.setUTCDate(end.getUTCDate() - (bucketCount - 1 - i) * bucketDays);
+    const start = new Date(end);
+    start.setUTCDate(start.getUTCDate() - bucketDays);
+    const count = createdAt.filter((value) => {
+      const created = new Date(value);
+      return created >= start && created < end;
+    }).length;
+    return { date: start.toISOString().slice(0, 10), count };
+  });
+}
+
+const sumStatuses = (by: Record<string, number>, statuses: readonly string[]) =>
+  statuses.reduce((total, status) => total + (by[status] ?? 0), 0);
+
+// Tablero del staff a partir de los conteos de la base.
+function staffDashboard(
+  counts: StaffCounts,
+  period: { days: number; bucketDays: number },
+): DashboardStats {
+  const { ticketsByStatus, loansByStatus, servicesByStatus, equipmentByStatus } = counts;
+  return {
+    totalEquipment: sumStatuses(equipmentByStatus, Object.keys(equipmentByStatus)),
+    openTickets: sumStatuses(ticketsByStatus, ["pending", "in_progress", "in_resolution"]),
+    activeLoans: sumStatuses(loansByStatus, OPEN_LOAN_STATUS_LIST),
+    pendingServices: servicesByStatus.pending ?? 0,
+    ticketsByStatus: DASHBOARD_TICKET_STATUSES.map((status) => ({
+      status,
+      count: ticketsByStatus[status] ?? 0,
+    })),
+    servicesByPeriod: servicesByPeriod(counts.serviceCreatedAt, period),
+    workQueue: {
+      unassignedTickets: counts.unassignedTickets,
+      ticketsInProgress: sumStatuses(ticketsByStatus, ["in_progress", "in_resolution"]),
+      pendingServices: servicesByStatus.pending ?? 0,
+      overdueLoans: loansByStatus.overdue ?? 0,
+      equipmentInRepair: equipmentByStatus.in_repair ?? 0,
+    },
+    requesterOverview: null,
+  };
+}
+
 const nowIso = () => new Date().toISOString();
 
 // ── Mobile (#98): escaneo QR, notas privadas y plantillas de incidencia ─────
@@ -779,19 +845,14 @@ const Query = {
     return ctx.state.users.find((u) => u.id === args.id) ?? null;
   },
 
+  // Sin la foto completa: filtra en la base (ver queries.ts, issue #115)
   products: (
     _p: unknown,
     args: { status?: string; locationId?: string; availableForLoan?: boolean },
     ctx: Ctx,
   ) => {
     requireAuth(ctx);
-    let products = ctx.state.products.filter((p) => p.deletedAt === null);
-    if (args.status) products = products.filter((p) => p.status === args.status);
-    if (args.availableForLoan) {
-      products = products.filter((p) => p.status === "available" && !hasOpenLoan(ctx.state, p.id));
-    }
-    if (args.locationId) products = products.filter((p) => p.locationId === args.locationId);
-    return products;
+    return listProducts(args);
   },
 
   product: (_p: unknown, args: { id: string }, ctx: Ctx) => {
@@ -823,6 +884,7 @@ const Query = {
     return ctx.state.components.find((c) => c.id === args.id) ?? null;
   },
 
+  // Sin la foto completa: filtra en la base (ver queries.ts, issue #115)
   tickets: (
     _p: unknown,
     args: {
@@ -836,21 +898,10 @@ const Query = {
     ctx: Ctx,
   ) => {
     const caller = requireAuth(ctx);
-    const scopedSubmittedById = isStaff(caller) ? args.submittedById : caller.id;
-    let tickets = [...ctx.state.tickets];
-    if (args.status) tickets = tickets.filter((t) => t.status === args.status);
-    if (args.assignedToId) tickets = tickets.filter((t) => t.assignedTo?.id === args.assignedToId);
-    if (scopedSubmittedById) {
-      tickets = tickets.filter((t) => t.submittedBy.id === scopedSubmittedById);
-    }
-    if (args.equipmentId) tickets = tickets.filter((t) => t.equipmentId === args.equipmentId);
-    // Rango por fecha de creacion; el cliente manda los extremos ya en su dia local
-    if (args.startDate || args.endDate) {
-      tickets = tickets.filter((t) =>
-        withinInstantRange(t.createdAt, args.startDate, args.endDate),
-      );
-    }
-    return tickets;
+    return listTickets({
+      ...args,
+      submittedById: isStaff(caller) ? args.submittedById : caller.id,
+    });
   },
 
   ticket: (_p: unknown, args: { id: string }, ctx: Ctx) => {
@@ -932,79 +983,53 @@ const Query = {
     return service;
   },
 
+  // El staff sale de conteos en la base (issue #115). El solicitante sigue sobre
+  // la foto completa: sus promedios (`ticketEstimates`) usan los tickets de toda el area.
   dashboardStats: async (_p: unknown, args: { period?: string }, ctx: Ctx) => {
     const caller = requireAuth(ctx);
+    const period = PERIOD_BUCKETS[args.period as DashboardPeriod] ?? PERIOD_BUCKETS["7d"];
+
+    if (isStaff(caller)) {
+      // Casi nunca hay vencidos por marcar: solo entonces se carga la foto
+      if (await hasOverdueToSync()) {
+        ctx.state = await loadState();
+        await syncOverdueLoans(ctx.state);
+      }
+      return staffDashboard(await staffCounts(), period);
+    }
+
+    ctx.state = await loadState();
     await syncOverdueLoans(ctx.state);
     const { state } = ctx;
-    const { days, bucketDays } =
-      PERIOD_BUCKETS[args.period as DashboardPeriod] ?? PERIOD_BUCKETS["7d"];
-
-    const staff = isStaff(caller);
-    const tickets = staff
-      ? state.tickets
-      : state.tickets.filter((t) => t.submittedBy.id === caller.id);
-    const loans = staff ? state.loans : state.loans.filter((l) => l.user.id === caller.id);
-    const services = staff
-      ? state.services
-      : state.services.filter((s) => s.requestedBy.id === caller.id);
+    const tickets = state.tickets.filter((t) => t.submittedBy.id === caller.id);
+    const loans = state.loans.filter((l) => l.user.id === caller.id);
+    const services = state.services.filter((s) => s.requestedBy.id === caller.id);
     const equipment = state.products.filter(
-      (p) =>
-        p.deletedAt === null && (staff || (p.status === "available" && !hasOpenLoan(state, p.id))),
+      (p) => p.deletedAt === null && p.status === "available" && !hasOpenLoan(state, p.id),
     );
-
-    const ticketStatuses: TicketStatus[] = ["pending", "in_progress", "in_resolution", "resolved"];
-    const ticketsByStatus = ticketStatuses.map((status) => ({
-      status,
-      count: tickets.filter((t) => t.status === status).length,
-    }));
-
-    const todayEnd = new Date();
-    todayEnd.setUTCHours(24, 0, 0, 0);
-    const bucketCount = Math.ceil(days / bucketDays);
-    const servicesByPeriod = Array.from({ length: bucketCount }, (_, i) => {
-      const end = new Date(todayEnd);
-      end.setUTCDate(end.getUTCDate() - (bucketCount - 1 - i) * bucketDays);
-      const start = new Date(end);
-      start.setUTCDate(start.getUTCDate() - bucketDays);
-      const count = services.filter((s) => {
-        const created = new Date(s.createdAt);
-        return created >= start && created < end;
-      }).length;
-      return { date: start.toISOString().slice(0, 10), count };
-    });
-
     const stats: DashboardStats = {
       totalEquipment: equipment.length,
       openTickets: tickets.filter((t) => t.status !== "resolved").length,
       activeLoans: loans.filter((l) => OPEN_LOAN_STATUSES.has(l.status)).length,
       pendingServices: services.filter((s) => s.status === "pending").length,
-      ticketsByStatus,
-      servicesByPeriod,
-      workQueue: staff
-        ? {
-            unassignedTickets: state.tickets.filter((t) => t.status === "pending" && !t.assignedTo)
-              .length,
-            ticketsInProgress: state.tickets.filter(
-              (t) => t.status === "in_progress" || t.status === "in_resolution",
-            ).length,
-            pendingServices: state.services.filter((s) => s.status === "pending").length,
-            overdueLoans: state.loans.filter((l) => l.status === "overdue").length,
-            equipmentInRepair: state.products.filter(
-              (p) => p.deletedAt === null && p.status === "in_repair",
-            ).length,
-          }
-        : null,
+      ticketsByStatus: DASHBOARD_TICKET_STATUSES.map((status) => ({
+        status,
+        count: tickets.filter((t) => t.status === status).length,
+      })),
+      servicesByPeriod: servicesByPeriod(
+        services.map((s) => s.createdAt),
+        period,
+      ),
+      workQueue: null,
       // Lo del solicitante tampoco viaja al staff: cada rol ve su tablero
-      requesterOverview: staff
-        ? null
-        : requesterOverview(
-            caller.id,
-            state.tickets,
-            state.loans,
-            state.reservations,
-            state.locations,
-            state.products,
-          ),
+      requesterOverview: requesterOverview(
+        caller.id,
+        state.tickets,
+        state.loans,
+        state.reservations,
+        state.locations,
+        state.products,
+      ),
     };
     return stats;
   },
@@ -3614,6 +3639,10 @@ const STATELESS_QUERIES = new Set<keyof typeof Query>([
   "myEquipmentNotes",
   "incidentTemplates",
   "incidentTemplate",
+  // Leen de la base lo que necesitan (queries.ts, issue #115)
+  "products",
+  "tickets",
+  "dashboardStats",
 ]);
 
 // Estas mutaciones no tocan el estado del dominio: evitan cargar la foto y el
