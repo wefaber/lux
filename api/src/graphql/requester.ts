@@ -1,16 +1,29 @@
 import type {
   CategoryEstimate,
-  Loan,
   Location,
   Product,
   RequesterArea,
   RequesterOverview,
-  Reservation,
   SatisfactionSummary,
   Ticket,
   TicketCategory,
   TicketEstimates,
+  User,
 } from "@/lib/types";
+
+// Lo minimo que se lee de cada coleccion: el tablero real (queries.ts) no arma
+// objetos completos para esto, solo trae esas columnas.
+export type EstimateInput = Pick<
+  Ticket,
+  "category" | "status" | "createdAt" | "attendedAt" | "resolvedAt"
+>;
+export type LoanPlace = { user: Pick<User, "id">; equipment: Pick<Product, "locationId"> };
+export type ReservationPlace = {
+  user: Pick<User, "id">;
+  location: Pick<Location, "id"> | null;
+  equipment: Pick<Product, "locationId"> | null;
+};
+export type AreaProduct = Pick<Product, "deletedAt" | "locationId" | "status">;
 
 // Lo que ve el solicitante en su inicio. Se calcula aca, lejos de los resolvers,
 // para poder probarlo sin base de datos: recibe las colecciones ya cargadas.
@@ -36,7 +49,7 @@ function average(values: number[]): number | null {
   return Math.round((total / values.length) * 10) / 10;
 }
 
-function estimateFor(tickets: Ticket[]): Omit<CategoryEstimate, "category"> {
+function estimateFor(tickets: EstimateInput[]): Omit<CategoryEstimate, "category"> {
   const resolved = tickets.filter((t) => t.status === "resolved" && t.resolvedAt);
   const attend = resolved
     .map((t) => hoursBetween(t.createdAt, t.attendedAt))
@@ -52,7 +65,7 @@ function estimateFor(tickets: Ticket[]): Omit<CategoryEstimate, "category"> {
 }
 
 /** Promedios del area: general mas el de cada categoria con muestra suficiente. */
-export function ticketEstimates(all: Ticket[]): TicketEstimates {
+export function ticketEstimates(all: EstimateInput[]): TicketEstimates {
   const general = estimateFor(all);
   const byCategory: CategoryEstimate[] = TICKET_CATEGORIES.flatMap((category) => {
     const estimate = estimateFor(all.filter((t) => t.category === category));
@@ -82,8 +95,8 @@ export function activeTicketsOf(tickets: Ticket[], userId: string, limit = 5): T
 function usedLocationIds(
   userId: string,
   tickets: Ticket[],
-  loans: Loan[],
-  reservations: Reservation[],
+  loans: LoanPlace[],
+  reservations: ReservationPlace[],
 ): Set<string> {
   const ids = new Set<string>();
   for (const t of tickets) {
@@ -103,17 +116,20 @@ function usedLocationIds(
 export function requesterAreas(
   userId: string,
   tickets: Ticket[],
-  loans: Loan[],
-  reservations: Reservation[],
+  loans: LoanPlace[],
+  reservations: ReservationPlace[],
   locations: Location[],
-  products: Product[],
+  products: AreaProduct[],
 ): RequesterArea[] {
   const used = usedLocationIds(userId, tickets, loans, reservations);
   return locations
     .filter((l) => l.deletedAt === null && used.has(l.id))
     .map((location) => {
-      const equipment = products.filter((p) => p.deletedAt === null && p.locationId === location.id);
-      const count = (status: Product["status"]) => equipment.filter((p) => p.status === status).length;
+      const equipment = products.filter(
+        (p) => p.deletedAt === null && p.locationId === location.id,
+      );
+      const count = (status: Product["status"]) =>
+        equipment.filter((p) => p.status === status).length;
       return {
         location: { ...location, productCount: equipment.length },
         available: count("available"),
@@ -131,17 +147,22 @@ export function requesterAreas(
     .toSorted((a, b) => a.location.name.localeCompare(b.location.name));
 }
 
+/**
+ * `estimateFrom` son los tickets que alimentan el promedio del area (todos los del
+ * area, no solo los del solicitante); por defecto `tickets`.
+ */
 export function requesterOverview(
   userId: string,
   tickets: Ticket[],
-  loans: Loan[],
-  reservations: Reservation[],
+  loans: LoanPlace[],
+  reservations: ReservationPlace[],
   locations: Location[],
-  products: Product[],
+  products: AreaProduct[],
+  estimateFrom: EstimateInput[] = tickets,
 ): RequesterOverview {
   return {
     activeTickets: activeTicketsOf(tickets, userId),
-    estimates: ticketEstimates(tickets),
+    estimates: ticketEstimates(estimateFrom),
     satisfaction: satisfactionOf(tickets, userId),
     areas: requesterAreas(userId, tickets, loans, reservations, locations, products),
   };

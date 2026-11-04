@@ -134,3 +134,6 @@ export const NOTICE_KINDS = exhaustive<NoticeKind>()([
   "comment",
   "overdue",
 ]);
+
+/** Estados de un prestamo que ocupan el equipo (aprobado, entregado o vencido). */
+export const OPEN_LOAN_STATUS_LIST: LoanStatus[] = ["approved", "active", "overdue"];
